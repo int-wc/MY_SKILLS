@@ -429,7 +429,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5') || mode === 'url') {
       1. 第一层 - 定位API入口:
          curl -s 获取页面HTML，提取 <script src>
          对每个JS，查找 baseURL/API_HOST/API_BASE/gatewayUrl/serverUrl
-         grep -oP '(baseURL|API_HOST|API_BASE)\\s*[:=]\\s*["'"'"'][^"'"'"]+["'"'"]'
+         grep -oP '(baseURL|API_HOST|API_BASE)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"]+["'"'"]'
 
       2. 第二层 - 路径模式提取:
          全量提取 "/xxx/yyy" 路径，按一级目录分组统计
@@ -445,7 +445,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5') || mode === 'url') {
          - OSS存储桶密钥: OBS_ACCESS_KEY / OSS_ACCESS_KEY / AWS_ACCESS_KEY
          - SecretKey/Token/密码硬编码
          - 拼接模式: accessKey分段存储在多个变量中(key_part + key_part2)
-         - 编码检测: Base64(A-Za-z0-9+/=)、Hex(0x..)、Unicode(\u00xx)
+         - 编码检测: Base64(A-Za-z0-9+/=)、Hex(0x..)、Unicode(\\u00xx)
          - JWT (eyJ...格式) → 解码看payload中user/role/exp
          - 数据库连接串 → mongodb/mysql/postgresql/redis://
          - 内网IP/域名 → 判断是哪个环境(dev/test/prod)
@@ -1257,7 +1257,7 @@ ${myFindingsJSON}
 
 报告格式要求：
 - 先用Read工具读取 ${SKILL_SCRIPTS}/../references/report-templates.md 了解标准模板结构
-- 如果该报告是**利用链类型**（多个漏洞串联），使用攻击链路图格式：`漏洞A → 漏洞B → 漏洞C → 最终危害`，每个步骤附带单独的请求/响应包
+- 如果该报告是**利用链类型**（多个漏洞串联），使用攻击链路图格式：\`漏洞A -> 漏洞B -> 漏洞C -> 最终危害\`，每个步骤附带单独的请求/响应包
 - 包含漏洞信息表（名称、等级、类型、范围、发现时间）
 - 包含漏洞描述
 - 包含漏洞复现步骤 + 完整的HTTP请求/响应包 + curl命令

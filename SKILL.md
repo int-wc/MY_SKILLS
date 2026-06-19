@@ -110,7 +110,8 @@ python3 -c "import requests, bs4, lxml" 2>/dev/null || echo "pip install request
 
 ## 阶段3：漏洞挖掘
 
-以**反思为主、迁跃为辅、分析为底、扩展为路**的原则执行。详细方法论 → `references/deep-mining-methodology.md`
+以**反思为主、迁跃为辅、分析为底、扩展为路**的原则执行。Agent 提示词中嵌入了"分析为底→第一性原理→扩散思维链"的方法论引导。
+详细方法论（含思维模型、第一性原理、扩散链示例） → `references/deep-mining-methodology.md`
 
 | 类型 | 测试要点 |
 |------|---------|

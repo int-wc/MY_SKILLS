@@ -419,11 +419,14 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
          Webpack chunk分析: chunks/ js/ 命名暴露功能模块
 
       4. 第四层 - 敏感信息提取:
-         - AccessKey: AKID模式、AKIA模式
+         - AccessKey: AKID模式、AKIA模式、LTAI(阿里云)
+         - OSS存储桶密钥: OBS_ACCESS_KEY / OSS_ACCESS_KEY / AWS_ACCESS_KEY
          - SecretKey/Token/密码硬编码
-         - JWT (eyJ...格式)
-         - 数据库连接串
-         - 内网IP/域名
+         - 拼接模式: accessKey分段存储在多个变量中(key_part + key_part2)
+         - 编码检测: Base64(A-Za-z0-9+/=)、Hex(0x..)、Unicode(\u00xx)
+         - JWT (eyJ...格式) → 解码看payload中user/role/exp
+         - 数据库连接串 → mongodb/mysql/postgresql/redis://
+         - 内网IP/域名 → 判断是哪个环境(dev/test/prod)
          - 测试账号硬编码
 
       5. 鉴权方式识别:
@@ -432,7 +435,15 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
          - Cookie + sessionId
          - localStorage Token存放
 
-      注意: 只做读取分析。`,
+      ⚡ 6. 凭证反思（关键思维环节 — 找到凭证后必须思考）:
+         找到accessKey+secretKey → 这是哪个云服务的？试列举 OBS/S3/OSS Bucket
+         找到OSS连接信息 → endpoint + bucket → 直接测试 ListObjects
+         找到账号密码 → 这是哪个系统的？钉钉/LDAP/数据库/邮件
+         找到JWT → 解码看user/role，试调API看是否越权
+         找到内网IP → 从命名判断服务名(k8s)、环境后缀(dev/test/ontest)
+         找到API路径 → 功能命名可推断数据敏感度
+
+      注意: 只做读取分析。遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)。`,
           { label: `🔬 JS分析: ${target.url}`, phase: '深度分析' }
         )
       },

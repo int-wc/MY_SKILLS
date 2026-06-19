@@ -88,7 +88,112 @@ curl -s "app.js" | grep -oP '["'"'"'](Authorization|X-TOKEN|X-Auth-Token|api_key
 curl -s "app.js" | grep -oP '(localStorage|sessionStorage)\.(getItem|setItem)\s*\(\s*["'"'"'][^"'"']*token["'"'"']'
 ```
 
-### 本地审计命令
+### JS反混淆识别
+
+```bash
+# 检测混淆类型
+# Webpack打包: 搜索 webpackJsonp|__webpack_require__
+curl -s target/app.js | grep -oP 'webpackJsonp|__webpack_require__'
+# Jscrambler: 搜索 jscrambler|_0x[0-9a-f]{4,6}
+curl -s target/app.js | grep -oP 'jscrambler|_0x[0-9a-f]{4,}'
+# obfuscator.io: 搜索 window\._0x|_0x[0-9a-f]{4}\b
+curl -s target/app.js | grep -oP 'window\._0x|_0x[0-9a-f]{4,}\b'
+# eval加密: 搜索 eval(function|eval(atob
+curl -s target/app.js | grep -oP 'eval\(function|eval\(atob'
+
+# 反混淆思路
+# 1. Webpack → 在JS底部找模块定义，提取各个chunk的字符串
+# 2. _0x 混淆 → 提取最前面的 _0x 数组，建立映射表还原
+# 3. eval(atob(... → console.log(atob(... 解码内容
+# 4. AAEncode/JSFuck → 浏览器控制台执行解混淆
+```
+
+### 编码检测与转换
+
+```bash
+# Unicode转义检测 (\u00xx)
+curl -s target/app.js | grep -oP '\\u[0-9a-fA-F]{4}' | head -5
+# 还原: echo -e '你好'
+
+# Base64硬编码检测（连续base64字符, 长度>20）
+curl -s target/app.js | grep -oP '[A-Za-z0-9+/]{40,}={0,2}' | head -10
+# 还原: echo 'bG9naW46cGFzcw==' | base64 -d
+
+# Hex编码检测
+curl -s target/app.js | grep -oP '(0x[0-9a-fA-F]{2})+[,\)]' | head -5
+# 还原: python3 -c "print(bytes.fromhex('6c6f67696e').decode())"
+
+# 多段拼接检测: accessKey分段存储在多个变量中
+# 常见模式: key_part1 + key_part2 + key_part3
+curl -s target/app.js | grep -oP 'key_part|key_frag|ak_part|sk_part|secret1|secret2'
+# 检测: 拼接特征的字符串碎片
+curl -s target/app.js | grep -oP '["'"'"'][A-Za-z0-9+/]{10,30}["'"'"']\s*[+]\s*["'"'"']' | head -10
+```
+
+### AK/SK字段拼接模式
+
+很多应用不会直接写 `accessKey: "AKIA..."`，而是拆成多段拼接，以下是常见拼接模式：
+
+```bash
+# 模式1: 字符串直接拼接
+#   var ak = "AKIA" + "IOSFODNN7EXAMPLE";
+curl -s target/app.js | grep -oP '["'"'"'][A-Z0-9+/]{4,}["'"'"']\s*[+]\s*["'"'"']' | head -20
+
+# 模式2: 环境变量 + 固定前缀
+#   accessKey = prefix + env.AWS_ACCESS_KEY_ID
+curl -s target/app.js | grep -oP '(prefix|suffix|append)\s*[:=]\s*["'"'"'][A-Za-z0-9]{2,10}["'"'"']'
+
+# 模式3: OSS密钥 (华为云/阿里云/AWS/腾讯云)
+# 华为云: OBS_ACCESS_KEY_ID / OBS_SECRET_ACCESS_KEY
+# 阿里云: LTAI + OSS_ACCESS_KEY_ID
+# AWS: AKIA + AWS_SECRET_ACCESS_KEY  
+# 腾讯云: AKID + SECRET_KEY
+curl -s target/app.js | grep -oP '(OBS_|OSS_|AWS_|COS_|BOS_)(ACCESS_KEY|SECRET_KEY|SESSION_TOKEN)'
+curl -s target/app.js | grep -oP '(AKID|LTAI|AKIA)[A-Za-z0-9]{10,}'
+
+# 模式4: decode/解密后拼接
+#   realKey = atob(encoded_part1 + encoded_part2)
+curl -s target/app.js | grep -oP '(atob|btoa|decodeURIComponent|unescape)\s*\(' | head -5
+
+# 模式5: 从配置中心动态获取（Nacos/Apollo/Spring Config）
+curl -s target/app.js | grep -oP '(nacos|apollo|configServer|configMap|env\.[A-Z_]+(KEY|SECRET|TOKEN))'
+```
+
+### 凭证反思清单（关键思维环节）
+
+拿到 JS 后，按以下顺序反思每个发现到底意味着什么：
+
+```bash
+# 1. 找到 accessKey + secretKey → 这套密钥能访问什么服务？
+#    阿里云: 试 OSS/ECS/RDS
+#    华为云: 试 OBS
+#    AWS:   试 S3/EC2
+#    MinIO: 试 Bucket 列举（见阶段4）
+
+# 2. 找到 OSS 连接信息 → 这个 Bucket 存了什么？
+#    endpoint + bucket + ak → 直接测试 ListBuckets/Object
+#    lhfpxtoss → 临海房票系统 Bucket（结合业务推断用途）
+
+# 3. 找到账号密码 → 这是哪个系统的？
+#    钉钉/企业微信集成 → 扫码登录相关
+#    LDAP/AD 配置 → 内网认证相关
+#    数据库连接串 → 能连的数据库类型和数据价值
+#    SMTP/邮件 → 邮件伪造或钓鱼
+
+# 4. 找到 JWT Token → 这是谁的 Token？过期了吗？
+#    jwt.io 解码看 payload 中的 user/role/exp
+#    如果是测试Token → 找签发者、可能越权到真实用户
+
+# 5. 找到内网 IP/域名 → 是哪个环境的？
+#    后缀 dev/test/staging/ontest → 测试环境
+#    10.x.x.x / 192.168.x.x → 内网段
+#    k8s service 名 → 可推断微服务架构
+
+# 6. 找到 API 路径 → 这个接口做什么的？
+#    /supplier-info/page → 供应商管理（数据敏感程度高）
+#    /v1/vehicle-status → 车辆状态（业务核心）
+#    /api/v1/config → 配置管理（可能泄漏系统配置）
+```
 
 ```bash
 grep -r '@\(RequestMapping\|GetMapping\|PostMapping\)' --include="*.java" .

@@ -33,3 +33,7 @@ Thumbs.db
 /tmp/
 *.tmp
 *.log
+
+# 测试运行产生的临时数据
+js_analysis/
+*/probe_*.sh

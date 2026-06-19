@@ -333,13 +333,15 @@ p1_portscan = await agent(
   `你是SRC资产扫描专家。负责对 ${companyName} 做资产扩充。
 
   1. 检查 ${SRC_BASE}/${companyName}/hunter_info/ 下是否有CSV文件
-  2. 如果有，提取前3个IP用于测试
+  2. 如果有，提取 3-5 个不同C段的IP用于测试（优先选最多子域名/域名的IP，确保不同网段）
   3. 检查目录下是否已有 masscan_results.gnmap 等扫描结果文件
-  4. 如果工具可用（masscan 或 nmap），对提取的IP执行快速端口扫描
-     - 优先用 sudo_helper.sh "masscan --rate=500 ..."
-     - 不可用时用 sudo_helper.sh "nmap -T4 --top-ports 100 ..."
+  4. **必须执行 masscan 全端口扫描（0-65535）**，不允许跳过或改用其他工具：
+     - 命令: sudo_helper.sh "masscan --rate=500 -p1-65535 -oG masscan_results.gnmap -iL /tmp/test_ips.txt"
+     - rate=500 是家庭宽带安全上限，不要加大
+     - **等待 masscan 执行完毕再继续**
      - sudo_helper.sh 路径: /home/my/.local/bin/sudo_helper.sh
      - 调用格式: sudo_helper.sh "要执行的完整命令"
+     - 如果 masscan 因 root/权限报错 → fallback 到: sudo_helper.sh "nmap -iL /tmp/test_ips.txt -p- -sV -T4 --min-rate=500 -oA fullport_scan"
   5. 将新发现的端口与域名映射并探活 (httpx)
   6. 输出结构化结果，包含新发现资产的URL/IP/端口/服务信息
 
@@ -819,8 +821,8 @@ ${p4_findings_json.substring(0, 6000)}
 - 如果完全无法提取可测试 URL → 标记为 needs_manual_test
 
 **Step 2: 用 curl 测试**
-1. 先 `curl -sk -o /dev/null -w "%{http_code}"` 获取数字HTTP状态码
-2. 状态码 200/401/403 的，`curl -sk` 获取响应体
+1. 先 \`curl -sk -o /dev/null -w "%{http_code}"\` 获取数字HTTP状态码
+2. 状态码 200/401/403 的，\`curl -sk\` 获取响应体
 3. 对比 带Cookie vs 无Cookie 的响应差异
 4. **http_status 必须是数字，不能是字符串。每个 confirmed/suspected 发现都必须有。**
 
@@ -891,7 +893,9 @@ ${p4_findings_json.substring(0, 6000)}
     if (p4_verify && p4_verify.confirmed_findings) {
       const fp_count = p4_verify.false_positives?.length || 0
       const manual_count = p4_verify.needs_manual_test?.length || 0
-      log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_count > 0 ? `, ${fp_count} 个 false_positive` : ''}${manual_count > 0 ? `, ${manual_count} 个需手动验证` : ''}`)
+      const fp_suffix = fp_count > 0 ? `, ${fp_count} 个 false_positive` : ''
+const manual_suffix = manual_count > 0 ? `, ${manual_count} 个需手动验证` : ''
+log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_suffix}${manual_suffix}`)
       // 记录各条验证的HTTP状态
       p4_verify.confirmed_findings.forEach(f => {
         const st = f.http_status || 0

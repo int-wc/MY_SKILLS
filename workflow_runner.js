@@ -1,10 +1,10 @@
-// SRC_SKILLS_V1 - 七阶段全流程 Workflow 编排
+// SRC_SKILLS_V1 - 八阶段全流程 Workflow 编排
 // 使用: Workflow({scriptPath: '...', args: {company: '货讯通科技', mode: 'full'}})
 // mode: 'full' | 'phase3' (跳过资产发现和深度分析，直接挖洞) | 'phase5' (直接出报告)
 
 export const meta = {
   name: 'src-full-scan',
-  description: '补天SRC全流程：资产发现→深度分析→漏洞挖掘→验证→报告→自审→提交',
+  description: '补天SRC全流程：资产发现→深度分析→漏洞挖掘→验证→资产标记→报告→自审→提交',
   phases: [
     { title: '资产发现', detail: '读取厂商信息 + 解析Hunter资产 + 目标分类标记' },
     { title: '深度分析', detail: 'JS逆向 + API枚举 + 组件审计' },

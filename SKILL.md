@@ -31,12 +31,15 @@ description: >
 ```
 SRC_SKILLS_V1/
 ├── SKILL.md                    ← 本文件：核心流程指令（≤500行）
-├── workflow_runner.js          ← 全自动7阶段workflow编排
-├── scripts/                    ← 自动化脚本 symlink
+├── workflow_runner.js          ← 全自动8阶段workflow编排
+├── scripts/                    ← 自动化脚本
 │   ├── generate_html.py        # MD→HTML 批量转换
 │   ├── audit_reports.py        # 报告质量审计
 │   ├── consolidate_findings.py # 报告整合/无效归档
-│   └── fetch_hunter.py         # Hunter API 资产采集
+│   ├── fetch_hunter.py         # Hunter API 资产采集
+│   ├── probe.sh                # 路径探测脚本
+│   ├── probe2.sh               # 批量API路径探测
+│   └── probe_actuator.sh       # Actuator端点探测
 ├── references/                 ← 详细参考文档
 │   ├── judgment-rules.md       # F/R/T 三级判定规则 ⬅ 必读
 │   ├── vulntype-matrix.md      # 各厂商VulnType速查
@@ -45,7 +48,8 @@ SRC_SKILLS_V1/
 │   ├── phase-cmd-reference.md  # 各阶段bash命令/字典/CVE表
 │   └── report-templates.md     # 报告模板(标准+利用链)
 └── assets/
-    └── report-template.html    # 报告HTML样式模板
+    ├── report-template.html    # 报告HTML样式模板
+    └── 报告导航.html           # 报告导航面板
 ```
 
 ## 启动检查

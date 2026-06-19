@@ -37,3 +37,9 @@ Thumbs.db
 # 测试运行产生的临时数据
 js_analysis/
 */probe_*.sh
+
+# E2E测试产生的分析脚本
+analyze_*.py
+compile_report.py
+test_*.py
+

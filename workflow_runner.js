@@ -1,6 +1,6 @@
 // SRC_SKILLS_V1 - 八阶段全流程 Workflow 编排
 // 使用: Workflow({scriptPath: '...', args: {company: '货讯通科技', mode: 'full'}})
-// mode: 'full' | 'phase3' (跳过资产发现和深度分析，直接挖洞) | 'phase5' (直接出报告)
+// mode: 'full' | 'phase3' (跳过资产发现和深度分析，直接挖洞) | 'phase5' (直接出报告) | 'url' (指定单个URL)
 
 export const meta = {
   name: 'src-full-scan',
@@ -23,13 +23,18 @@ export const meta = {
 const SRC_BASE = '/home/my/butiansrc/Exclusive_SRC'
 const SKILL_SCRIPTS = '/home/my/.claude/skills/SRC_SKILLS_V1/scripts'
 
-let companyName, mode
+let companyName, mode, singleUrl
 if (typeof args === 'string') {
   companyName = args
   mode = 'full'
 } else if (typeof args === 'object' && args) {
   companyName = args.company || '货讯通科技'
   mode = args.mode || 'full'
+  singleUrl = args.url || null
+  if (mode === 'url' && !singleUrl) {
+    log('⚠️ 单URL模式需指定 url 参数，如: {mode: "url", url: "https://target:8080"}')
+    return { error: 'need_url', message: '请指定url参数' }
+  }
 } else {
   companyName = null
   mode = 'full'
@@ -190,6 +195,23 @@ if (mode.startsWith('phase5')) {
   log('[1/8] ⏭️ 跳过（用户指定报告模式）')
   markPhase(1, '⏭️')
   p1_assets = { company_name: companyName, priority_targets: [], all_urls: [] }
+} else if (mode === 'url' && singleUrl) {
+  log('[1/8] 🔗 单URL模式 — 跳过资产发现，直接测试')
+  markPhase(1, '⏭️')
+  p1_assets = {
+    company_name: singleUrl,
+    src_scope_summary: '用户指定URL',
+    priority_targets: [{
+      url: singleUrl, ip: '', port: 443, title: '',
+      tags: ['[用户指定]'], priority: '最高', reason: '用户指定目标'
+    }],
+    all_urls: [singleUrl],
+  }
+  // 记录基础维度
+  dimTracker.record(singleUrl, 'port_scan', 'done')
+  dimTracker.record(singleUrl, 'http_probe', 'done', { title: '' })
+  progress.findings_count = 1
+  showProgress()
 } else if (!companyName) {
   // 无参数：列出公司并退出
   const listing = await agent(
@@ -384,7 +406,7 @@ let p3_unauth, p3_other, p3_quick, p4_dirscan, p4_verify
 // 聚合发现数据，供 Phase 5 写入线索文件
 let p3_findings_data = []
 
-if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
+if (mode.startsWith('phase3') || mode.startsWith('phase5') || mode === 'url') {
   log('[2/8] ⏭️ 跳过（用户指定模式）')
   markPhase(2, '⏭️')
 } else {

@@ -90,6 +90,11 @@ python3 -c "import requests, bs4, lxml" 2>/dev/null || echo "pip install request
 5. **目标优先级**: RCE > 大量敏感数据 > 文件读写 > SSRF > 越权 > 信息泄露 > XSS > 弱口令
 6. 详细命令 → `references/phase-cmd-reference.md#阶段1-资产发现命令`
 
+**单URL模式：** 指定 `mode: "url"` 跳过资产发现和深度分析，直接对单个URL执行漏洞挖掘全流程。
+```
+Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}})
+```
+
 ---
 
 ## 阶段2：深度分析

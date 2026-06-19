@@ -297,7 +297,7 @@ Tier 2 快速探测确保每个资产至少完成 unauthtest，弥补"44 个资�
 | 可提交报告 | `{公司}/submittable_reports/` |
 | HTML报告 | `{公司}/submittable_reports/reports_html/` |
 | 无效报告归档 | `{公司}/submittable_reports/_invalid/` |
-| Hunter资产数据 | `/home/my/butiansrc/hunter_assets/` |
+| Hunter资产数据 | `{公司}/hunter_info/` |
 | 报告导航面板 | `/home/my/butiansrc/Exclusive_SRC/报告导航.html` |
 | 阶段命令参考 | `references/phase-cmd-reference.md` |
 | 报告模板 | `references/report-templates.md` |

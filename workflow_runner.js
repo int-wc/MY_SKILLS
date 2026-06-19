@@ -559,7 +559,24 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
    redirect/next/url → 开放重定向
    data/html/content → XSS/富文本注入
 
-3. HTTP方法过度:
+3. SSRF专项测试（参数含 url/path/redirect/domain/host/target）:
+   - 替换为内网地址: http://127.0.0.1:8080, http://10.0.0.1, http://172.16.0.1
+   - 云元数据: http://169.254.169.254/latest/meta-data/（AWS/阿里云）
+   - 华为云元数据: http://169.254.169.254/openstack/latest/
+   - 内部服务探测: http://localhost:6379(Redis), http://localhost:3306(MySQL)
+   - 观察响应差异: 超时vs拒绝vs返回数据 = 内网服务存活
+
+4. 组件版本识别 + CVE比对:
+   - 识别组件指纹（从响应头Server/X-Powered-By/body中的版本号）
+   - 对照已知CVE:
+     · Spring Boot <2.6.6 → CVE-2022-22965
+     · Log4j ≤2.14.1 → CVE-2021-44228
+     · Fastjson ≤1.2.80 → RCE
+     · Apache Shiro <1.9.1 → CVE-2023-22602
+     · Nacos ≤2.0.3 → CVE-2021-29441
+     · ThinkPHP ≤6.0 → RCE
+
+5. HTTP方法过度:
    对发现的端点 OPTIONS → 允许的方法 → PUT修改/DELETE删除/POST创建
 
 4. 未授权对比:
@@ -632,6 +649,12 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
 4. 目录/文件遍历:
    - 测试 ../ 路径穿越
    - 测试下载功能
+
+5. 逻辑漏洞测试（如发现订单/支付/优惠券相关API）:
+   - 金额/数量篡改: 修改 POST body 中的 amount/price/quantity 参数
+   - 优惠券/折扣: 重复使用优惠码、篡改折扣比例
+   - 流程绕过: 跳过支付步骤、负值参数(Integer溢出)
+   - 并发竞态: 同时请求多次（点赞/领券/提现接口）
 
 只做读取探测。`,
       { label: `🎯 越权/弱口令测试`, schema: {

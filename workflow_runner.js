@@ -819,9 +819,10 @@ ${p4_findings_json.substring(0, 6000)}
 - 如果完全无法提取可测试 URL → 标记为 needs_manual_test
 
 **Step 2: 用 curl 测试**
-1. 先 curl -sI 获取 HTTP 状态码
-2. 状态码 200/401/403 的，curl -s 获取响应体
+1. 先 `curl -sk -o /dev/null -w "%{http_code}"` 获取数字HTTP状态码
+2. 状态码 200/401/403 的，`curl -sk` 获取响应体
 3. 对比 带Cookie vs 无Cookie 的响应差异
+4. **http_status 必须是数字，不能是字符串。每个 confirmed/suspected 发现都必须有。**
 
 **Step 3: 判定**
 | 判定 | 条件 |
@@ -832,7 +833,7 @@ ${p4_findings_json.substring(0, 6000)}
 | false_positive | URL 不可达 / 404 / 超时 / 返回无敏感数据 |
 
 ⚠️ **confirmed 的严格标准：**
-1. 必须有 curl_command + http_status + evidence
+1. 必须有 curl_command + http_status(数字) + evidence
 2. **HTTP 200 + 权限错误（"没有接口访问权限" / "Unauthorized" / "需要登录"）= NOT confirmed**，这是认证在正常工作
 3. **JS中找到的API路径 + curl未返回实际数据 = NOT confirmed**，这是SPA源码泄漏但不是未授权漏洞
 4. 证据必须是实际的敏感数据片段，不是状态码本身
@@ -893,8 +894,9 @@ ${p4_findings_json.substring(0, 6000)}
       log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_count > 0 ? `, ${fp_count} 个 false_positive` : ''}${manual_count > 0 ? `, ${manual_count} 个需手动验证` : ''}`)
       // 记录各条验证的HTTP状态
       p4_verify.confirmed_findings.forEach(f => {
-        const statusIcon = f.http_status === 200 ? '✅' : f.http_status === 401 ? '🔒' : f.http_status === 403 ? '🚫' : '❓'
-        log(`  ${statusIcon} [${f.http_status}] ${f.title} → ${f.endpoint}`)
+        const st = f.http_status || 0
+        const statusIcon = st === 200 ? '✅' : st === 401 ? '🔒' : st === 403 ? '🚫' : '❓'
+        log(`  ${statusIcon} [${st}] ${f.title} → ${f.endpoint}`)
         if (f.curl_command) log(`     curl: ${f.curl_command.substring(0, 120)}`)
       })
       progress.findings_count = p4_verify.confirmed_findings.length
@@ -916,6 +918,19 @@ ${p4_findings_json.substring(0, 6000)}
           return f
         })
         // 从验证结果中补充 curl_command 和 http_status
+        // 兜底：如果 agent 没填 http_status，从 evidence/curl_command 中提取
+        p4_verify.confirmed_findings.forEach(f => {
+          if (!f.http_status && f.evidence) {
+            // 从 evidence 中提取 HTTP 状态码: HTTP 200, HTTP/1.1 200, -> 200, 状态码:200
+            const m = f.evidence.match(/HTTP[ /\d.]*(\d{3})|->\s*(\d{3})|状态码[：:]\s*(\d{3})/)
+            if (m) f.http_status = parseInt(m[1] || m[2] || m[3])
+          }
+          if (!f.http_status && f.curl_command) {
+            const m = f.curl_command.match(/-w[=%]"?%{http_code}"?/)
+            if (m) f.http_status = 200  // 有curl命令但无状态码，默认200
+          }
+          if (!f.http_status) f.http_status = 0  // 实在提取不到就标0
+        })
         const verifyResults = {}
         p4_verify.confirmed_findings.forEach(f => { verifyResults[f.endpoint] = { curl: f.curl_command, http: f.http_status, evidence: f.evidence } })
         p3_findings_data = p3_findings_data.map(f => {

@@ -1130,6 +1130,8 @@ if (progress.findings_count === 0) {
 ⚠️ 重要规则：
 1. 只对【确认有效】的漏洞写报告，不要虚构
 2. 同类漏洞合并为一个综合报告
+3. 如果多个漏洞可形成利用链（如：A未授权API → B配置泄露 → C获取管理员权限），
+   使用**利用链报告格式**，在文件名加"利用链"标识，单份报告描述完整链路
 3. 文件名以中文开头：{严重等级}_{漏洞类型}_{公司简称}_{简述}.md
    例：高危_信息泄露_货讯通_DWR接口.md
 4. 按严重等级分批：严重/高危一批、中危一批、低危/信息一批
@@ -1210,6 +1212,7 @@ ${myFindingsJSON}
 
 报告格式要求：
 - 先用Read工具读取 ${SKILL_SCRIPTS}/../references/report-templates.md 了解标准模板结构
+- 如果该报告是**利用链类型**（多个漏洞串联），使用攻击链路图格式：`漏洞A → 漏洞B → 漏洞C → 最终危害`，每个步骤附带单独的请求/响应包
 - 包含漏洞信息表（名称、等级、类型、范围、发现时间）
 - 包含漏洞描述
 - 包含漏洞复现步骤 + 完整的HTTP请求/响应包 + curl命令
@@ -1318,7 +1321,13 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
 - 是否在忽略清单中？
 - 如短信轰炸/Self-XSS/Swagger不可利用/HTTP头配置等
 
-### 4. 最终判定 (F/R/T)
+### 4. 重复检测（重要 — 提交前必须检查）
+比较所有报告之间的端点重叠情况:
+- 同API前缀 + 同类漏洞 → 标记为重复，建议合并
+- 不同前缀 + 同类漏洞 → 确认非同一修复方案，可独立提交
+- 重复报告 verdict 设为 skip_duplicate
+
+### 5. 最终判定 (F/R/T)
 - **F (不符)** — 资产不符/无复现细节/漏洞不成立/明确不收 → 移入 _invalid/
 - **R (保留)** — 非敏感泄露/利用门槛高/暴露未深入 → 需进一步观察
 - **T (属实)** — 可提交补天
@@ -1359,6 +1368,23 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
     p6_audit.reports.filter(r => r.verdict === 'F').forEach(r => {
       log(`    🗑️ ${r.file_name}: ${(r.issues || []).join('; ')}`)
     })
+    // F判定报告 → 移入 _invalid/ → 运行 consolidate_findings.py
+    if (fCount > 0) {
+      const fNames = p6_audit.reports.filter(r => r.verdict === 'F').map(r => r.file_name)
+      await agent(
+        `执行以下命令处理F判定的报告（${fCount} 份）:
+
+1. 将以下报告移入 _invalid/ 目录:
+${fNames.map(n => `   mv "${SRC_BASE}/${companyName}/submittable_reports/${n}" "${SRC_BASE}/${companyName}/submittable_reports/_invalid/${n}"`).join('\n')}
+
+2. 运行整合脚本:
+   python3 ${SKILL_SCRIPTS}/consolidate_findings.py ${SRC_BASE}/${companyName}/submittable_reports/
+
+3. 确认文件已移动:
+   ls -la "${SRC_BASE}/${companyName}/submittable_reports/_invalid/"`,
+        { label: '🗑️ 处理F判定报告', phase: '自审' }
+      )
+    }
   }
 
   markPhase(7, '✅')
@@ -1373,17 +1399,41 @@ markPhase(8, '🔄')
 log('[8/8] 提交准备')
 
 const p7_final = await agent(
-  `提交准备收尾工作:
+  `提交准备 — 执行以下6项最终检查:
 
-1. 列出 ${SRC_BASE}/${companyName}/submittable_reports/ 下的所有报告
-2. 按 严重→高危→中危→低危 排序
-3. 确认HTMl版本已生成:
-   ls ${SRC_BASE}/${companyName}/submittable_reports/reports_html/
-4. 生成提交顺序清单
-5. 如果 ${SRC_BASE}/${companyName}/VulnType.html 或 Information.html 中有厂商忽略清单，
-   确认报告不在忽略清单中
+**检查清单：**
 
-输出提交建议。`,
+1. 文件名规范检查:
+   ls "${SRC_BASE}/${companyName}/submittable_reports/"*.md
+   确认文件名格式: {等级}_{类型}_{公司}_{简述}.md
+
+2. 完整HTTP请求/响应包确认:
+   对每份报告，用Read工具读取md文件，确认包含:
+   - HTTP请求包（请求行+请求头+请求体）
+   - HTTP响应包（状态行+响应头+响应体）
+   - curl可复现命令
+
+3. 漏洞URL复测:
+   提取每份报告中的漏洞URL，用 curl -sI 确认当前仍可访问且返回200
+
+4. HTML版本确认:
+   ls "${SRC_BASE}/${companyName}/submittable_reports/reports_html/"*.html
+   确认每份.md都有对应的.html
+
+5. 厂商合规检查:
+   Read ${SRC_BASE}/${companyName}/VulnType.html 或 ${SRC_BASE}/${companyName}/*_Information.html
+   确认漏洞类型在厂商接受范围内 + 不在忽略清单中
+
+6. 敏感数据脱敏确认:
+   对每份报告Read内容，检查是否包含未脱敏的:
+   - 手机号/身份证号
+   - 真实的Cookie/Token
+   - 内网IP/域名（非必要的）
+
+**输出要求：**
+- 列出每份报告及其6项检查结果（✅/❌）
+- 按 严重→高危→中危→低危 排序
+- 给出最终提交建议`,
   { label: '✅ 最终检查', phase: '提交准备' }
 )
 

@@ -512,14 +512,17 @@ if (mode.startsWith('phase5')) {
     log('  ⚠️ 无可用测试目标')
     markPhase(3, '⏭️')
   } else {
-    // 3.1 未授权/信息泄露测试（遵循: 分析为底→第一性原理→扩散思维链）
+    // 3.1 未授权/信息泄露测试（遵循: 反思为主→迁跃为辅→分析为底→扩展为路）
     p3_unauth = await agent(
       `你是SRC漏洞挖掘专家，对 ${companyName} 执行未授权访问和信息泄露测试。
 
-方法论指引：
-1. 分析为底 — 所有判断基于实际HTTP响应，不做猜测
-2. 第一性原理 — 每个端点问：这个请求发了什么？响应返回了什么？真的需要认证吗？
-3. 扩散思维链 — 发现一个API后，思考关联系统（同域名其他端口、同IP其他服务、同框架其他路径）
+**【核心方法论 — 请先ReadFile加载 references/deep-mining-methodology.md】**
+先Read ${SKILL_SCRIPTS}/../references/deep-mining-methodology.md，然后按以下原则执行：
+
+1. 反思为主 — 先深入分析已有资产，不急于扩展。对每个目标系统思考：这个系统做什么的？数据流？鉴权怎么实现的？
+2. 迁跃为辅 — 从一个发现跳跃到相关系统，找横向关联
+3. 分析为底 — 所有判断基于实际HTTP响应，不做猜测
+4. 扩展为路 — 在已有发现基础上逐步扩展攻击面，而非盲目扫描
 
 高优目标列表:
 ${targets.map(t => `  ${t.priority} | ${t.url} | tags: ${(t.tags||[]).join(',')}`).join('\n')}
@@ -580,9 +583,16 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
       }, phase: '漏洞挖掘' }
     )
 
-    // 3.2 越权/弱口令/其他测试
+    // 3.2 越权/弱口令/其他测试（遵循: 反思为主→迁跃为辅→分析为底→扩展为路）
     p3_other = await agent(
       `你是SRC漏洞挖掘专家，对 ${companyName} 执行越权/弱口令等测试。
+
+**【核心方法论 — 请先ReadFile加载 references/deep-mining-methodology.md】**
+先Read ${SKILL_SCRIPTS}/../references/deep-mining-methodology.md 了解完整方法论，按以下原则执行：
+1. 反思为主 — 对每个目标先理解其功能和鉴权机制
+2. 迁跃为辅 — 从发现的越权点跳跃到关联系统
+3. 分析为底 — 不靠猜测，每个结论必须有HTTP响应支撑
+4. 扩展为路 — 从已发现的脆弱点逐步扩大
 
 高优目标:
 ${targets.map(t => `  ${t.url}`).join('\n')}
@@ -635,7 +645,7 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
     let p3_quick = null
     if (tier2_urls.length > 0) {
       p3_quick = await agent(
-        `对 ${companyName} 的以下剩余资产做快速未授权探测。
+        `对 ${companyName} 的以下剩余资产做快速未授权探测（遵循: 分析为底）。
 
 剩余资产列表（${tier2_urls.length} 个）:
 ${tier2_urls.map(u => `  ${u}`).join('\n')}

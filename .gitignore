@@ -1,0 +1,35 @@
+# 运行时生成的公司数据
+butiansrc/
+Exclusive_SRC/
+submittable_reports/
+reports_html/
+_invalid/
+
+# 资产测试状态
+asset_test_status.json
+asset_findings.json
+
+# 凭据文件
+.sudo_pass
+sudo_helper.sh
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 临时文件
+/tmp/
+*.tmp
+*.log

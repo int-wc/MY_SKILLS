@@ -534,24 +534,40 @@ ${allUrls.map(u => `  ${u}`).join('\n')}
 ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分析数据）'}
 
 测试矩阵（按优先级执行）:
-1. 未授权访问 - 直接curl不带任何Cookie/Token
-   - 从URL提取域名，构造常见API路径:
-     /api/v1/user/info, /api/v1/order/list, /admin/user, /api/v1/config
-   - 对管理后台: /admin/, /console/, /manager/
-   - 对Spring Boot: /actuator, /actuator/env, /actuator/heapdump
 
-2. API文档泄露:
-   /swagger-ui.html, /v2/api-docs, /v3/api-docs, /doc.html
+**【核心策略 — 根据 API 命名推断功能，针对性利用】**
 
-3. 配置文件泄露:
-   /.env, /.git/config, /WEB-INF/web.xml, /phpinfo.php, /robots.txt
+不要只测固定路径列表。对于从 JS 发现的 API 路径，先分析命名再选择测试手法：
 
-4. HTTP方法过度:
-   对发现的端点尝试 OPTIONS、PUT、DELETE
+1. 分析 API 命名 → 推断功能 → 对应攻击:
+   upload/file/import/attachment       → **文件上传绕过/任意文件写入**
+   download/export/backup/fetch        → **路径遍历/任意文件读取**
+   order/payment/bill/account/balance  → **IDOR越权（替换id/userId参数）**
+   login/auth/token/session            → **认证绕过/弱口令/JWT伪造**
+   admin/manager/console/dashboard     → **垂直越权/权限提升**
+   config/settings/env/param           → **配置泄露/敏感信息**
+   sql/search/query/select             → **SQL注入/SSTI**
+   exec/run/command/shell/exec     → **命令执行/RCE**
+   delete/drop/remove/clear            → **未授权删除**
+   page/list/search/query              → **批量遍历/未授权敏感数据**
 
-5. 批量对比:
-   对每个发现的API，对比 带Cookie vs 无Cookie 的响应差异
-   响应大小相近 + 200 = 可能未授权
+2. 根据参数名判断测试方向:
+   id/userId/orderId → 替换遍历看响应变化
+   file/path/url     → 路径穿越(../)、SSRF
+   page/pageSize     → 分页遍历
+   callback/jsonp    → XSS/JSON劫持
+   redirect/next/url → 开放重定向
+   data/html/content → XSS/富文本注入
+
+3. HTTP方法过度:
+   对发现的端点 OPTIONS → 允许的方法 → PUT修改/DELETE删除/POST创建
+
+4. 未授权对比:
+   带Cookie vs 无Cookie 响应差异 → 响应大小相近+200 = 可能未授权
+
+5. 通用路径兜底（不在JS路径中的也扫）:
+   API文档: /swagger-ui.html, /v3/api-docs, /doc.html
+   配置:   /.env, /actuator, /actuator/heapdump
 
 对每个潜在漏洞记录:
 - 类型、端点、HTTP请求/响应摘要、状态码、置信度

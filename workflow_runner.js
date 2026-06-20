@@ -25,8 +25,18 @@ const SKILL_SCRIPTS = '/home/my/.claude/skills/SRC_SKILLS_V1/scripts'
 
 let companyName, mode, singleUrl
 if (typeof args === 'string') {
-  companyName = args
-  mode = 'full'
+  // 修复：Workflow 工具传递的对象 args 可能被序列化为 JSON 字符串
+  // 先尝试 JSON 解析，成功则作为对象处理，否则当做公司名
+  let parsed = null
+  try { parsed = JSON.parse(args) } catch (_) {}
+  if (parsed && typeof parsed === 'object') {
+    companyName = parsed.company || '货讯通科技'
+    mode = parsed.mode || 'full'
+    singleUrl = parsed.url || null
+  } else {
+    companyName = args
+    mode = 'full'
+  }
 } else if (typeof args === 'object' && args) {
   companyName = args.company || '货讯通科技'
   mode = args.mode || 'full'

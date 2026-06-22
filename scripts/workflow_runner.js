@@ -421,7 +421,10 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5') || mode === 'url') {
   markPhase(2, '🔄')
   log(`[2/8] 深度分析 — ${companyName}`)
 
-  const targets = (p1_assets.priority_targets || []).slice(0, 50)
+  // 从priority_targets + all_urls 合并取前50个去重，确保JS分析覆盖全部资产
+  const p2_priority_urls = (p1_assets.priority_targets || []).map(t => t.url).filter(Boolean)
+  const p2_all_urls = (p1_assets.all_urls || []).filter(u => !p2_priority_urls.includes(u))
+  const targets = [...p2_priority_urls, ...p2_all_urls].slice(0, 50)
 
   if (targets.length === 0) {
     log('  ⚠️ 无高优先级目标可分析')
@@ -431,7 +434,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5') || mode === 'url') {
       targets,
       async (target) => {
         return await agent(
-          `你是JS逆向和API发现专家，分析目标: ${target.url}
+          `你是JS逆向和API发现专家，分析目标: ${target}
 
       执行四层分析：
       1. 第一层 - 定位API入口:
@@ -491,7 +494,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5') || mode === 'url') {
         .map((a, i) => `【目标${i+1}JS分析结果】\n${a}`)
         .join('\n\n')
       // 记录JS分析维度
-      targets.forEach(t => dimTracker.record(t.url, 'js_analysis', 'done'))
+      targets.forEach(t => dimTracker.record(t, 'js_analysis', 'done'))
     }
   }
 

@@ -425,7 +425,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
          找到API路径 → 功能命名可推断数据敏感度
 
       注意: 只做读取分析。遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)。`,
-          { label: `🔬 JS分析: ${target.url}`, phase: '深度分析' }
+          { label: `🔬 JS分析: ${target}`, phase: '深度分析' }
         )
       },
       (result, target) => {
@@ -1058,7 +1058,7 @@ ${p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框�
     // == 本地部署+源码审计结束 ==
 
     // Tier 2: 剩余资产全量测试（非快速探测，所有目标做完整维度测试）
-    let p3_quick = null
+    p3_quick = null
     if (tier2_urls.length > 0) {
       p3_quick = await agent(
         `对 ${companyName} 的以下剩余资产做**全量漏洞测试**。
@@ -1345,7 +1345,7 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
             if (m) f.http_status = parseInt(m[1] || m[2] || m[3])
           }
           if (!f.http_status && f.curl_command) {
-            const m = f.curl_command.match(/-w[=%]"?%{http_code}"?/)
+            const m = f.curl_command.match(/-w[=% ]"?%{http_code}"?/)
             if (m) f.http_status = 200  // 有curl命令但无状态码，默认200
           }
           if (!f.http_status) f.http_status = 0  // 实在提取不到就标0
@@ -1360,7 +1360,7 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
         })
       }
     }
-  }
+
 
   // 2. 如果有效发现仍然较少，尝试目录扫描兜底
   if (progress.findings_count < 3) {
@@ -1407,7 +1407,7 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
 
   markPhase(4, '✅')
   showProgress()
-}
+
 
 // ============================================================
 // Phase 5: 资产标记与状态存储
@@ -1594,6 +1594,7 @@ if (progress.findings_count === 0) {
     ...(typeof p3_unauth !== 'undefined' && p3_unauth?.findings ? p3_unauth.findings : []),
     ...(typeof p3_other !== 'undefined' && p3_other?.findings ? p3_other.findings : []),
     ...(typeof p4_dirscan !== 'undefined' && p4_dirscan?.findings ? p4_dirscan.findings : []),
+    ...(typeof p3_quick !== 'undefined' && p3_quick?.findings ? p3_quick.findings : []),
   ]
   const findingsJSON = JSON.stringify(allFindingsData, null, 2)
 

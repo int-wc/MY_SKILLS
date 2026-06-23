@@ -133,7 +133,7 @@ if (p0_tracker?.exists && p0_tracker?.assets) {
 // ============================================================
 // 测试维度跟踪器 — 记录每个资产完成了哪些测试
 // ============================================================
-// 适用维度: port_scan, http_probe, unauth_test, weak_pass
+// 适用维度: http_probe, unauth_test, weak_pass
 //           dir_enum(手动), dirsearch_scan(全量), js_analysis
 const dimTracker = {
   _data: {},
@@ -151,7 +151,7 @@ const dimTracker = {
   judge(url, isWeb, hasLogin) {
     const e = this._data[url]
     if (!e) return '无法进行测试'
-    const app = ['port_scan', 'http_probe', 'unauth_test', 'dir_enum']
+    const app = ['http_probe', 'unauth_test', 'dir_enum']
     if (isWeb) app.push('dirsearch_scan')
     if (hasLogin) app.push('weak_pass')
     const done = this.completed(url)
@@ -163,7 +163,7 @@ const dimTracker = {
   missing(url, isWeb, hasLogin) {
     const e = this._data[url]
     if (!e) return ['http_probe', 'unauth_test', 'dir_enum']
-    const app = ['port_scan', 'http_probe', 'unauth_test', 'dir_enum']
+    const app = ['http_probe', 'unauth_test', 'dir_enum']
     if (isWeb) app.push('dirsearch_scan')
     if (hasLogin) app.push('weak_pass')
     const done = this.completed(url)
@@ -262,14 +262,7 @@ p1_assets = await agent(
 
   3. 优先级排序输出
 
-4. **全端口扫描扩充**（最高优先级 — 如资源允许）:
-   - 如果目标 IP 数量较少（<50）且测试机器性能允许，对目标 IP 执行全端口扫描:
-   - masscan --rate=1000 -iL targets_ip.txt -p0-65535 -oG masscan_results.gnmap
-   - 或用 nmap -p- -sV -T4 做服务识别
-   - 将新发现的端口 URL 加入 all_urls 并标记 [全端口发现]
-   - 详细命令 → references/phase-cmd-reference.md#阶段1-资产发现命令
-
-5. **URL聚合去重**：同域名多端口→保留HTTP+HTTPS各一；同IP多域名→独立保留
+4. **URL聚合去重**：同域名多端口→保留HTTP+HTTPS各一；同IP多域名→独立保留
 
      - 最高: [管理后台][境外资产]
      - 高: [范围内][新发现]
@@ -1529,7 +1522,7 @@ ${p3_findings_data.length > 0 ? p5_findings_json.substring(0, 4000) : '(无发�
                   type: 'array',
                   items: {
                     type: 'string',
-                    enum: ['port_scan', 'http_probe', 'unauth_test', 'dir_enum', 'dirsearch_scan', 'weak_pass', 'js_analysis'],
+                    enum: ['http_probe', 'unauth_test', 'dir_enum', 'dirsearch_scan', 'weak_pass', 'js_analysis'],
                   },
                   description: '该资产已完成的测试维度，agent可基于泛化判断增减'
                 },

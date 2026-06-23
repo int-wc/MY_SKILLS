@@ -6,7 +6,7 @@
 
 ```bash
 # 检查依赖
-for tool in curl jq nmap masscan httpx dirsearch hydra python3 awk sed grep; do
+for tool in curl jq httpx dirsearch hydra python3 awk sed grep; do
   command -v $tool &>/dev/null && echo "[✓] $tool" || echo "[✗] $tool 缺失"
 done
 pip install requests bs4 lxml
@@ -29,7 +29,7 @@ claude Workflow --script workflow_runner.js --args '{"company":"理想汽车","m
 
 | 阶段 | 说明 |
 |------|------|
-| 1️⃣ 资产发现 | Hunter CSV 解析 + 端口扫描 + 优先级排序 |
+| 1️⃣ 资产发现 | Hunter CSV 解析 + 优先级排序 |
 | 2️⃣ 深度分析 | JS 逆向 + API 端点提取 + 组件审计 |
 | 3️⃣ 漏洞挖掘 | 未授权/弱口令/越权/目录探测（Tier 1 全量 + Tier 2 快速） |
 | 4️⃣ 验证取证 | 严格 curl 验证，confirmed 必须有 http_status + evidence |
@@ -62,10 +62,9 @@ claude Workflow --script workflow_runner.js --args '{"company":"理想汽车","m
 ## 前置要求
 
 - Claude Code CLI
-- curl, jq, nmap/masscan, httpx, dirsearch
+- curl, jq, httpx, dirsearch
 - Python 3 + requests/bs4/lxml
 - Hunter API Key（用于资产采集）
-- sudo 权限（用于端口扫描），密码存于 `.sudo_pass`
 
 ## 注意事项
 

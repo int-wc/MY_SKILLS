@@ -55,13 +55,13 @@ SRC_SKILLS_V1/
 ## 启动检查
 
 ```bash
-for tool in curl jq nmap masscan httpx dirsearch hydra python3 awk sed grep; do
+for tool in curl jq httpx dirsearch hydra python3 awk sed grep; do
   command -v $tool &>/dev/null && echo "[✓] $tool" || echo "[✗] $tool 缺失"
 done
 python3 -c "import requests, bs4, lxml" 2>/dev/null || echo "pip install requests bs4 lxml"
 ```
 
-**缺工具策略：** 缺 masscan → nmap 替代；缺 dirsearch → ffuf/手动curl；缺 httpx → `curl -sI`
+**缺工具策略：** 缺 dirsearch → ffuf/手动curl；缺 httpx → `curl -sI`
 
 ---
 
@@ -86,8 +86,7 @@ python3 -c "import requests, bs4, lxml" 2>/dev/null || echo "pip install request
 2. **解析Hunter资产**：CSV列—IP,端口,域名,url,标题,状态码,组件,备案。按维度打标签：
    - `[管理后台]` 最高 | `[新发现][范围内][境外资产]` 高 | `[非常见端口][组件指纹]` 中
 3. **URL聚合去重**：同域名不同端口→保留HTTP+HTTPS各一；同IP不同域名→独立保留
-4. **全端口扫描扩充**（最高优先级）：masscan/nmap → 域名-IP映射 → httpx探活 → `[全端口发现]`标签
-5. **目标优先级**: RCE > 大量敏感数据 > 文件读写 > SSRF > 越权 > 信息泄露 > XSS > 弱口令
+4. **目标优先级**: RCE > 大量敏感数据 > 文件读写 > SSRF > 越权 > 信息泄露 > XSS > 弱口令
 6. 详细命令 → `references/phase-cmd-reference.md#阶段1-资产发现命令`
 
 **单URL模式：** 指定 `mode: "url"` 跳过资产发现和深度分析，直接对单个URL执行漏洞挖掘全流程。
@@ -180,8 +179,8 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
 
 每次标记必须附带 `reason` 字段，例如：
 - `"已完成全部7维度测试，无新发现"`
-- `"缺漏 dir_enum, dirsearch_scan 维度，仅做了端口扫描和未授权探测"`
-- `"端口关闭，无法建立TCP连接"`
+- `"缺漏 dir_enum, dirsearch_scan 维度，仅做了HTTP探活和未授权探测"`
+- `"无法建立TCP连接"`
 
 ### 线索/漏洞存储
 
@@ -213,7 +212,6 @@ Tier 2 快速探测确保每个资产至少完成 unauthtest，弥补"44 个资�
 
 | 维度 | 编码 | 判定条件 | 适用场景 |
 |------|------|---------|---------|
-| 端口扫描 | `port_scan` | masscan/nmap 已执行 | 所有 IP 资产 |
 | HTTP探活 | `http_probe` | curl/httpx 返回了 HTTP 响应 | 开放了 Web 端口 |
 | 未授权测试 | `unauth_test` | 无 Cookie/Token 探测了至少 5 个 API 路径 | 有 HTTP 响应 |
 | 目录枚举(手动) | `dir_enum` | curl 手动探测了常见/自定义前缀路径 | Web 应用 |

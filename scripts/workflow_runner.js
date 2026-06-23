@@ -133,7 +133,7 @@ if (p0_tracker?.exists && p0_tracker?.assets) {
 // ============================================================
 // 测试维度跟踪器 — 记录每个资产完成了哪些测试
 // ============================================================
-// 适用维度: port_scan, http_probe, unauth_test, weak_pass
+// 适用维度: http_probe, unauth_test, weak_pass
 //           dir_enum(手动), dirsearch_scan(全量), js_analysis
 const dimTracker = {
   _data: {},
@@ -151,7 +151,7 @@ const dimTracker = {
   judge(url, isWeb, hasLogin) {
     const e = this._data[url]
     if (!e) return '无法进行测试'
-    const app = ['port_scan', 'http_probe', 'unauth_test', 'dir_enum']
+    const app = ['http_probe', 'unauth_test', 'dir_enum']
     if (isWeb) app.push('dirsearch_scan')
     if (hasLogin) app.push('weak_pass')
     const done = this.completed(url)
@@ -162,8 +162,8 @@ const dimTracker = {
   },
   missing(url, isWeb, hasLogin) {
     const e = this._data[url]
-    if (!e) return ['port_scan', 'http_probe', 'unauth_test', 'dir_enum']
-    const app = ['port_scan', 'http_probe', 'unauth_test', 'dir_enum']
+    if (!e) return ['http_probe', 'unauth_test', 'dir_enum']
+    const app = ['http_probe', 'unauth_test', 'dir_enum']
     if (isWeb) app.push('dirsearch_scan')
     if (hasLogin) app.push('weak_pass')
     const done = this.completed(url)
@@ -216,7 +216,6 @@ if (mode.startsWith('phase5')) {
     all_urls: [singleUrl],
   }
   // 记录基础维度
-  dimTracker.record(singleUrl, 'port_scan', 'done')
   dimTracker.record(singleUrl, 'http_probe', 'done', { title: '' })
   progress.findings_count = 1
   showProgress()
@@ -262,7 +261,7 @@ p1_assets = await agent(
      - 同一域名多端口做URL聚合去重
 
   3. 优先级排序输出
-     - 最高: [全端口发现][管理后台][境外资产]
+     - 最高: [管理后台][境外资产]
      - 高: [范围内][新发现]
      - 中: [非常见端口][组件指纹]
 
@@ -328,10 +327,9 @@ if (p0_testedUrls.size > 0 && p1_assets?.priority_targets) {
   if (filtered > 0) log(`  已过滤 ${filtered} 个已测试资产，跳过重复测试`)
 }
 
-// 记录 Phase 1 资产维度（port_scan + http_probe）
+// 记录 Phase 1 资产维度
 ;(p1_assets.priority_targets || []).forEach(t => {
   const isLogin = (t.tags || []).includes('[管理后台]')
-  dimTracker.record(t.url, 'port_scan', 'done')
   dimTracker.record(t.url, 'http_probe', 'done', { title: t.title || '' })
   if (isLogin) dimTracker.record(t.url, 'weak_pass', 'pending')
 })
@@ -1095,9 +1093,9 @@ ${p3_findings_data.length > 0 ? p5_findings_json.substring(0, 4000) : '(无发�
 
 每次标记必须给出 reason 字段（不要用 notes 字段，必须用 reason ），例如：
 - "已完成全部7维度测试，无新发现"
-- "缺漏 dir_enum, dirsearch_scan 维度，仅做了端口扫描和未授权探测"
+- "缺漏 dir_enum, dirsearch_scan 维度，仅做了HTTP探活和未授权探测"
 - "端口关闭，无法建立TCP连接"
-- "仅做了 port_scan + http_probe，未授权检测和目录枚举均未执行"
+- "仅做了 http_probe 探活，未授权检测和目录枚举均未执行"
 
 **Part B: 线索/漏洞存档（如有发现）**
 1. 读取已有线索文件 ${findingsPath}（Read工具），如不存在则新建
@@ -1124,7 +1122,7 @@ ${p3_findings_data.length > 0 ? p5_findings_json.substring(0, 4000) : '(无发�
                   type: 'array',
                   items: {
                     type: 'string',
-                    enum: ['port_scan', 'http_probe', 'unauth_test', 'dir_enum', 'dirsearch_scan', 'weak_pass', 'js_analysis'],
+                    enum: ['http_probe', 'unauth_test', 'dir_enum', 'dirsearch_scan', 'weak_pass', 'js_analysis'],
                   },
                   description: '该资产已完成的测试维度，agent可基于泛化判断增减'
                 },

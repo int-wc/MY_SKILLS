@@ -199,8 +199,6 @@ phase('资产发现')
 // Fix 4: phase5 模式跳过整个资产发现阶段
 // 用let声明p1_assets，以便在phase5模式下跳过资产发现后仍可在更外层作用域使用
 let p1_assets
-// p1_portscan 也在外层作用域声明，供Phase 3引用
-let p1_portscan
 if (mode.startsWith('phase5')) {
   log('[1/8] ⏭️ 跳过（用户指定报告模式）')
   markPhase(1, '⏭️')
@@ -338,61 +336,6 @@ if (p0_testedUrls.size > 0 && p1_assets?.priority_targets) {
   if (isLogin) dimTracker.record(t.url, 'weak_pass', 'pending')
 })
 
-// 尝试全端口扫描扩充
-p1_portscan = await agent(
-  `你是SRC资产扫描专家。负责对 ${companyName} 做资产扩充。
-
-  1. 检查 ${SRC_BASE}/${companyName}/hunter_info/ 下是否有CSV文件
-  2. 如果有，提取 3-5 个不同C段的IP用于测试（优先选最多子域名/域名的IP，确保不同网段）
-  3. 检查目录下是否已有 masscan_results.gnmap 等扫描结果文件
-  4. **必须执行 masscan 全端口扫描（0-65535）**，不允许跳过或改用其他工具：
-     - 命令: sudo_helper.sh "masscan --rate=500 -p1-65535 -oG masscan_results.gnmap -iL /tmp/test_ips.txt"
-     - rate=500 是家庭宽带安全上限，不要加大
-     - **等待 masscan 执行完毕再继续**
-     - sudo_helper.sh 路径: /home/my/.local/bin/sudo_helper.sh
-     - 调用格式: sudo_helper.sh "要执行的完整命令"
-     - 如果 masscan 因 root/权限报错 → fallback 到: sudo_helper.sh "nmap -iL /tmp/test_ips.txt -p- -sV -T4 --min-rate=500 -oA fullport_scan"
-  5. 将新发现的端口与域名映射并探活 (httpx)
-  6. 输出结构化结果，包含新发现资产的URL/IP/端口/服务信息
-
-  输出新发现的资产列表。`,
-  { label: '🔍 端口扫描扩充', phase: '资产发现', schema: {
-    type: 'object',
-    properties: {
-      new_assets: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            url: { type: 'string', description: '完整URL，如 https://1.2.3.4:8443' },
-            ip: { type: 'string', description: 'IP地址' },
-            port: { type: 'number', description: '端口号' },
-            title: { type: 'string', description: '网站标题' },
-            service: { type: 'string', description: '服务类型/组件' },
-            tags: { type: 'array', items: { type: 'string' }, description: '标签，如 [全端口发现]' },
-          },
-          required: ['url', 'ip', 'port'],
-        },
-      },
-      summary: { type: 'string', description: '扫描结果摘要' },
-    },
-    required: ['new_assets', 'summary'],
-  } }
-)
-
-
-// 提取端口扫描发现的新资产URL，供后续阶段使用
-const p1_portscan_new_urls = (p1_portscan?.new_assets || []).map(a => a.url).filter(Boolean)
-if (p1_portscan_new_urls.length > 0) {
-  log(`  端口扫描发现 ${p1_portscan_new_urls.length} 个新资产:`)
-  p1_portscan_new_urls.slice(0, 5).forEach(u => log(`    ${u}`))
-}
-
-// 记录端口扫描资产维度
-;(p1_portscan?.new_assets || []).forEach(a => {
-  dimTracker.record(a.url, 'port_scan', 'done')
-  dimTracker.record(a.url, 'http_probe', 'done', { title: a.title || a.service || '' })
-})
 
 markPhase(1, '✅')
 progress.findings_count = p1_assets.priority_targets?.length || 0
@@ -418,14 +361,17 @@ let p3_unauth, p3_other, p3_quick, p4_dirscan, p4_verify
 // 聚合发现数据，供 Phase 5 写入线索文件
 let p3_findings_data = []
 
-if (mode.startsWith('phase3') || mode.startsWith('phase5') || mode === 'url') {
+if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
   log('[2/8] ⏭️ 跳过（用户指定模式）')
   markPhase(2, '⏭️')
 } else {
   markPhase(2, '🔄')
   log(`[2/8] 深度分析 — ${companyName}`)
 
-  const targets = (p1_assets.priority_targets || []).slice(0, 2)
+  // 从priority_targets + all_urls 合并取前50个去重，确保JS分析覆盖全部资产
+  const p2_priority_urls = (p1_assets.priority_targets || []).map(t => t.url).filter(Boolean)
+  const p2_all_urls = (p1_assets.all_urls || []).filter(u => !p2_priority_urls.includes(u))
+  const targets = [...p2_priority_urls, ...p2_all_urls].slice(0, 50)
 
   if (targets.length === 0) {
     log('  ⚠️ 无高优先级目标可分析')
@@ -435,7 +381,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5') || mode === 'url') {
       targets,
       async (target) => {
         return await agent(
-          `你是JS逆向和API发现专家，分析目标: ${target.url}
+          `你是JS逆向和API发现专家，分析目标: ${target}
 
       执行四层分析：
       1. 第一层 - 定位API入口:
@@ -495,7 +441,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5') || mode === 'url') {
         .map((a, i) => `【目标${i+1}JS分析结果】\n${a}`)
         .join('\n\n')
       // 记录JS分析维度
-      targets.forEach(t => dimTracker.record(t.url, 'js_analysis', 'done'))
+      targets.forEach(t => dimTracker.record(t, 'js_analysis', 'done'))
     }
   }
 
@@ -518,29 +464,22 @@ if (mode.startsWith('phase5')) {
   markPhase(3, '🔄')
   log(`[3/8] 漏洞挖掘 — ${companyName}`)
 
-  // Tier 1: 高优目标（全量测试：未授权+弱口令+目录枚举）
-  const targets = (p1_assets.priority_targets || []).slice(0, 5)
-  const p1_portscan_targets = p1_portscan?.new_assets?.length
-    ? p1_portscan.new_assets.slice(0, 5).map(a => ({
-        url: a.url, ip: a.ip, port: a.port, title: a.title || '',
-        tags: [...(a.tags || []), '[全端口发现]'],
-        priority: '最高', reason: '端口扫描发现'
-      }))
-    : []
-  if (p1_portscan_targets.length > 0) {
-    targets.push(...p1_portscan_targets)
-  }
+  // 所有高优目标全量测试（不限制top5，扩大覆盖到MAX_TARGETS个）
+  // P3_TIER1_MAX 控制Tier 1全量测试的资产数上限
+  // P3_TIER2_MAX 控制Tier 2全量测试的资产数上限（超出Tier 1的部分）
+  const P3_TIER1_MAX = 50
+  const P3_TIER2_MAX = 50
+  const targets = (p1_assets.priority_targets || []).slice(0, P3_TIER1_MAX)
 
-  // Tier 2: 剩余资产快速探测（扩充维度覆盖，弥补仅2-3维度的缺口）
+  // Tier 2: 剩余资产同样全量测试（非快速探测）
   const tier2_urls = [
-    ...(p1_assets.priority_targets || []).slice(5).map(t => t.url),
+    ...(p1_assets.priority_targets || []).slice(P3_TIER1_MAX).map(t => t.url),
     ...(p1_assets.all_urls || [])
   ].filter((v, i, a) => a.indexOf(v) === i)
    .filter(u => !targets.some(t => t.url === u))
-   .slice(0, 30)
+   .slice(0, P3_TIER2_MAX)
 
   const allUrls = [...targets.map(t => t.url), ...tier2_urls]
-  const p1_scan_urls = (p1_portscan?.new_assets || []).map(a => a.url).filter(Boolean)
 
   if (targets.length === 0 && allUrls.length === 0) {
     log('  ⚠️ 无可用测试目标')
@@ -622,6 +561,12 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
 
 对每个潜在漏洞记录:
 - 类型、端点、HTTP请求/响应摘要、状态码、置信度
+
+**⚠️ 硬性过滤规则（必须遵守）:**
+- JSON 响应中 data 字段为 []（空数组）、{}（空对象）、null → 不视为"信息泄露"或"未授权访问"
+- HTTP 200 + {"code":"1","msg":"成功","data":[]} → 说明API存在但数据不可见，不是漏洞
+- 这类发现的 confidence 必须标记为 "exploratory"，不能标记为 "confirmed" 或 "suspected"
+- 只有响应体包含实际业务数据（用户信息/配置凭证/订单记录等）才算 confirmed
 
 只做读取探测。`,
       { label: `🔓 未授权/信息泄露测试`, schema: {
@@ -714,24 +659,28 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
       }, phase: '漏洞挖掘' }
     )
 
-    // Tier 2: 剩余资产快速未授权探测（批量curl常见路径，填补维度覆盖缺口）
+    // Tier 2: 剩余资产全量测试（非快速探测，所有目标做完整维度测试）
     let p3_quick = null
     if (tier2_urls.length > 0) {
       p3_quick = await agent(
-        `对 ${companyName} 的以下剩余资产做快速未授权探测（遵循: 分析为底）。
+        `对 ${companyName} 的以下剩余资产做**全量漏洞测试**。
 
 剩余资产列表（${tier2_urls.length} 个）:
 ${tier2_urls.map(u => `  ${u}`).join('\n')}
 
-执行快速探测（每个目标只做轻量探测）:
+执行全量测试（每个目标深入测试）:
 1. curl -sI 每个URL确认HTTP状态码
-2. 对返回200/401/403的，尝试常见路径:
-   - API: /api/v1/user, /api/v1/config, /swagger-ui.html, /v2/api-docs
-   - 后台: /admin/, /console/, /login, /manager/
-   - 配置: /.env, /robots.txt, /WEB-INF/web.xml
-   - 组件: /actuator, /druid, /nacos
-3. 有发现的才记录，无发现的不需输出
-4. 每个发现附带 curl 命令`,
+2. 对返回200/401/403的，探测以下维度:
+   - 未授权API: /api/v1/user, /api/v1/config, /swagger-ui.html, /v2/api-docs
+   - 后台管理: /admin/, /console/, /login, /manager/
+   - 配置泄露: /.env, /robots.txt, /WEB-INF/web.xml
+   - 组件端点: /actuator, /druid, /nacos
+   - 备份文件: *.bak, *.zip, *.tar.gz
+   - 路径穿越: ../../etc/passwd
+3. 对登录页面尝试弱口令: admin/admin, admin/123456
+4. 识别组件版本+CVE匹配
+5. 有发现的才记录，无发现的不需输出
+6. 每个发现附带 curl 命令`,
         { label: '⚡ Tier2快速探测', schema: {
           type: 'object',
           properties: {
@@ -851,6 +800,23 @@ ${p4_findings_json.substring(0, 6000)}
 4. 证据必须是实际的敏感数据片段，不是状态码本身
 5. 三项条件缺一不可，不满足的降级为 suspected 或 needs_manual_test
 
+**🔥 关键 — JSON空响应检测规则（必须硬性遵守，不可覆盖）：**
+- 如果响应体是 JSON，执行 curl 后用 python3 -c "import sys,json; d=json.load(sys.stdin); print(len(json.dumps(d.get('data', {}))))" 提取 data 字段
+- **[data] 字段为 []（空数组）或 {}（空对象）或 null 或无 data 字段 → 一律标记为 false_positive**，理由: data_empty
+- **[data] 字段长度 < 30 字符（最小有意义数据的阈值）→ 标记为 false_positive**
+- **JSON 中只含非数据字段（code/msg/timestamp/success/pageNum/total 等状态元数据）但无实际业务数据 → 标记为 false_positive**
+- **不要因为 HTTP 200 + JSON 包含 "成功" 字样就认为是真数据，必须检查 data 字段是否包含有意义的业务记录**
+
+**检测步骤（按顺序执行，不可跳过）：**
+Step A: 执行 curl -sk -o /tmp/verify_resp.json -w "%{http_code}" "<URL>" 获取完整响应体
+Step B: 用 python3 -c "import json; d=json.load(open('/tmp/verify_resp.json')); print(json.dumps(d, ensure_ascii=False)[:200])" 查看响应前200字符
+Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
+  - data 是空列表 [] → false_positive (理由: data_empty_list)
+  - data 是空对象 {} → false_positive (理由: data_empty_object)
+  - data 是 null 或 undefined → false_positive (理由: data_null)
+  - data 是非空列表但第一项不包含用户可读的业务字段（仅含 id/iid/total/pageNum 等元数据）→ suspected 或 false_positive
+  - data 是包含用户/订单/配置/凭证等业务数据的非空列表 → confirmed
+
 输出时 confirmed_findings 只放 confirmed + suspected 的。false_positives 和 needs_manual_test 各自归位。`,
       { label: '🔍 漏洞复测验证', schema: {
         type: 'object',
@@ -901,6 +867,47 @@ ${p4_findings_json.substring(0, 6000)}
     )
 
     if (p4_verify && p4_verify.confirmed_findings) {
+      // ============================================================
+      // 🔧 硬性程序化证据检查 — 确保 AI 的 confirmed/suspected 判定
+      // 必须包含可验证的真实业务数据（而非空 JSON 容器）
+      // ============================================================
+      const EMPTY_DATA_PATTERNS = [
+        '"data":[]', '"data":{}', '"data":null', '"data":""',
+        '"data":\n[]', '"data":\n{}',
+        '"list":[]', '"records":[]', '"rows":[]',
+        '"total":0}', '"size":0}',
+      ]
+      const AUDIT_EVIDENCE_MIN = 40
+      const audited = []
+      for (const f of p4_verify.confirmed_findings) {
+        let reason = null
+        const ev = (f.evidence || '').replace(/\s+/g, '')
+        if (!f.evidence || f.evidence.trim().length < 3) {
+          reason = 'evidence_empty_or_too_short'
+        } else if (EMPTY_DATA_PATTERNS.some(p => ev.includes(p))) {
+          reason = 'evidence_contains_empty_data_container'
+        } else if (f.evidence.length < AUDIT_EVIDENCE_MIN) {
+          reason = `evidence_too_short_${f.evidence.length}chars`
+        }
+        if (reason) {
+          log(`  🔧 程序化验货: [${f.severity}] ${f.title} -> ${reason}，自动降级 false_positive`)
+          p4_verify.false_positives = p4_verify.false_positives || []
+          p4_verify.false_positives.push({
+            title: f.title, endpoint: f.endpoint,
+            reason: `自动证据检查: ${reason}，evidence="${(f.evidence||'').substring(0,120)}"`
+          })
+          log(`     -> ${f.title} 已从 confirmed 移至 false_positives`)
+        } else {
+          audited.push(f)
+        }
+      }
+      const downgraded = p4_verify.confirmed_findings.length - audited.length
+      if (downgraded > 0) log(`  🔧 程序化验货已自动降级 ${downgraded} 条空证据发现`)
+      p4_verify.confirmed_findings = audited
+      // ============================================================
+      // 程序化证据检查结束
+      // ============================================================
+
       const fp_count = p4_verify.false_positives?.length || 0
       const manual_count = p4_verify.needs_manual_test?.length || 0
       const fp_suffix = fp_count > 0 ? `, ${fp_count} 个 false_positive` : ''
@@ -960,7 +967,7 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
   // 2. 如果有效发现仍然较少，尝试目录扫描兜底
   if (progress.findings_count < 3) {
     p4_dirscan = await agent(
-      `对 ${companyName} 执行目录扫描兜底（因当前发现较少）。\n\n目标URL:\n${(p1_assets.priority_targets || []).slice(0, 3).map(t => t.url).join('\n')}\n\n使用 dirsearch 扫描常见路径:\n- 后台管理: /admin/, /manager/, /console/, /system/\n- 备份文件: /backup/, *.bak, *.zip, *.tar.gz\n- 文件上传: /uploads/, /files/\n- 配置泄露: /.git/, /.svn/, /.env, /WEB-INF/web.xml\n- 组件端点: /actuator/, /druid/, /nacos/\n\n如果 dirsearch 不可用，用 curl 手动探测以上路径。\n对新发现的端点做未授权测试。\n\n输出所有发现。`,
+      `对 ${companyName} 执行目录扫描兜底（因当前发现较少）。\n\n目标URL:\n${(p1_assets.priority_targets || []).slice(0, 50).map(t => t.url).join('\n')}\n\n使用 dirsearch 扫描常见路径:\n- 后台管理: /admin/, /manager/, /console/, /system/\n- 备份文件: /backup/, *.bak, *.zip, *.tar.gz\n- 文件上传: /uploads/, /files/\n- 配置泄露: /.git/, /.svn/, /.env, /WEB-INF/web.xml\n- 组件端点: /actuator/, /druid/, /nacos/\n\n如果 dirsearch 不可用，用 curl 手动探测以上路径。\n对新发现的端点做未授权测试。\n\n输出所有发现。`,
       { label: '📂 目录扫描兜底', schema: {
         type: 'object',
         properties: {
@@ -994,7 +1001,7 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
       })))
     }
     // 记录目录枚举维度（手动探测 → dir_enum，dirsearch → dirsearch_scan）
-    ;(p1_assets.priority_targets || []).slice(0, 3).forEach(t => {
+    ;(p1_assets.priority_targets || []).slice(0, 50).forEach(t => {
       dimTracker.record(t.url, 'dir_enum', 'done')
       if (extra.length > 0) dimTracker.record(t.url, 'dirsearch_scan', 'done')
     })
@@ -1019,7 +1026,6 @@ if (mode.startsWith('phase5') || typeof p1_assets === 'undefined' || !p1_assets 
   // 收集本次运行涉及的所有资产
   const p5_all_assets = [
     ...(typeof p1_assets !== 'undefined' && p1_assets?.priority_targets ? p1_assets.priority_targets.map(t => ({ url: t.url, ip: t.ip, port: t.port, title: t.title || '', tags: t.tags || [] })) : []),
-    ...(typeof p1_portscan !== 'undefined' && p1_portscan?.new_assets ? p1_portscan.new_assets.map(a => ({ url: a.url, ip: a.ip, port: a.port, title: a.title || a.service || '', tags: a.tags || [] })) : []),
   ]
   // 去重
   const p5_urls_set = new Set()
@@ -1515,12 +1521,13 @@ const p7_final = await agent(
 
 markPhase(8, '✅')
 
+
 // ============================================================
 // 最终总结
 // ============================================================
 log('')
 log('╔══════════════════════════════════════════════════════════════╗')
-log('║              🎉  八阶段全流程执行完成                        ║')
+log('║              🎉  七阶段全流程执行完成                        ║')
 log('╠══════════════════════════════════════════════════════════════╣')
 log(`║  厂商     │ ${(progress.company || '').padEnd(36)} ║`)
 log(`║  模式     │ ${String(mode).padEnd(36)} ║`)

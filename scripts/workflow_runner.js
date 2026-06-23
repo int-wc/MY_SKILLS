@@ -14,7 +14,6 @@ export const meta = {
     { title: '报告编写', detail: 'MD+HTML双格式输出' },
     { title: '自审', detail: '格式检查 + 重复检测' },
     { title: '提交准备', detail: '最终清单 + 提交排序' },
-    { title: '全端口扫描兜底', detail: '报告后全量masscan 0-65535，补充新端口线索' },
   ],
 }
 
@@ -62,7 +61,6 @@ const progress = {
   phase6: '⬜',
   phase7: '⬜',
   phase8: '⬜',
-  phase9: '⬜',
   findings_count: 0,
   reports_count: 0,
 }
@@ -201,8 +199,6 @@ phase('资产发现')
 // Fix 4: phase5 模式跳过整个资产发现阶段
 // 用let声明p1_assets，以便在phase5模式下跳过资产发现后仍可在更外层作用域使用
 let p1_assets
-// p1_portscan 也在外层作用域声明，供Phase 3引用
-let p1_portscan
 if (mode.startsWith('phase5')) {
   log('[1/8] ⏭️ 跳过（用户指定报告模式）')
   markPhase(1, '⏭️')
@@ -340,55 +336,6 @@ if (p0_testedUrls.size > 0 && p1_assets?.priority_targets) {
   if (isLogin) dimTracker.record(t.url, 'weak_pass', 'pending')
 })
 
-// [轻量] 仅收集IP列表供后续全端口扫描阶段使用，不在此执行masscan
-p1_portscan = await agent(
-  `你是SRC资产扫描专家。负责对 ${companyName} 做资产IP收集（不做全端口扫描，仅做快速IP去重）。
-
-  1. 检查 ${SRC_BASE}/${companyName}/hunter_info/ 下是否有CSV文件
-  2. 提取所有资产的IP列，去重
-  3. 检查目录下已有的 masscan_results.gnmap / nmap_scan_results.txt 等扫描结果文件
-  4. **不做masscan**，仅列出去重后的IP清单
-  5. 输出这些IP清单，供后续全端口扫描阶段使用
-
-  只输出IP列表。`,
-  { label: '📋 IP收集（端口扫描延后）', phase: '资产发现', schema: {
-    type: 'object',
-    properties: {
-      new_assets: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            url: { type: 'string' },
-            ip: { type: 'string' },
-            port: { type: 'number' },
-            title: { type: 'string' },
-            service: { type: 'string' },
-            tags: { type: 'array', items: { type: 'string' } },
-          },
-          required: ['url', 'ip', 'port'],
-        },
-      },
-      all_ips: { type: 'array', items: { type: 'string' }, description: '所有去重后的IP列表' },
-      summary: { type: 'string' },
-    },
-    required: ['new_assets', 'all_ips', 'summary'],
-  } }
-)
-
-
-// 提取端口扫描发现的新资产URL，供后续阶段使用
-const p1_portscan_new_urls = (p1_portscan?.new_assets || []).map(a => a.url).filter(Boolean)
-if (p1_portscan_new_urls.length > 0) {
-  log(`  端口扫描发现 ${p1_portscan_new_urls.length} 个新资产:`)
-  p1_portscan_new_urls.slice(0, 5).forEach(u => log(`    ${u}`))
-}
-
-// 记录端口扫描资产维度
-;(p1_portscan?.new_assets || []).forEach(a => {
-  dimTracker.record(a.url, 'port_scan', 'done')
-  dimTracker.record(a.url, 'http_probe', 'done', { title: a.title || a.service || '' })
-})
 
 markPhase(1, '✅')
 progress.findings_count = p1_assets.priority_targets?.length || 0
@@ -414,7 +361,7 @@ let p3_unauth, p3_other, p3_quick, p4_dirscan, p4_verify
 // 聚合发现数据，供 Phase 5 写入线索文件
 let p3_findings_data = []
 
-if (mode.startsWith('phase3') || mode.startsWith('phase5') || mode === 'url') {
+if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
   log('[2/8] ⏭️ 跳过（用户指定模式）')
   markPhase(2, '⏭️')
 } else {
@@ -523,16 +470,6 @@ if (mode.startsWith('phase5')) {
   const P3_TIER1_MAX = 50
   const P3_TIER2_MAX = 50
   const targets = (p1_assets.priority_targets || []).slice(0, P3_TIER1_MAX)
-  const p1_portscan_targets = p1_portscan?.new_assets?.length
-    ? p1_portscan.new_assets.slice(0, P3_TIER1_MAX).map(a => ({
-        url: a.url, ip: a.ip, port: a.port, title: a.title || '',
-        tags: [...(a.tags || []), '[全端口发现]'],
-        priority: '最高', reason: '端口扫描发现'
-      }))
-    : []
-  if (p1_portscan_targets.length > 0) {
-    targets.push(...p1_portscan_targets)
-  }
 
   // Tier 2: 剩余资产同样全量测试（非快速探测）
   const tier2_urls = [
@@ -543,7 +480,6 @@ if (mode.startsWith('phase5')) {
    .slice(0, P3_TIER2_MAX)
 
   const allUrls = [...targets.map(t => t.url), ...tier2_urls]
-  const p1_scan_urls = (p1_portscan?.new_assets || []).map(a => a.url).filter(Boolean)
 
   if (targets.length === 0 && allUrls.length === 0) {
     log('  ⚠️ 无可用测试目标')
@@ -1090,7 +1026,6 @@ if (mode.startsWith('phase5') || typeof p1_assets === 'undefined' || !p1_assets 
   // 收集本次运行涉及的所有资产
   const p5_all_assets = [
     ...(typeof p1_assets !== 'undefined' && p1_assets?.priority_targets ? p1_assets.priority_targets.map(t => ({ url: t.url, ip: t.ip, port: t.port, title: t.title || '', tags: t.tags || [] })) : []),
-    ...(typeof p1_portscan !== 'undefined' && p1_portscan?.new_assets ? p1_portscan.new_assets.map(a => ({ url: a.url, ip: a.ip, port: a.port, title: a.title || a.service || '', tags: a.tags || [] })) : []),
   ]
   // 去重
   const p5_urls_set = new Set()
@@ -1586,117 +1521,20 @@ const p7_final = await agent(
 
 markPhase(8, '✅')
 
-// ============================================================
-// Phase 9 (Supplementary): 全端口扫描兜底
-// 在所有漏洞挖掘和报告完成后执行，作为补充线索供下一轮使用
-// ============================================================
-phase('全端口扫描兜底')
-markPhase(9, '🔄')
-log('[9] 🔍 全端口扫描兜底 — 补充线索供下一轮使用')
-
-// 收集所有资产的去重IP
-const p9_all_ips = new Set()
-if (p1_portscan?.all_ips) {
-  p1_portscan.all_ips.forEach(ip => p9_all_ips.add(ip))
-}
-if (p1_assets?.priority_targets) {
-  p1_assets.priority_targets.forEach(t => {
-    if (t.ip) p9_all_ips.add(t.ip)
-  })
-}
-const p9_ip_list = Array.from(p9_all_ips).filter(Boolean)
-log(`收集到 ${p9_ip_list.length} 个去重IP，开始全端口扫描`)
-
-if (p9_ip_list.length > 0) {
-  const p9_scan = await agent(
-    `你是SRC资产扫描专家。对 ${companyName} 进行**全端口扫描兜底**。
-
-这是所有漏洞挖掘和报告都完成后的补充阶段，用于发现新的端口/服务。
-
-扫描目标IP（${p9_ip_list.length} 个，去重后）:
-${p9_ip_list.join('\n')}
-
-执行步骤:
-
-1. 将以上IP写入 /tmp/p9_scan_ips.txt:
-   echo "${p9_ip_list.join('\n')}" > /tmp/p9_scan_ips.txt
-
-2. **执行 masscan 全端口扫描（0-65535）**:
-   sudo_helper.sh "masscan --rate=500 -p1-65535 -oG ${SRC_BASE}/${companyName}/hunter_info/masscan_results_supplement.gnmap -iL /tmp/p9_scan_ips.txt"
-   - 如果 masscan 因权限错误失败 → fallback 到:
-     sudo_helper.sh "nmap -iL /tmp/p9_scan_ips.txt -p- -sV -T4 --min-rate=500 -oA ${SRC_BASE}/${companyName}/hunter_info/fullport_scan_supplement"
-
-3. 解析扫描结果，提取:
-   - 新发现端口（不在已知端口列表中的）
-   - 新发现的服务（HTTP/HTTPS/数据库等）
-
-4. 对新发现的HTTP端口用httpx或curl探活:
-   curl -skI -o /dev/null -w "%{http_code}" "http://IP:PORT/"
-   curl -skI -o /dev/null -w "%{http_code}" "https://IP:PORT/"
-
-输出JSON:
-{
-  "new_discoveries": [{"ip":"x.x.x.x","port":8080,"service":"http","http_status":200,"title":"新页面标题"}],
-  "summary": "扫描结果摘要",
-  "total_ports_found": 100,
-  "new_ports_count": 50
-}`,
-    { label: '🔍 全端口扫描（兜底）', phase: '全端口扫描兜底', schema: {
-      type: 'object',
-      properties: {
-        new_discoveries: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              ip: { type: 'string' },
-              port: { type: 'number' },
-              service: { type: 'string' },
-              http_status: { type: 'number' },
-              title: { type: 'string' },
-            },
-          },
-        },
-        summary: { type: 'string' },
-        total_ports_found: { type: 'number' },
-        new_ports_count: { type: 'number' },
-      },
-      required: ['new_discoveries', 'summary'],
-    }, phase: '全端口扫描兜底' }
-  )
-
-  if (p9_scan && p9_scan.new_discoveries && p9_scan.new_discoveries.length > 0) {
-    log(`发现 ${p9_scan.new_discoveries.length} 个新端口/服务！可作为下一轮挖掘的新目标:`)
-    p9_scan.new_discoveries.slice(0, 10).forEach(d => {
-      log(`  ${d.ip}:${d.port} [${d.service}] HTTP ${d.http_status || 'N/A'} ${d.title || ''}`)
-    })
-    if (p9_scan.new_discoveries.length > 10) {
-      log(`  ... 还有 ${p9_scan.new_discoveries.length - 10} 个`)
-    }
-  } else {
-    log('全端口扫描完成，未发现新的可访问端口/服务')
-  }
-  log(`扫描摘要: ${p9_scan?.summary || '无'}`)
-} else {
-  log('⏭️ 无可扫描IP')
-}
-markPhase(9, '✅')
-showProgress()
-log('')
 
 // ============================================================
 // 最终总结
 // ============================================================
 log('')
 log('╔══════════════════════════════════════════════════════════════╗')
-log('║              🎉  八阶段全流程执行完成                        ║')
+log('║              🎉  七阶段全流程执行完成                        ║')
 log('╠══════════════════════════════════════════════════════════════╣')
 log(`║  厂商     │ ${(progress.company || '').padEnd(36)} ║`)
 log(`║  模式     │ ${String(mode).padEnd(36)} ║`)
 log(`║  发现数   │ ${String(progress.findings_count).padEnd(36)} ║`)
 log(`║  报告数   │ ${String(progress.reports_count).padEnd(36)} ║`)
 log('╠══════════════════════════════════════════════════════════════╣')
-log(`║  ① ${progress.phase1}   ② ${progress.phase2}   ③ ${progress.phase3}   ④ ${progress.phase4}   ⑤ ${progress.phase5}   ⑥ ${progress.phase6}   ⑦ ${progress.phase7}   ⑧ ${progress.phase8}   ⑨ ${progress.phase9}   ║`)
+log(`║  ① ${progress.phase1}   ② ${progress.phase2}   ③ ${progress.phase3}   ④ ${progress.phase4}   ⑤ ${progress.phase5}   ⑥ ${progress.phase6}   ⑦ ${progress.phase7}   ⑧ ${progress.phase8}   ║`)
 log('╚══════════════════════════════════════════════════════════════╝')
 showProgress()
 

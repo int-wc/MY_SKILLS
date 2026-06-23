@@ -1074,7 +1074,6 @@ ${p3_findings_data.length > 0 ? p5_findings_json.substring(0, 4000) : '(无发�
 === 维度说明 ===
 | 维度 | 说明 |
 |------|------|
-| port_scan | masscan/nmap端口扫描 |
 | http_probe | HTTP探活，确认是否Web服务 |
 | unauth_test | 无Cookie/Token的未授权端点探测 |
 | dir_enum | 手动目录枚举（含自定义前缀，如 /gateway/ /dwr/ /sys/） |

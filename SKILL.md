@@ -161,10 +161,10 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
 | 弱口令 | 通用字典 + JS发现的默认凭证 |
 | 逻辑漏洞 | 金额修改/优惠券叠加/流程绕过 |
 | **本地部署实现** | 对已识别的快速开发框架（JeecgBoot/RuoYi/JeeSite等）下载对应版本源码 → Docker/本地搭建复现环境 → 在本地验证默认口令/分析漏洞触发条件/测试绕过手法/复现利用链 → 将本地 POC 适配迁移到目标系统验证差异 |
-| **源码审计** | **三大审计维度**：
-① **权限审计（未授权探查）** — Shiro/Spring Security 过滤链 `filterChainDefinitionMap` 中 `/anon` 端点是否有遗漏；控制器 `@RequiresPermissions` / `@PreAuthorize` 注解是否缺失；各 Controller 方法逐个检查是否可无 Token 直接调用；Swagger `/doc.html` 暴露的所有接口逐一测试鉴权状态
-② **控制审计** — 文件上传后缀校验是否可绕过（大小写/双写/截断/ MIME 绕过）；文件下载/导出路径拼接是否存在 `../` 穿越；命令执行函数 `exec/shell_exec/system/Runtime.getRuntime().exec` 参数是否可控制；SQL 查询参数是否拼接（尤其 `orderBy` 排序字段）；反序列化输入是否可控；表达式模板 SSTI 注入；XXE 外部实体是否禁用
-③ **零凭据获取 Admin Token 路径** — 搜索 `login` / `auth` / `token` 相关控制器的鉴权逻辑；是否存在 `无需凭证即可获取 Token` 的接口（如仅有 IP 白名单但无认证、仅靠 `Referer` 头、仅靠时间戳签名即可签发 Token）；硬编码的 `superAdmin` / `adminKey` / `secret` 能否直接派生 Token；密码重置/验证码/社交登录/OAuth 回调是否存在逻辑缺陷可绕过
+| **源码审计** | **三大审计维度**：<br>① **权限审计（未授权探查）** — Shiro/Spring Security 过滤链 `filterChainDefinitionMap` 中 `/anon` 端点是否有遗漏；控制器 `@RequiresPermissions` / `@PreAuthorize` 注解是否缺失；各 Controller 方法逐个检查是否可无 Token 直接调用；Swagger `/doc.html` 暴露的所有接口逐一测试鉴权状态<br>② **控制审计** — 文件上传后缀校验是否可绕过（大小写/双写/截断/ MIME 绕过）；文件下载/导出路径拼接是否存在 `../` 穿越；命令执行函数 `exec/shell_exec/system/Runtime.getRuntime().exec` 参数是否可控制；SQL 查询参数是否拼接（尤其 `orderBy` 排序字段）；反序列化输入是否可控；表达式模板 SSTI 注入；XXE 外部实体是否禁用<br>③ **零凭据获取 Admin Token 路径** — 搜索 `login` / `auth` / `token` 相关控制器的鉴权逻辑；是否存在 `无需凭证即可获取 Token` 的接口（如仅有 IP 白名单但无认证、仅靠 `Referer` 头、仅靠时间戳签名即可签发 Token）；硬编码的 `superAdmin` / `adminKey` / `secret` 能否直接派生 Token；密码重置/验证码/社交登录/OAuth 回调是否存在逻辑缺陷可绕过
+
+
+
 
 批量测试脚本、弱口令字典、框架定制路径 → `references/phase-cmd-reference.md#阶段3-漏洞挖掘命令`
 

@@ -7,8 +7,8 @@ export const meta = {
   description: '补天SRC全流程：资产发现→深度分析→漏洞挖掘→验证→资产标记→报告→自审→提交',
   phases: [
     { title: '资产发现', detail: '读取厂商信息 + 解析Hunter资产 + 目标分类标记' },
-    { title: '深度分析', detail: 'JS逆向 + API枚举 + 组件审计' },
-    { title: '漏洞挖掘', detail: '按优先级测试所有攻击面' },
+    { title: '深度分析', detail: 'JS逆向 + API枚举 + 组件审计 + 开源系统识别' },
+    { title: '漏洞挖掘', detail: '按优先级测试所有攻击面 + 本地部署 + 源码审计' },
     { title: '验证取证', detail: '复现确认 + 证据收集' },
     { title: '资产标记', detail: '标记已测资产状态并存储，避免重复测试' },
     { title: '报告编写', detail: 'MD+HTML双格式输出' },
@@ -441,6 +441,194 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
       // 记录JS分析维度
       targets.forEach(t => dimTracker.record(t, 'js_analysis', 'done'))
     }
+
+    // 【开源系统识别】— 识别快速开发框架/低代码平台（JeecgBoot, RuoYi, JeeSite 等）
+    log('  🔍 执行开源系统识别（快速开发框架/低代码平台）...')
+    const p2_oss = await agent(
+      `你是快速开发框架识别专家，对 ${companyName} 的以下目标执行开源系统识别。
+重点识别：JeecgBoot、RuoYi（若依）、JeeSite、Guns、TeaWeb、BladeX、Pear Admin、低代码平台/iPaas 等。
+
+目标列表（前 20 个）:
+${targets.slice(0, 20).map(t => `  ${t.url}`).join('\n')}
+
+对每个目标执行以下步骤：
+
+**Step 1: 指纹采集**
+对每个目标执行 curl -sI 获取响应头 + curl -s 获取首页内容 + curl -sk 获取 /swagger-ui.html /doc.html /v2/api-docs
+
+**Step 2: 快速开发框架识别**
+
+逐项检查以下框架特征（不限于此列表，可根据实际发现的特征推断）：
+
+1. **JeecgBoot 系列**:
+   - 响应头: X-Powered-By: JeecgBoot
+   - 路径: /jeecg-boot/ 前缀, /sys/login, /sys/dict, /sys/permission
+   - 特征: Swagger UI 常见 /doc.html (Knife4j), 登录页带有 Jeecg 标识
+   - 默认口令: admin/admin123, admin/123456, jeecg/jeecg123
+   - 特有攻击面: /sys/oss（Minio配置泄露）, /sys/file/upload, 代码生成器 /code, online 表单
+   - 检测: curl -sk /jeecg-boot/sys/dict/list 是否返回字典数据
+
+2. **RuoYi (若依)**:
+   - 特征: 页面底部 "RuoYi" / "若依" 版权, 默认登录 /login
+   - 路径: /ruoyi/, /prod-api/, /common/captcha, /system/user
+   - 组合: Shiro + Thymeleaf, 响应头 Set-Cookie 含 JSESSIONID + rememberMe
+   - 默认口令: admin/admin123
+   - 特有攻击面: Shiro 反序列化(默认rememberMe密钥), /common/captcha 验证码绕过
+   - 检测: curl -sk /prod-api/system/user/list 是否未授权
+
+3. **JeeSite**:
+   - 特征: Cookie 含 JeeSite, /js/a/login 路径
+   - 默认口令: admin/admin123, admin/123456
+   - 特有攻击面: $._csrf 鉴权可伪造, Beelt 模板注入, /sys/ 后台功能
+   - 检测: curl -sk /js/a/login 看是否为 JeeSite 登录页
+
+4. **Guns**:
+   - 特征: Guns 标识, Beetl 模板, /guns-api/ 前缀
+   - 默认口令: admin/admin
+   - 特有攻击面: /guns-api/ 未授权, 代码生成器接口
+
+5. **TeaWeb**:
+   - 特征: Go 语言, TeaWeb 响应头, WebShell 管理特征
+   - 特有攻击面: 默认配置泄露, 执行命令接口
+
+6. **BladeX**:
+   - 特征: /blade- 前缀, blade-auth 鉴权, blade-log
+   - 默认口令: admin/admin
+   - 特有攻击面: /blade- 未经授权, BladeX Redis 配置泄露
+
+7. **Pear Admin / AntdV / Vue Admin / 其他前端模板**:
+   - 判断是纯前端还是全栈（有API代理才是全栈）
+   - 纯前端: 后端是单独接口服务，需找真实API地址
+   - 全栈: 前后端一体，直接测试
+
+8. **低代码平台 / iPaas**:
+   - 特征: /designer/, /form/, /workflow/, /code/generate
+   - 特有攻击面: 代码生成器未授权, 表单设计器RCE, 流程引擎越权
+
+9. **悟空CRM / 72CMS / 企业系统**:
+   - 特征: 版权信息, 特定文件路径
+   - 默认口令: admin/admin123, admin/123456
+
+**Step 2.5: 自主识别（不匹配已知框架时的通用检测 — 关键）**
+如果以上预定义列表都不匹配，**不要直接返回"未发现"**。用以下通用线索自主判断是否疑似开源系统搭建：
+
+针对每个目标，执行以下通用检测（**即使不在已知列表中也必须执行**）：
+
+1. **路径结构探针** — curl 探测以下通用开源系统目录（任何命中都说明有第三方包依赖）:
+   - 包管理: /vendor/phpunit, /vendor/composer, /node_modules/, /bower_components/
+   - CMS特征: /plugins/, /modules/, /themes/, /uploads/, /sites/, /extensions/
+   - 安装遗留: /install/, /setup/, /upgrade/, /wizard/, /migrations/
+   - 源代码: /src/, /app/, /config/, /routes/, /database/, /resources/
+   - 注意: 如果有多个命中（如 /vendor/ + /config/ + /routes/），高度疑似开源项目
+
+2. **文件特征分析** — curl 获取关键配置文件:
+   - curl -sk /robots.txt — 分析 Disallow 路径推断目录结构
+   - curl -sk /sitemap.xml — 查看 URL 路径模式（模块名/控制器/动作）
+   - curl -sk /package.json — 仅限 Node 项目，列出依赖推断框架
+   - curl -sk /composer.json — 仅限 PHP 项目，列出依赖推断框架
+   - curl -sk /.env — 如果能访问到说明环境配置完全泄露
+   - 注意: 404/403 也是信息 — 说明该路径存在但被防护
+
+3. **响应头/体特征**:
+   - 响应头 X-Powered-By / Server / Set-Cookie — 注意异常值
+   - 404 错误页的内容 — 默认 404 页风格可推断框架
+   - 403 错误页 — 某些框架有默认 403 页（如 Spring Boot Whitelabel）
+   - 响应体中的框架注释 — `<!-- /usr/local/... -->` 泄露路径
+
+4. **Cookie 模式**:
+   - PHPSESSID — PHP 通用
+   - JSESSIONID — Java 通用
+   - ASP.NET_SessionId — .NET
+   - laravel_session — Laravel
+   - csrftoken — Django
+
+5. **前端框架推断**:
+   - window.Vue / __VUE_DEVTOOLS__ — Vue.js
+   - window.React / __REACT_DEVTOOLS__ — React
+   - window.angular — Angular
+   - Ant Design / ElementUI / Layui — UI 库
+
+6. **综合判定**:
+   - 命中 ≥3 条路径结构特征 + Cookie 模式匹配 → **高度疑似开源系统**
+   - 命中 1-2 条 + 前端框架匹配 → **部分疑似**
+   - 完全无特征 → **大概率自研**
+   - **关键认知**：「疑似开源」本身就值得标记——即使不知道具体名称，也要输出所有线索供 Phase 3 参考
+
+**Step 3: 特有攻击面清单（针对识别的框架，逐项检测）**
+对每个已识别的框架，输出其特有攻击面及检测结果：
+
+- 默认口令: 尝试框架默认账号密码登录
+- Swagger 泄露: /swagger-ui.html, /doc.html, /v2/api-docs
+- 代码生成器: /code/generate, /generator/, /gen/
+- 文件上传: /file/upload, /common/upload, /sys/file/upload — 测试是否限制类型
+- Minio/OSS: /sys/oss, /sys/minio — 是否泄露accessKey/secretKey
+- 定时任务: /job/, /schedule/, /quartz/ — 未授权可操作
+- Shiro 绕过: Shiro 过滤链是否有未收全的 /anon 端点
+- Swagger 接口未授权: 从 swagger 文档中发现无需鉴权的API
+
+**输出 JSON，每个目标一个条目。**`,
+      { label: '🔍 快速开发框架识别', schema: {
+        type: 'object',
+        properties: {
+          findings: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                target: { type: 'string' },
+                framework_name: { type: 'string', description: '识别的快速开发框架名称（已知则为具体名，未知则填"疑似开源系统"）' },
+                version: { type: 'string', description: '版本号（如能识别）' },
+                confidence: { type: 'string', enum: ['高', '中', '低'] },
+                evidence: { type: 'string', description: '识别依据' },
+                is_suspected_oss: { type: 'boolean', description: '是否通过自主识别判断为疑似开源系统（不依赖预定义列表）' },
+                oss_clues: { type: 'array', items: { type: 'string' }, description: '自主识别线索列表（如：命中/vendor/、Cookie模式PHPSESSID、robots.txt暴露模块路径等）' },
+                oss_verdict: { type: 'string', enum: ['高度疑似开源', '部分疑似', '大概率自研', '无法判断'], description: '自主识别综合判定结论' },
+                default_credentials: { type: 'array', items: { type: 'string' }, description: '默认口令列表' },
+                attack_surface: { type: 'array', items: { type: 'string' }, description: '特有攻击面清单' },
+                notes: { type: 'string', description: '重点关注或挖掘建议' },
+              },
+              required: ['target', 'framework_name', 'confidence'],
+            },
+          },
+        },
+      }, phase: '深度分析' }
+    )
+
+    if (p2_oss && p2_oss.findings && p2_oss.findings.length > 0) {
+      const known = p2_oss.findings.filter(f => !f.is_suspected_oss && f.framework_name !== '疑似开源系统')
+      const suspected = p2_oss.findings.filter(f => f.is_suspected_oss || f.framework_name === '疑似开源系统')
+      if (known.length > 0) log(`  快速开发框架识别: 发现 ${known.length} 个已知框架`)
+      if (suspected.length > 0) log(`  🔍 自主识别: 发现 ${suspected.length} 个疑似开源系统`)
+      p2_oss.findings.forEach(f => {
+        if (f.is_suspected_oss || f.framework_name === '疑似开源系统') {
+          const clues = f.oss_clues?.length ? ` | 线索: ${f.oss_clues.join(', ')}` : ''
+          const verdict = f.oss_verdict ? ` [${f.oss_verdict}]` : ''
+          log(`    🔍 疑似开源 @ ${f.target}${verdict}${clues}`)
+        } else {
+          const defCreds = f.default_credentials?.length ? ` | 默认口令: ${f.default_credentials.join(', ')}` : ''
+          const attacks = f.attack_surface?.length ? ` | 攻击面: ${f.attack_surface.join(', ')}` : ''
+          log(`    🏗️ ${f.framework_name}${f.version ? ' v'+f.version : ''} @ ${f.target} [${f.confidence}]${defCreds}${attacks}`)
+        }
+      })
+      // 将识别结果纳入 Phase 3 上下文
+      p2_discoveries_text += `\n\n【快速开发框架识别结果】\n` +
+        p2_oss.findings.map(f => {
+          if (f.is_suspected_oss || f.framework_name === '疑似开源系统') {
+            return `${f.target}: 疑似开源系统 [${f.oss_verdict || '无法判断'}]
+  线索: ${f.oss_clues?.join('; ') || 'N/A'}
+  依据: ${f.evidence || 'N/A'}
+  建议: ${f.notes || '深入探测是否存在通用漏洞/默认配置'}`
+          }
+          return `${f.target}: ${f.framework_name}${f.version ? ' v'+f.version : ''} [${f.confidence}]
+  依据: ${f.evidence || 'N/A'}
+  默认口令: ${f.default_credentials?.join(', ') || '未知'}
+  特有攻击面: ${f.attack_surface?.join(', ') || '常规测试'}
+  建议: ${f.notes || '按攻击面逐项测试'}`
+        }).join('\n\n')
+    } else {
+      log('  识别完成: 未发现已知框架或疑似开源系统')
+    }
+    // == 开源系统识别结束 ==
   }
 
   markPhase(2, '✅')
@@ -656,6 +844,211 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
         },
       }, phase: '漏洞挖掘' }
     )
+
+    // 3.3 本地部署实现 + 源码审计（对 Phase 2 识别的开源系统进行深度审计）
+    let p3_codeaudit = null
+    // 从 p2_discoveries_text 中提取开源系统识别结果
+    const p3_has_oss = p2_discoveries_text && p2_discoveries_text.includes('【快速开发框架识别结果】')
+    if (p3_has_oss) {
+      p3_codeaudit = await agent(
+        `你是快速开发框架审计专家，对 ${companyName} 的已识别框架执行本地部署实现和源码审计。
+
+===== Phase 2 快速开发框架识别结果 =====
+${p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框架识别结果】'), p2_discoveries_text.length).substring(0, 4000)}
+==========================================
+
+你的任务分为两部分：
+
+**【Part A: 本地部署实现】**
+对每个已识别的快速开发框架/低代码平台：
+
+1. **源码获取** — 根据框架名+版本，从 GitHub Releases 下载对应版本
+   - JeecgBoot: https://github.com/jeecg-boot/jeecg-boot/releases
+   - RuoYi: https://github.com/yangzongzhuan/RuoYi/releases
+   - JeeSite: https://github.com/thinkgem/jeesite/releases
+   - Guns: https://github.com/stylefeng/Guns/releases
+   - BladeX: https://github.com/chillzhuang/BladeX/releases
+   - 其他: 根据框架名搜索 GitHub
+
+2. **本地环境搭建**（在 /tmp/zc_local_audit/ 下）:
+   - Java项目(JeecgBoot/RuoYi/JeeSite/Guns/BladeX): 用 mvn spring-boot:run 或 java -jar
+   - 需要数据库的: 用 Docker 启动 MySQL/Redis，修改配置连接
+   - Docker 项目: docker-compose up（优先使用避免环境冲突）
+   - 如果源码无法下载/编译失败，从 Docker Hub 拉取官方镜像
+
+3. **漏洞复现分析**:
+   - 在本地验证 Phase 2 识别的特有攻击面（默认口令、Shiro绕过、代码生成器）
+   - 分析漏洞触发条件、请求构造细节、绕过手法
+   - 对比本地和目标系统的差异（路径前缀、鉴权方式、WAF等）
+   - 记录完整的 POC 请求包
+
+**【Part B: 源码审计 — 三大审计维度】**
+对下载的快速开发框架源码执行深入审计，按以下三个维度逐一排查：
+
+**维度一：权限审计（未授权探查）**
+核心目标：找到**无需任何凭证即可访问**的接口。
+
+1. **Shiro/Spring Security 过滤链审计**:
+   - 找到 ShiroConfig.java / SecurityConfig.java / WebSecurityConfigurerAdapter
+   - 提取 filterChainDefinitionMap 中所有标记为 /anon 或 .permitAll() 的路径
+   - 对照 Controller 路由表，检查这些路径对应的 Controller 方法是否真的有公开权限
+   - 特别关注: /actuator/**、/druid/**、/swagger**、/v2/api-docs、/doc.html 是否被放行
+
+2. **Controller 鉴权注解审计**:
+   - 搜索 @RequiresPermissions, @RequiresRoles, @PreAuthorize, @Secured 在各 Controller 的使用情况
+   - 找出没有注解的方法——那就是未授权入口
+   - 关注: 代码生成器、文件上传、定时任务、系统配置等控制器
+
+3. **Swagger 接口逐条测试**:
+   - 从 /doc.html 或 /v2/api-docs 提取所有 API 端点
+   - 每一条用 curl 测试不带任何 Cookie/Token 是否能返回数据
+
+4. **路由表遍历**:
+   - 找到 @RequestMapping 或 @GetMapping/@PostMapping 定义的完整路由
+   - 逐个检查可匿名访问的管理后台/敏感功能
+
+**维度二：控制审计**
+核心目标：找到**可被利用实现命令执行/文件读写/SQL注入**的代码路径。
+
+1. **文件上传控制**:
+   - 后缀白名单校验是否能绕过(大小写/双写/截断/MIME)
+   - 路径拼接是否存在 ../ 问题
+   - 上传文件是否可被直接访问
+
+2. **文件下载/导出控制**:
+   - 路径参数是否使用 ../ 跳出目录
+   - 导出功能是否存在 XXE
+
+3. **命令执行控制**:
+   - 搜索 Runtime.getRuntime().exec(), ProcessBuilder, exec(), shell_exec(), system(), subprocess.run()
+   - 检查参数是否为用户输入可控
+
+4. **SQL 注入控制**:
+   - MyBatis XML 中的 ${} 拼接（尤其 orderBy/sort 排序字段）
+   - @Select/@Query 中的原生 SQL 拼接
+
+5. **反序列化控制**:
+   - readObject, fromJson, JSON.parse(Fastjson) — 输入是否可控
+   - AutoType 是否开启
+
+6. **表达式注入/SSTI**:
+   - SpEL/PEL/OGNL/TemplateExpress — 模板解析是否依赖用户输入
+   - eval/assert/create_function/Jinja2
+
+7. **XXE**:
+   - DocumentBuilderFactory, SAXParser, SimpleXMLElement — disable-doctype-decl 是否设置
+
+**维度三：零凭据获取 Admin Token 路径**
+核心目标：找到**无需用户名密码即可获取管理员 Token 或会话**的路径。
+
+1. **login/auth/token 控制器鉴权逻辑**:
+   - 搜索 LoginController / AuthController / TokenController
+   - 查找可**不校验密码**就返回 Token 的特殊路径：
+     - 仅校验 IP 白名单 → X-Forwarded-For 伪造绕过
+     - 仅校验 Referer 头 → 可伪造
+     - 仅校验时间戳签名 → 可重放/推导
+     - 存在 debug=true / test=true 参数可跳过
+
+2. **硬编码超级凭证**:
+   - 搜索 adminKey, superKey, masterKey, jwt.secret, token.secret
+   - 静态 JWT 密钥 → 可伪造任意用户的 JWT
+   - 搜索 defaultPassword, initPassword, superAdmin 硬编码账号
+
+3. **密码重置/验证码逻辑缺陷**:
+   - 搜索 resetPassword, /forgot, /reset, /changePassword
+   - 验证码是否仅前端校验
+   - 重置 Token 是否可预测
+
+4. **OAuth/SSO/社交登录回调**:
+   - state 参数是否校验（CSRF 绑定攻击者账号）
+   - redirect_uri 是否可任意指向
+   - callback 是否无鉴权即可换 token
+
+5. **Session 预测/固定**:
+   - sessionId/token 生成是否可预测
+   - 是否存在 Session Fixation
+
+6. **搜索模式（贯穿三个维度）**:
+   - 硬编码凭证: password/secret/key/token/shrio.key 在配置中硬编码
+   - Shrio.key 默认密钥: 搜索配置值, 比对应知默认密钥
+   - 测试接口: test/debug/demo/mock 后缀的控制器
+   - 后门: eval/exec/shell/system 无过滤调用
+   - 对比补丁: commit diff 定位新修复的漏洞
+
+**输出**:
+   - 每个审计发现：文件路径+行号+审计维度+问题类型+风险等级
+   - 「零凭据获取Admin Token」最高优先级标记
+   - 已知CVE给出POC；0day标注 potentially_0day
+
+只做本地分析和读取，不在目标系统执行破坏性操作。`,
+        { label: '📦 本地部署+源码审计', schema: {
+          type: 'object',
+          properties: {
+            local_setups: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  system_name: { type: 'string' },
+                  version: { type: 'string' },
+                  setup_method: { type: 'string', description: '本地部署方式（docker/php/java/python/npm）' },
+                  status: { type: 'string', enum: ['成功', '部分成功', '失败'] },
+                  notes: { type: 'string' },
+                },
+              },
+            },
+            audit_findings: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string' },
+                  type: { type: 'string', enum: ['硬编码凭证', 'SQL注入', '文件操作', '反序列化', '命令执行', '鉴权绕过', '表达式注入', 'XXE', '后门', '测试接口', '未授权接口', 'AdminToken绕过', '其他'] },
+                  severity: { type: 'string', enum: ['严重', '高危', '中危', '低危'] },
+                  audit_dimension: { type: 'string', enum: ['权限审计', '控制审计', '零凭据AdminToken'], description: '所属审计维度' },
+                  file_path: { type: 'string' },
+                  line_number: { type: 'number' },
+                  description: { type: 'string' },
+                  poc: { type: 'string', description: 'POC/EXP' },
+                  is_known_cve: { type: 'boolean' },
+                  cve_id: { type: 'string' },
+                  is_potential_0day: { type: 'boolean' },
+                },
+                required: ['title', 'type', 'severity', 'description'],
+              },
+            },
+          },
+        }, phase: '漏洞挖掘' }
+      )
+
+      if (p3_codeaudit) {
+        const setupCount = p3_codeaudit.local_setups?.length || 0
+        const auditCount = p3_codeaudit.audit_findings?.length || 0
+        log(`  本地部署: ${setupCount} 个环境 | 源码审计: ${auditCount} 个发现`)
+        if (auditCount > 0) {
+          p3_codeaudit.audit_findings.forEach(f => {
+            const dimIcon = f.audit_dimension === '权限审计' ? '🔓' : f.audit_dimension === '控制审计' ? '🎮' : f.audit_dimension === '零凭据AdminToken' ? '👑' : ''
+            const icon = f.severity === '严重' ? '🔥' : f.severity === '高危' ? '🔴' : '🟡'
+            const extra = f.is_potential_0day ? ' [⚠️ 潜在0day]' : f.is_known_cve ? ` [CVE:${f.cve_id}]` : ''
+            const dim = f.audit_dimension ? ` [${f.audit_dimension}]` : ''
+            log(`    ${dimIcon}${icon} [${f.severity}] ${f.title}${dim}${extra}`)
+            if (f.file_path) log(`       → ${f.file_path}:${f.line_number || '?'}`)
+          })
+          // 将源码审计发现的漏洞纳入总发现列表，供 Phase 4 验证
+          p3_findings_data.push(...p3_codeaudit.audit_findings.map(f => ({
+            title: f.title, type: f.type, severity: f.severity,
+            target: p1_assets?.priority_targets?.[0]?.url || companyName,
+            endpoint: f.file_path || f.title,
+            confidence: f.is_potential_0day ? 'exploratory' : 'suspected',
+            curl_command: f.poc || '',
+            phase_discovered: 'phase3_codeaudit', status: 'unverified'
+          })))
+        }
+      }
+    } else {
+      log('  源码审计: ⏭️ 无开源系统识别结果，跳过本地部署和源码审计')
+    }
+    // == 本地部署+源码审计结束 ==
 
     // Tier 2: 剩余资产全量测试（非快速探测，所有目标做完整维度测试）
     let p3_quick = null

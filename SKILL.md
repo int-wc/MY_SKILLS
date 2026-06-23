@@ -55,13 +55,13 @@ SRC_SKILLS_V1/
 ## 启动检查
 
 ```bash
-for tool in curl jq httpx dirsearch hydra python3 awk sed grep; do
+for tool in curl jq nmap masscan httpx dirsearch hydra python3 awk sed grep; do
   command -v $tool &>/dev/null && echo "[✓] $tool" || echo "[✗] $tool 缺失"
 done
 python3 -c "import requests, bs4, lxml" 2>/dev/null || echo "pip install requests bs4 lxml"
 ```
 
-**缺工具策略：** 缺 dirsearch → ffuf/手动curl；缺 httpx → `curl -sI`
+**缺工具策略：** 缺 masscan → nmap 替代；缺 dirsearch → ffuf/手动curl；缺 httpx → `curl -sI`
 
 ---
 
@@ -69,8 +69,8 @@ python3 -c "import requests, bs4, lxml" 2>/dev/null || echo "pip install request
 
 ```
 阶段1: 资产发现与目标识别  →  目标清单 + 范围确认
-阶段2: 深度分析              →  隐藏端点 + 攻击面清单
-阶段3: 漏洞挖掘              →  原始发现列表
+阶段2: 深度分析              →  隐藏端点 + 开源系统识别 + 攻击面清单
+阶段3: 漏洞挖掘              →  原始发现列表 + 本地部署实现 + 源码审计发现
 阶段4: 验证与证据            →  可复现POC/EXP
 阶段5: 资产标记              →  已测资产状态存储（避免重复测试）
 阶段6: 报告编写              →  .md + .html 双格式报告
@@ -86,7 +86,8 @@ python3 -c "import requests, bs4, lxml" 2>/dev/null || echo "pip install request
 2. **解析Hunter资产**：CSV列—IP,端口,域名,url,标题,状态码,组件,备案。按维度打标签：
    - `[管理后台]` 最高 | `[新发现][范围内][境外资产]` 高 | `[非常见端口][组件指纹]` 中
 3. **URL聚合去重**：同域名不同端口→保留HTTP+HTTPS各一；同IP不同域名→独立保留
-4. **目标优先级**: RCE > 大量敏感数据 > 文件读写 > SSRF > 越权 > 信息泄露 > XSS > 弱口令
+4. **全端口扫描扩充**（最高优先级）：masscan/nmap → 域名-IP映射 → httpx探活 → `[全端口发现]`标签
+5. **目标优先级**: RCE > 大量敏感数据 > 文件读写 > SSRF > 越权 > 信息泄露 > XSS > 弱口令
 6. 详细命令 → `references/phase-cmd-reference.md#阶段1-资产发现命令`
 
 **单URL模式：** 指定 `mode: "url"` 跳过资产发现和深度分析，直接对单个URL执行漏洞挖掘全流程。
@@ -108,6 +109,40 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
 
 **组件审计**：指纹识别 → 源码获取(GitHub/官方) → 本地审计(路由表/硬编码凭证/鉴权白名单) → 回测目标
 
+**【开源系统识别】**（新增 — 聚焦快速开发框架/低代码平台）：
+1. **指纹采集**：响应头、Cookie 特征名、页面底部版权声明（`Powered by JeecgBoot`、`RuoYi`、`Guns`）、静态资源路径特征（`/jeecg-boot/`、`/ruoyi/`、`/sys/`）、登录页特有元素
+2. **快速开发框架识别重点**：
+   - **JeecgBoot** — `X-Powered-By: JeecgBoot`、`/jeecg-boot/` 路径前缀、`/sys/` 通用API、默认验证码 `/?_t=timestamp`、minio 配置泄露
+   - **JeeSite** — `JeeSite` Cookie 特征、`/js/a/login` 路径、`$._csrf` 鉴权模式、默认账号 `admin/admin123`
+   - **RuoYi (若依)** — `RuoYi` 版权信息、`/ruoyi/` 前缀、`/common/captcha` 验证码、Shiro + Thymeleaf 组合特征、`/prod-api/` 前缀
+   - **Guns** — `Guns` 特征、Beetl 模板特征、`/guns-api/` 前缀
+   - **TeaWeb** — Go 语言编写、`TeaWeb` 响应头、WebShell 特征
+   - **BladeX** — `BladeX` 特征、`/blade-` 路径前缀、`blade-auth` 鉴权
+   - **Pear Admin / AntdV / Vue Admin** — 前端框架特征（package.json、路由模式）、确定是纯前端还是全栈、API 代理路径
+   - **iPaas / 低代码平台** — 表单引擎特征、`/designer/` 路径、代码生成器接口 `/code/generate`
+   - **悟空CRM / 72CMS / 其它企业系统** — 版权特征、文件结构
+3. **快速框架特有攻击面分析**：
+   - **默认口令库**：`admin/admin123`、`admin/admin`、`admin/123456`、`jeecg/jeecg123`、`admin/password`
+   - **代码生成器遗留接口**：`/code/generate`、`/generator/`、`/gen/` — 未授权可生成任意代码
+   - **Swagger API 文档泄露**：`/swagger-ui.html`、`/doc.html`（Knife4j）、`/v2/api-docs` — 快速框架标配
+   - **Deprecated 接口残留**：低代码升级遗留的旧版 API 路径
+   - **Minio/OSS 配置泄露**：`/sys/oss`、`/sys/minio` 端点暴露密钥
+   - **定时任务接口**：`/job/`、`/schedule/`、`/quartz/` — 未授权可操作定时任务
+   - **文件上传接口**：`/file/upload`、`/common/upload`、`/sys/file/upload` — 是否限制文件类型
+   - **数据字典泄露**：`/dict/`、`/sys/dict` — 泄露系统结构
+   - **Shiro 配置绕过**：快速框架 Shiro 过滤链常有配置缺陷（`/anon` 端点未收全）
+4. **自主识别（不依赖预定义列表）**：当目标不匹配任何已知框架时，通过以下通用线索判断**是否疑似开源系统搭建**：
+   - **路径结构特征**（最有价值）：`/vendor/`、`/node_modules/`、`/plugins/`、`/modules/`、`/themes/`、`/uploads/`、`/install/`、`/setup/`、`/upgrade/` — 这些目录名来自具体第三方包而非自研项目
+   - **文件特征**：`robots.txt` 中暴露的目录结构、`sitemap.xml` 中的模块路径、`package.json` / `composer.json` / `requirements.txt` 暴露（列出依赖项，可推断技术栈）
+   - **响应特征**：错误页出现文件路径（如 `/var/www/html/vendor/...` 说明是 Composer 项目）、调试信息泄露后端框架名
+   - **资源特征**：favicon.ico 哈希比对（许多 CMS 有默认 favicon）、CSS class 命名规范（Bootstrap `col-md-` / ElementUI `el-` / AntD `ant-` / Tailwind `flex`）、JS 全局变量暴露框架对象（`window.Vue`、`window.React`、`window.angular`、`$.fn`）
+   - **Cookie 模式**：`XSRF-TOKEN`、`laravel_session`、`ci_session`、`django_language`、`wordpress_`、`PHPSESSID`、`JSESSIONID` — 这些表明后端框架
+   - **认证相关**：`/api/login`、`/api/auth/`、`/oauth/`、`/token/` 结构往往是标准化框架路由约定
+   - **管理层特征**：`/admin/`、`/manager/`、`/dashboard/`、`/console/`、`/backend/` 统一前缀——商业自研系统通常命名多样而非这样规范
+   - **分析结论**：汇总所有线索，做出判定 — `高度疑似开源系统 / 部分疑似 / 大概率自研 / 无法判断`
+   - 即使无法确定具体名称，**「疑似开源」本身就值得深入**——意味着有通用漏洞、默认配置的风险
+5. **输出**：已知框架 → `{框架名} {版本/特征} → 默认口令/已知漏洞/特有攻击面清单`；未知框架 → `疑似开源系统 → 线索清单 → 推荐深入方向`
+
 详细命令 → `references/phase-cmd-reference.md#阶段2-js逆向命令`
 
 ---
@@ -126,6 +161,11 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
 | SSRF | URL参数 → 内网地址 + 云元数据 |
 | 弱口令 | 通用字典 + JS发现的默认凭证 |
 | 逻辑漏洞 | 金额修改/优惠券叠加/流程绕过 |
+| **本地部署实现** | 对已识别的快速开发框架（JeecgBoot/RuoYi/JeeSite等）下载对应版本源码 → Docker/本地搭建复现环境 → 在本地验证默认口令/分析漏洞触发条件/测试绕过手法/复现利用链 → 将本地 POC 适配迁移到目标系统验证差异 |
+| **源码审计** | **三大审计维度**：
+① **权限审计（未授权探查）** — Shiro/Spring Security 过滤链 `filterChainDefinitionMap` 中 `/anon` 端点是否有遗漏；控制器 `@RequiresPermissions` / `@PreAuthorize` 注解是否缺失；各 Controller 方法逐个检查是否可无 Token 直接调用；Swagger `/doc.html` 暴露的所有接口逐一测试鉴权状态
+② **控制审计** — 文件上传后缀校验是否可绕过（大小写/双写/截断/ MIME 绕过）；文件下载/导出路径拼接是否存在 `../` 穿越；命令执行函数 `exec/shell_exec/system/Runtime.getRuntime().exec` 参数是否可控制；SQL 查询参数是否拼接（尤其 `orderBy` 排序字段）；反序列化输入是否可控；表达式模板 SSTI 注入；XXE 外部实体是否禁用
+③ **零凭据获取 Admin Token 路径** — 搜索 `login` / `auth` / `token` 相关控制器的鉴权逻辑；是否存在 `无需凭证即可获取 Token` 的接口（如仅有 IP 白名单但无认证、仅靠 `Referer` 头、仅靠时间戳签名即可签发 Token）；硬编码的 `superAdmin` / `adminKey` / `secret` 能否直接派生 Token；密码重置/验证码/社交登录/OAuth 回调是否存在逻辑缺陷可绕过
 
 批量测试脚本、弱口令字典、框架定制路径 → `references/phase-cmd-reference.md#阶段3-漏洞挖掘命令`
 
@@ -179,8 +219,8 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
 
 每次标记必须附带 `reason` 字段，例如：
 - `"已完成全部7维度测试，无新发现"`
-- `"缺漏 dir_enum, dirsearch_scan 维度，仅做了HTTP探活和未授权探测"`
-- `"无法建立TCP连接"`
+- `"缺漏 dir_enum, dirsearch_scan 维度，仅做了端口扫描和未授权探测"`
+- `"端口关闭，无法建立TCP连接"`
 
 ### 线索/漏洞存储
 
@@ -212,6 +252,7 @@ Tier 2 快速探测确保每个资产至少完成 unauthtest，弥补"44 个资�
 
 | 维度 | 编码 | 判定条件 | 适用场景 |
 |------|------|---------|---------|
+| 端口扫描 | `port_scan` | masscan/nmap 已执行 | 所有 IP 资产 |
 | HTTP探活 | `http_probe` | curl/httpx 返回了 HTTP 响应 | 开放了 Web 端口 |
 | 未授权测试 | `unauth_test` | 无 Cookie/Token 探测了至少 5 个 API 路径 | 有 HTTP 响应 |
 | 目录枚举(手动) | `dir_enum` | curl 手动探测了常见/自定义前缀路径 | Web 应用 |

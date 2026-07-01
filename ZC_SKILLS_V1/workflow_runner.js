@@ -1,0 +1,1590 @@
+// ZC_SKILLS_V1 - 360众测八阶段全流程 Workflow 编排
+// 使用: Workflow({scriptPath: '...', args: {project: '1516_中远海运', mode: 'full'}})
+// 默认项目: 自动探测当前目录下的项目
+// mode: 'full' | 'phase3' (跳过资产发现和深度分析，直接挖洞) | 'phase5' (直接出报告) | 'url' (指定单个URL)
+
+export const meta = {
+  name: 'zc-full-scan',
+  description: '360众测全流程：项目信息→资产发现→深度分析→漏洞挖掘→验证→资产标记→报告→自审→提交',
+  phases: [
+    { title: '项目信息+资产发现', detail: '读取VulnType/NOTICE + 解析资产清单 + VPN检查' },
+    { title: '深度分析', detail: 'JS逆向 + API枚举 + 组件审计 + 开源系统识别' },
+    { title: '漏洞挖掘', detail: '按优先级测试所有攻击面 + 本地部署 + 源码审计' },
+    { title: '验证取证', detail: '复现确认 + 证据收集' },
+    { title: '资产标记', detail: '标记已测资产状态并存储' },
+    { title: '报告编写', detail: 'MD+HTML双格式输出' },
+    { title: '自审', detail: '格式检查 + 重复检测' },
+    { title: '提交准备', detail: '最终清单 + 检查时间截图' },
+  ],
+}
+
+// ============================================================
+// 解析参数
+// ============================================================
+const ZC_BASE = '/home/my/360zc'
+const SKILL_SCRIPTS = '/home/my/.claude/skills/ZC_SKILLS_V1/scripts'
+let projectName, mode, singleUrl
+
+if (typeof args === 'string') {
+  let parsed = null
+  try { parsed = JSON.parse(args) } catch (_) {}
+  if (parsed && typeof parsed === 'object') {
+    projectName = parsed.project || null
+    mode = parsed.mode || 'full'
+    singleUrl = parsed.url || null
+  } else {
+    projectName = args
+    mode = 'full'
+  }
+} else if (typeof args === 'object' && args) {
+  projectName = args.project || null
+  mode = args.mode || 'full'
+  singleUrl = args.url || null
+  if (mode === 'url' && !singleUrl) {
+    log('⚠️ 单URL模式需指定 url 参数，如: {mode: "url", url: "https://target:8080"}')
+    return { error: 'need_url', message: '请指定url参数' }
+  }
+} else {
+  projectName = null
+  mode = 'full'
+}
+
+// 自动探测项目目录 — 以当前工作目录为准
+const CWD = '/home/my/360zc/1516_中远海运'
+
+// 如果未指定project，尝试从CWD推断
+const resolvedProject = projectName || '1516_中远海运'
+const PROJECT_DIR = `${ZC_BASE}/${resolvedProject}`
+
+log(`📂 项目目录: ${PROJECT_DIR}`)
+log(`📋 模式: ${mode}`)
+
+// 目标进度追踪
+const progress = {
+  project: resolvedProject,
+  phase1: '⬜', phase2: '⬜', phase3: '⬜', phase4: '⬜',
+  phase5: '⬜', phase6: '⬜', phase7: '⬜', phase8: '⬜',
+  findings_count: 0,
+  reports_count: 0,
+}
+
+function showProgress() {
+  log('')
+  log('╔══════════════════════════════════════════════════════════════╗')
+  log(`║  目标进度表 — ${(progress.project || '').padEnd(30)} ║`)
+  log('╠══════════════════════════════════════════════════════════════╣')
+  log('║  ①项目资产  ②深度分析  ③挖洞     ④验证     ⑤标记     ⑥报告     ⑦自审     ⑧提交  ║')
+  log(`║    ${progress.phase1}       ${progress.phase2}       ${progress.phase3}       ${progress.phase4}       ${progress.phase5}       ${progress.phase6}       ${progress.phase7}       ${progress.phase8}    ║`)
+  log(`║  发现: ${String(progress.findings_count).padEnd(4)}  |  报告: ${String(progress.reports_count).padEnd(4)}                            ║`)
+  log('╚══════════════════════════════════════════════════════════════╝')
+  log('')
+}
+
+function markPhase(n, status) {
+  progress[`phase${n}`] = status
+}
+
+// ============================================================
+// 资产测试状态加载（避免重复测试）
+// ============================================================
+const trackerPath = `${PROJECT_DIR}/asset_test_status.json`
+const findingsPath = `${PROJECT_DIR}/asset_findings.json`
+let p0_tracker = null
+
+if (!mode.startsWith('phase5')) {
+  p0_tracker = await agent(
+    `读取资产测试状态文件。
+路径: ${trackerPath}
+用Read工具读取该文件。
+如果文件不存在（Read返回错误），返回空对象。
+文件格式为JSON: {"assets": {"url": {"status": "已完全测试完毕|还未测试完毕|无法进行测试", ...}}}`,
+    { schema: {
+      type: 'object',
+      properties: {
+        exists: { type: 'boolean' },
+        assets: {
+          type: 'object',
+          additionalProperties: {
+            type: 'object',
+            properties: {
+              status: { type: 'string' },
+              phases_tested: { type: 'array', items: { type: 'string' } },
+              last_tested: { type: 'string' },
+              reason: { type: 'string' },
+            },
+          },
+        },
+      },
+      required: ['exists'],
+    }, label: '📋 加载资产测试状态' }
+  )
+}
+
+// 构建已测试资产URL集合
+const p0_testedUrls = new Set()
+if (p0_tracker?.exists && p0_tracker?.assets) {
+  for (const [url, info] of Object.entries(p0_tracker.assets)) {
+    if (info.status === '已完全测试完毕' || info.status === '无法进行测试') {
+      p0_testedUrls.add(url)
+    }
+  }
+  if (p0_testedUrls.size > 0) {
+    log(`  已加载 ${p0_testedUrls.size} 个已完成/无法测试的资产，将跳过重复测试`)
+  }
+}
+
+// ============================================================
+// 测试维度跟踪器
+// ============================================================
+const dimTracker = {
+  _data: {},
+  ensure(url) {
+    if (!this._data[url]) this._data[url] = { dims: {} }
+    return this._data[url]
+  },
+  record(url, dim, status = 'done', meta) {
+    this.ensure(url).dims[dim] = { status, ...(meta || {}) }
+  },
+  completed(url) {
+    const e = this._data[url]
+    return e ? Object.keys(e.dims).filter(d => e.dims[d].status === 'done') : []
+  },
+  judge(url, isWeb, hasLogin) {
+    const e = this._data[url]
+    if (!e) return '无法进行测试'
+    const app = ['http_probe', 'unauth_test', 'dir_enum']
+    if (isWeb) app.push('dirsearch_scan')
+    if (hasLogin) app.push('weak_pass')
+    const done = this.completed(url)
+    const allDone = app.every(d => done.includes(d))
+    if (allDone && done.length > 0) return '已完全测试完毕'
+    if (done.length === 0) return '无法进行测试'
+    return '还未测试完毕'
+  },
+  missing(url, isWeb, hasLogin) {
+    const e = this._data[url]
+    if (!e) return ['http_probe', 'unauth_test', 'dir_enum']
+    const app = ['http_probe', 'unauth_test', 'dir_enum']
+    if (isWeb) app.push('dirsearch_scan')
+    if (hasLogin) app.push('weak_pass')
+    const done = this.completed(url)
+    return app.filter(d => !done.includes(d))
+  },
+  toJSON() { return this._data },
+  load(data) {
+    this._data = {}
+    if (!data) return
+    for (const [url, info] of Object.entries(data)) {
+      if (info.dims) this._data[url] = { dims: info.dims }
+    }
+  },
+}
+
+// 从已有状态文件恢复已完成维度
+if (p0_tracker?.exists && p0_tracker?.assets) {
+  const restored = {}
+  for (const [url, info] of Object.entries(p0_tracker.assets)) {
+    if (info.phases_tested && info.phases_tested.length > 0) {
+      restored[url] = { dims: {} }
+      info.phases_tested.forEach(d => { restored[url].dims[d] = { status: 'done' } })
+    }
+  }
+  dimTracker.load(restored)
+}
+
+// ============================================================
+// 阶段变量声明（全局作用域，供后续阶段使用）
+// ============================================================
+let p1_assets
+let p2_discoveries_text = ''
+let p3_unauth, p3_other, p3_quick, p4_dirscan, p4_verify
+let p3_findings_data = []
+
+// ============================================================
+// Phase 1: 项目信息读取 + 资产发现
+// ============================================================
+phase('项目信息+资产发现')
+
+if (mode.startsWith('phase5')) {
+  log('[1/8] ⏭️ 跳过（用户指定报告模式）')
+  markPhase(1, '⏭️')
+  p1_assets = { project_name: resolvedProject, priority_targets: [], all_urls: [] }
+} else if (mode === 'url' && singleUrl) {
+  log('[1/8] 🔗 单URL模式 — 跳过资产发现')
+  markPhase(1, '⏭️')
+  p1_assets = {
+    project_name: singleUrl,
+    summary: '用户指定URL',
+    priority_targets: [{
+      url: singleUrl, ip: '', port: 443, title: '',
+      tags: ['[用户指定]'], priority: '最高', reason: '用户指定目标'
+    }],
+    all_urls: [singleUrl],
+  }
+  dimTracker.record(singleUrl, 'http_probe', 'done', { title: '' })
+  progress.findings_count = 1
+  showProgress()
+} else {
+  markPhase(1, '🔄')
+  log(`[1/8] 项目信息读取 + 资产发现 — ${resolvedProject}`)
+
+  // 检查项目目录是否存在
+  const dirCheck = await agent(
+    `检查项目目录是否存在:
+    ls -la ${PROJECT_DIR}/
+    ls -la ${PROJECT_DIR}/assets/ 2>/dev/null || echo "assets/目录不存在"
+    ls -la ${PROJECT_DIR}/NOTICE/ 2>/dev/null || echo "NOTICE/目录不存在"
+    ls -la ${PROJECT_DIR}/OPENVPN/ 2>/dev/null || echo "OPENVPN/目录不存在"
+    输出检查结果。`,
+    { label: '📁 检查项目目录结构', phase: '项目信息+资产发现' }
+  )
+  log(`  ${dirCheck || '（无法读取项目目录）'}`)
+
+  p1_assets = await agent(
+    `你是360众测项目专家，负责 "项目信息读取 + 资产发现" 阶段。
+    项目名称: ${resolvedProject}
+    项目路径: ${PROJECT_DIR}
+
+    请依次执行:
+
+    1. **读取 VULN_TYPE.html**（项目漏洞类型定义）
+       - 文件: ${PROJECT_DIR}/VULN_TYPE.html
+       - 提取：接受哪些漏洞类型、忽略清单、严重等级定义
+
+    2. **读取 NOTICE 规则**
+       - 目录: ${PROJECT_DIR}/NOTICE/
+       - 读取 NOTICE1（项目公告：测试范围、行为约束、去重规则、报告要求）
+       - 读取 NOTICE2（VPN账号信息）
+
+    3. **解析资产列表**
+       - 目录: ${PROJECT_DIR}/assets/
+       - 查找 *资产列表.xlsx 文件
+       - 用 python3 + openpyxl 库读取 xlsx 文件，提取列: URL/IP/域名/端口/标题/备注
+       - 按以下方式给资产打标签:
+         · [范围内] — 域名/IP 在资产列表收录范围内
+         · [新发现] — 从 xlsx/页面解析发现的额外子域名
+         · [非常见端口] — 非80/443端口
+         · [高优先级] — 明确标记为重要的资产
+         · [管理后台] — 标题含"登录/管理/后台/admin/dashboard/运维"
+         · [非常见端口] — 非80/443端口
+       - 如果 xlsx 无法读取或不存在，输出空列表并说明
+
+    4. **VPN 隔离连接确认（渗透与日常隔离）**
+       - 检查 ${PROJECT_DIR}/OPENVPN/vpn-split.sh 是否存在（通用脚本，适配任意项目）
+       - 执行 sudo ${PROJECT_DIR}/OPENVPN/vpn-split.sh up ${PROJECT_DIR} 启动 VPN（参数化，自动扫描资产文件）
+       - 如果未连接，提示用户执行 sudo 命令启动 VPN
+       - **关键检查**：双通道验证 — 众测平台(走VPN) + 百度(走外网) 均应可达
+       - 记录 VPN IP 和路由表供后续参考
+    5. **优先级排序输出**
+       - 最高: [管理后台]
+       - 高: [高优先级]
+       - 中: [非常见端口]
+
+    6. **读取 NOTICE 去重规则** — 特别注意：
+       - 同一漏洞源产生的多个漏洞算同一个漏洞
+       - 全局函数、全局配置导致的问题算同源
+       - 同一配置影响的多个文件算同源
+       - 同一漏洞的不同利用方式算同源
+       - 同一函数导致的漏洞算同源
+       - 同一功能模块下的不同接口算同源
+       - 同一文件的不同参数算同源
+       - 泛域名解析产生的多个安全漏洞算同源
+    JSON输出格式:
+    {
+      "project_name": "项目名",
+      "vulntype_summary": "接受的漏洞类型摘要",
+      "prohibited_types": "不接收/忽略的类型",
+      "scope_summary": "测试范围简述",
+      "rules": "NOTICE中的关键规则",
+      "dedup_rules": "去重规则摘要",
+      "report_requirements": "报告提交要求",
+      "category_breakdown": {
+        "management": N, "high_priority": N, "uncommon_port": N
+      },
+      "priority_targets": [
+        {"url": "https://xxx", "ip": "x.x.x.x", "port": 443, "title": "xx",
+         "tags": ["[管理后台]"], "priority": "最高", "reason": "xxx"}
+      ],
+      "all_urls": ["url1", "url2", ...]
+    }`,
+    {
+      label: `📡 ${resolvedProject} 项目信息+资产分析`,
+      schema: {
+        type: 'object',
+        properties: {
+          project_name: { type: 'string' },
+          vulntype_summary: { type: 'string' },
+          prohibited_types: { type: 'string' },
+          scope_summary: { type: 'string' },
+          rules: { type: 'string' },
+          dedup_rules: { type: 'string' },
+          report_requirements: { type: 'string' },
+          category_breakdown: { type: 'object' },
+          priority_targets: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                url: { type: 'string' },
+                ip: { type: 'string' },
+                port: { type: 'number' },
+                title: { type: 'string' },
+                tags: { type: 'array', items: { type: 'string' } },
+                priority: { type: 'string', enum: ['最高', '高', '中', '低'] },
+                reason: { type: 'string' },
+              },
+              required: ['url', 'priority'],
+            },
+          },
+          all_urls: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['project_name', 'priority_targets'],
+      },
+      phase: '项目信息+资产发现',
+    }
+  )
+
+  if (!p1_assets) {
+    log('⚠️ 资产发现无返回，请检查项目目录')
+    markPhase(1, '❌')
+    showProgress()
+    return { error: '资产发现失败', progress }
+  }
+
+  // 输出项目信息摘要
+  log(`  📋 项目: ${p1_assets.project_name}`)
+  log(`  📐 范围: ${p1_assets.scope_summary || '未知'}`)
+  log(`  🚫 禁止类型: ${p1_assets.prohibited_types || '未知'}`)
+  log(`  📝 报告要求: ${(p1_assets.report_requirements || '').substring(0, 200)}...`)
+
+  // 过滤已测试资产
+  if (p0_testedUrls.size > 0 && p1_assets?.priority_targets) {
+    const before = p1_assets.priority_targets.length
+    p1_assets.priority_targets = p1_assets.priority_targets.filter(t => !p0_testedUrls.has(t.url))
+    p1_assets.all_urls = (p1_assets.all_urls || []).filter(u => !p0_testedUrls.has(u))
+    const filtered = before - p1_assets.priority_targets.length
+    if (filtered > 0) log(`  已过滤 ${filtered} 个已测试资产`)
+  }
+
+  // 记录维度
+  ;(p1_assets.priority_targets || []).forEach(t => {
+    const isLogin = (t.tags || []).includes('[管理后台]')
+    dimTracker.record(t.url, 'http_probe', 'done', { title: t.title || '' })
+    if (isLogin) dimTracker.record(t.url, 'weak_pass', 'pending')
+  })
+
+  markPhase(1, '✅')
+  progress.findings_count = p1_assets.priority_targets?.length || 0
+  showProgress()
+
+  const top3 = (p1_assets.priority_targets || []).slice(0, 3)
+  log(`  高优目标: ${p1_assets.priority_targets?.length || 0} 个`)
+  top3.forEach(t => log(`    ${t.priority} ${t.url} — ${t.reason || ''}`))
+}
+
+// ============================================================
+// Phase 2: 深度分析
+// ============================================================
+phase('深度分析')
+
+if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
+  log('[2/8] ⏭️ 跳过（用户指定模式）')
+  markPhase(2, '⏭️')
+} else {
+  markPhase(2, '🔄')
+  log(`[2/8] 深度分析 — ${resolvedProject}`)
+
+  const p2_priority_urls = (p1_assets.priority_targets || []).map(t => t.url).filter(Boolean)
+  const p2_all_urls = (p1_assets.all_urls || []).filter(u => !p2_priority_urls.includes(u))
+  const targets = [...p2_priority_urls, ...p2_all_urls].slice(0, 50)
+
+  if (targets.length === 0) {
+    log('  ⚠️ 无高优先级目标可分析')
+    markPhase(2, '⏭️')
+  } else {
+    const analyses = await pipeline(
+      targets,
+      async (target) => {
+        return await agent(
+          `你是JS逆向和API发现专家，分析目标: ${target}
+
+      执行四层分析：
+      1. 第一层 - 定位API入口:
+         curl -s 获取页面HTML，提取 <script src>
+         对每个JS，查找 baseURL/API_HOST/API_BASE/gatewayUrl/serverUrl
+
+      2. 第二层 - 路径模式提取:
+         全量提取 "/xxx/yyy" 路径，按一级目录分组统计
+         关注非标准前缀: /gateway/, /dwr/, /sys/, /manage/, /crm/, /erp/
+
+      3. 第三层 - Source Map还原:
+         检查 //# sourceMappingURL= 并尝试下载 .js.map
+         Webpack chunk分析: chunks/ js/ 命名暴露功能模块
+
+      4. 第四层 - 敏感信息提取:
+         - AccessKey: AKID模式、AKIA模式、LTAI(阿里云)
+         - OSS存储桶密钥: OBS_ACCESS_KEY / OSS_ACCESS_KEY / AWS_ACCESS_KEY
+         - SecretKey/Token/密码硬编码
+         - JWT (eyJ...格式) → 解码看payload
+         - 数据库连接串 → mongodb/mysql/postgresql/redis://
+         - 内网IP/域名 → 判断是哪个环境(dev/test/prod)
+         - 测试账号硬编码
+
+      5. 鉴权方式识别:
+         - Authorization: Bearer / Basic
+         - X-TOKEN / X-Auth-Token
+         - Cookie + sessionId
+         - localStorage Token存放
+
+      只做读取分析。`,
+          { label: `🔬 JS分析: ${target}`, phase: '深度分析' }
+        )
+      },
+      (result, target) => {
+        return result
+      }
+    )
+
+    log(`  完成 ${analyses.filter(Boolean).length} 个目标的分析`)
+    if (analyses && analyses.length > 0) {
+      p2_discoveries_text = analyses.filter(Boolean)
+        .map((a, i) => `【目标${i+1}JS分析结果】\n${a}`)
+        .join('\n\n')
+      targets.forEach(t => dimTracker.record(t, 'js_analysis', 'done'))
+    }
+
+    // 【开源系统识别】— 识别快速开发框架/低代码平台（JeecgBoot, RuoYi, JeeSite 等）
+    log('  🔍 执行开源系统识别（快速开发框架/低代码平台）...')
+    const p2_oss = await agent(
+      `你是快速开发框架识别专家，对 ${resolvedProject} 的以下目标执行开源系统识别。
+重点识别：JeecgBoot、RuoYi（若依）、JeeSite、Guns、TeaWeb、BladeX、低代码平台等。
+
+目标列表（前 20 个）:
+${targets.slice(0, 20).map(t => `  ${t}`).join('\n')}
+
+**Step 1: 指纹采集**
+对每个目标执行 curl -sI + curl -s 首页 + curl -sk /swagger-ui.html /doc.html
+
+**Step 2: 快速开发框架识别**
+
+1. **JeecgBoot**:
+   - 特征: X-Powered-By: JeecgBoot, /jeecg-boot/ 前缀, /sys/dict, Knife4j /doc.html
+   - 默认口令: admin/admin123, jeecg/jeecg123
+   - 攻击面: /sys/oss minio泄露, /sys/file/upload, 代码生成器 /code
+
+2. **RuoYi (若依)**:
+   - 特征: RuoYi 版权, /prod-api/, /common/captcha, Shiro+Thymeleaf
+   - 默认口令: admin/admin123
+   - 攻击面: Shiro反序列化, /prod-api/system/user/list 未授权
+
+3. **JeeSite**:
+   - 特征: JeeSite Cookie, /js/a/login
+   - 默认口令: admin/admin123
+   - 攻击面: Beelt模板注入, $._csrf 伪造, /sys/
+
+4. **Guns/BladeX/TeaWeb**:
+   - Guns: /guns-api/, Beetl模板
+   - BladeX: /blade- 前缀, blade-auth
+   - TeaWeb: Go编写, TeaWeb响应头
+
+5. **低代码平台 / iPaas**:
+   - 特征: /designer/, /form/, /workflow/, /code/generate
+   - 攻击面: 代码生成器未授权, 表单设计器RCE
+
+6. **Pear Admin / Vue Admin / 企业系统**:
+   - 前端框架/全栈判断, 版权特征
+
+**Step 2.5: 自主识别（不匹配已知框架时的通用检测 — 关键）**
+如果以上预定义列表都不匹配，**不要直接返回"未发现"**。用以下通用线索自主判断：
+
+1. **路径结构探针** — curl 探测:
+   - 包管理: /vendor/, /node_modules/, /bower_components/
+   - CMS特征: /plugins/, /modules/, /themes/, /uploads/, /install/
+   - 源码: /src/, /app/, /config/, /routes/, /resource/
+   - 多个命中 → 高度疑似开源
+
+2. **文件特征分析**:
+   - /robots.txt — Disallow路径推断目录结构
+   - /sitemap.xml — URL模式推断模块结构
+   - /package.json, /composer.json — 依赖推断框架
+   - /.env — 环境配置泄露
+
+3. **响应特征**:
+   - X-Powered-By / Server / Set-Cookie 特征值
+   - 默认404/403错误页风格推断框架
+   - 注释泄露路径
+
+4. **Cookie 模式**: PHPSESSID(PHP), JSESSIONID(Java), ASP.NET_SessionId(.NET), laravel_session(Laravel)
+
+5. **前端框架**: Vue/React/Angular 全局变量, AntD/ElementUI UI库
+
+6. **综合判定**:
+   - ≥3条路径特征 + Cookie匹配 → **高度疑似开源**
+   - 1-2条 + 前端匹配 → **部分疑似**
+   - 完全无特征 → **大概率自研**
+   - 「疑似开源」本身就值得标记供 Phase 3 参考
+
+**Step 3: 特有攻击面检测**
+对每个已识别框架输出：
+- 默认口令、Swagger泄露(/doc.html /v2/api-docs)
+- 代码生成器接口、文件上传、Minio/OSS配置
+- Shiro 绕过、定时任务、数据字典未授权
+
+只做读取探测。`,
+      { label: '🔍 快速开发框架识别', schema: {
+        type: 'object',
+        properties: {
+          findings: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                target: { type: 'string' },
+                framework_name: { type: 'string', description: '已知框架写具体名，自主识别则为"疑似开源系统"' },
+                version: { type: 'string' },
+                confidence: { type: 'string', enum: ['高', '中', '低'] },
+                evidence: { type: 'string' },
+                is_suspected_oss: { type: 'boolean', description: '是否通过自主识别判断为疑似开源系统' },
+                oss_clues: { type: 'array', items: { type: 'string' }, description: '自主识别线索' },
+                oss_verdict: { type: 'string', enum: ['高度疑似开源', '部分疑似', '大概率自研', '无法判断'] },
+                default_credentials: { type: 'array', items: { type: 'string' } },
+                attack_surface: { type: 'array', items: { type: 'string' } },
+                notes: { type: 'string' },
+              },
+              required: ['target', 'framework_name', 'confidence'],
+            },
+          },
+        },
+      }, phase: '深度分析' }
+    )
+
+    if (p2_oss && p2_oss.findings && p2_oss.findings.length > 0) {
+      const known = p2_oss.findings.filter(f => !f.is_suspected_oss && f.framework_name !== '疑似开源系统')
+      const suspected = p2_oss.findings.filter(f => f.is_suspected_oss || f.framework_name === '疑似开源系统')
+      if (known.length > 0) log(`  快速开发框架识别: 发现 ${known.length} 个已知框架`)
+      if (suspected.length > 0) log(`  🔍 自主识别: 发现 ${suspected.length} 个疑似开源系统`)
+      p2_oss.findings.forEach(f => {
+        if (f.is_suspected_oss || f.framework_name === '疑似开源系统') {
+          const clues = f.oss_clues?.length ? ` | 线索: ${f.oss_clues.join(', ')}` : ''
+          const verdict = f.oss_verdict ? ` [${f.oss_verdict}]` : ''
+          log(`    🔍 疑似开源 @ ${f.target}${verdict}${clues}`)
+        } else {
+          const defCreds = f.default_credentials?.length ? ` | 默认口令: ${f.default_credentials.join(', ')}` : ''
+          const attacks = f.attack_surface?.length ? ` | 攻击面: ${f.attack_surface.join(', ')}` : ''
+          log(`    🏗️ ${f.framework_name}${f.version ? ' v'+f.version : ''} @ ${f.target} [${f.confidence}]${defCreds}${attacks}`)
+        }
+      })
+      p2_discoveries_text += `\n\n【快速开发框架识别结果】\n` +
+        p2_oss.findings.map(f => {
+          if (f.is_suspected_oss || f.framework_name === '疑似开源系统') {
+            return `${f.target}: 疑似开源系统 [${f.oss_verdict || '无法判断'}]
+  线索: ${f.oss_clues?.join('; ') || 'N/A'}
+  依据: ${f.evidence || 'N/A'}
+  建议: ${f.notes || '深入探测是否存在通用漏洞/默认配置'}`
+          }
+          return `${f.target}: ${f.framework_name}${f.version ? ' v'+f.version : ''} [${f.confidence}]
+  依据: ${f.evidence || 'N/A'}
+  默认口令: ${f.default_credentials?.join(', ') || '未知'}
+  特有攻击面: ${f.attack_surface?.join(', ') || '常规测试'}
+  建议: ${f.notes || '按攻击面逐项测试'}`
+        }).join('\n\n')
+    } else {
+      log('  识别完成: 未发现已知框架或疑似开源系统')
+    }
+    // == 开源系统识别结束 ==
+  }
+
+  markPhase(2, '✅')
+  showProgress()
+}
+
+// ============================================================
+// Phase 3: 漏洞挖掘
+// ============================================================
+phase('漏洞挖掘')
+
+if (mode.startsWith('phase5')) {
+  log('[3/8] ⏭️ 跳过（用户指定报告模式）')
+  markPhase(3, '⏭️')
+  markPhase(4, '⏭️')
+} else {
+  markPhase(3, '🔄')
+  log(`[3/8] 漏洞挖掘 — ${resolvedProject}`)
+
+  const P3_TIER1_MAX = 50
+  const targets = (p1_assets.priority_targets || []).slice(0, P3_TIER1_MAX)
+  const allUrls = [ ...(p1_assets.all_urls || []) ]
+
+  if (targets.length === 0 && allUrls.length === 0) {
+    log('  ⚠️ 无可用测试目标')
+    markPhase(3, '⏭️')
+  } else {
+    // 3.1 未授权/信息泄露测试
+    p3_unauth = await agent(
+      `你是360众测项目漏洞挖掘专家，对 ${resolvedProject} 执行未授权访问和信息泄露测试。
+
+高优目标列表:
+${targets.map(t => `  ${t.priority} | ${t.url} | tags: ${(t.tags||[]).join(',')}`).join('\n')}
+
+常规URL列表:
+${allUrls.map(u => `  ${u}`).join('\n')}
+
+第2阶段JS逆向发现的隐藏端点:
+${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分析数据）'}
+
+**【核心策略 — 根据 API 命名推断功能，针对性利用】**
+1. 分析 API 命名 → 推断功能 → 对应攻击:
+   upload/file/import        → **文件上传绕过**
+   download/export/backup    → **路径遍历/任意文件读取**
+   order/payment/account     → **IDOR越权（替换id/userId）**
+   login/auth/token          → **认证绕过/弱口令/JWT伪造**
+   admin/manager/console     → **垂直越权/权限提升**
+   config/settings/env       → **配置泄露/敏感信息**
+   sql/search/query          → **SQL注入/SSTI**
+
+   ssrf/redirect/fetch/proxy → **SSRF（替换URL为内网地址/云元数据）**
+
+2. **SSRF 专项测试**（参数含 url/path/redirect/domain/host/target）:
+   - 替换为内网地址: http://127.0.0.1:8080, http://10.0.0.1, http://172.16.0.1
+   - 云元数据: http://169.254.169.254/latest/meta-data/（AWS/阿里云）
+   - 华为云元数据: http://169.254.169.254/openstack/latest/
+   - 内部服务探测: http://localhost:6379(Redis), http://localhost:3306(MySQL)
+   - 观察响应差异: 超时vs拒绝vs返回数据 = 内网服务存活
+
+3. **RCE 测试**（参数含 exec/cmd/command/shell/action）:
+   - 表达式注入: \${7*7}, #{7*7}, \${{7*7}} 模板语法测试
+   - 命令注入: ;id, |id, `id`, \$(id) 参数值注入
+   - 反序列化: 检查 Content-Type 为 application/x-java-serialized-object 的请求
+   - 文件上传: 尝试上传 jsp/php/jspx 文件（仅上传普通文件证明存在即可）
+
+4. HTTP200 + 空JSON容器(data:[]/data:{}/data:null) → **不是漏洞**
+
+5. 通用路径兜底:
+   API文档: /swagger-ui.html, /v3/api-docs, /doc.html
+   配置:   /.env, /actuator, /actuator/heapdump
+
+⚠️ **硬性过滤规则:**
+- JSON data 为空数组/空对象/null → 不视为信息泄露
+- HTTP 200 + {"code":"1","msg":"成功","data":[]} → 不是漏洞
+- confirmed 必须有实际业务数据
+
+只做读取探测。`,
+      { label: `🔓 未授权/信息泄露测试`, schema: {
+        type: 'object',
+        properties: {
+          findings: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                type: { type: 'string' },
+                severity: { type: 'string', enum: ['严重', '高危', '中危', '低危', '信息'] },
+                target: { type: 'string' },
+                endpoint: { type: 'string' },
+                method: { type: 'string' },
+                description: { type: 'string' },
+                evidence: { type: 'string' },
+                curl_command: { type: 'string' },
+                confidence: { type: 'string', enum: ['confirmed', 'suspected', 'exploratory'] },
+              },
+              required: ['title', 'type', 'severity', 'target', 'endpoint', 'confidence'],
+            },
+          },
+        },
+      }, phase: '漏洞挖掘' }
+    )
+
+    // 3.2 越权/弱口令/其他测试
+    p3_other = await agent(
+      `对 ${resolvedProject} 执行越权/弱口令等测试。
+
+高优目标:
+${targets.map(t => `  ${t.url}`).join('\n')}
+
+第2阶段JS逆向发现的隐藏端点:
+${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分析数据）'}
+
+1. 越权测试:
+   - 对含数字ID的路径，尝试替换ID值
+   - 观察响应差异
+
+2. 弱口令枚举:
+   - **通用字典暴力枚举**（按优先级排列）:
+     · 组合1: admin/admin, admin/123456, admin/Admin@123
+     · 组合2: admin/Admin@123456, admin/password, admin/12345678
+     · 组合3: 从项目名/公司名衍生: ${resolvedProject}/123456, cosco/123456, zhongyuan/123456
+     · 组合4: 框架默认口令（JeecgBoot: jeecg/jeecg123, RuoYi: admin/admin123, JeeSite: admin/admin123）
+     · 组合5: 从 JS 配置/注释中发现硬编码凭证
+   - 测试 JSON API 登录（Content-Type: application/json）
+
+3. 信息泄露检查:
+   - 响应体中是否包含多余字段（密码/身份证/手机号）
+   - 错误信息是否泄露路径/版本
+
+4. 逻辑漏洞测试:
+   - 金额/数量篡改: 修改 POST body 中的 amount/price/quantity
+   - 流程绕过: 跳过支付步骤
+   - 并发竞态: 同时请求多次
+
+只做读取探测。`,
+      { label: `🎯 越权/弱口令测试`, schema: {
+        type: 'object',
+        properties: {
+          findings: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                type: { type: 'string' },
+                severity: { type: 'string' },
+                target: { type: 'string' },
+                endpoint: { type: 'string' },
+                description: { type: 'string' },
+                confidence: { type: 'string' },
+              },
+              required: ['title', 'type', 'severity', 'target', 'endpoint', 'confidence'],
+            },
+          },
+        },
+      }, phase: '漏洞挖掘' }
+    )
+
+    // 3.3 本地部署实现 + 源码审计（对 Phase 2 识别的开源系统进行深度审计）
+    let p3_codeaudit = null
+    const p3_has_oss = p2_discoveries_text && p2_discoveries_text.includes('【快速开发框架识别结果】')
+    if (p3_has_oss) {
+      p3_codeaudit = await agent(
+        `你是快速开发框架审计专家，对 ${resolvedProject} 的已识别框架执行本地部署实现和源码审计。
+
+===== Phase 2 快速开发框架识别结果 =====
+${p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框架识别结果】'), p2_discoveries_text.length).substring(0, 4000)}
+==========================================
+
+**【Part A: 本地部署实现】**
+1. **源码获取** — 根据框架名+版本从GitHub下载（JeecgBoot/RuoYi/JeeSite/Guns/BladeX等）
+2. **本地环境搭建** — 在 /tmp/zc_local_audit/ 下用 Docker/mvn/java -jar 搭建
+3. **漏洞复现分析** — 在本地验证 Phase 2 识别的特有攻击面（默认口令、Shiro绕过、代码生成器、文件上传），记录 POC
+
+**【Part B: 源码审计 — 三大审计维度】**
+
+**维度一：权限审计（未授权探查）**
+核心目标：找到无需任何凭证即可访问的接口。
+1. Shiro/Spring Security 过滤链 audit — filterChainDefinitionMap 中 /anon 端点遗漏
+2. Controller 鉴权注解审计 — @RequiresPermissions/@PreAuthorize 缺失的方法
+3. Swagger 接口逐条测试 — 从 /doc.html /v2/api-docs 提取所有 API，无 Token 测试
+4. 路由表遍历 — 关注代码生成器/文件上传/定时任务/系统配置控制器
+
+**维度二：控制审计**
+核心目标：找到可被利用的命令执行/文件读写/SQL注入。
+1. 文件上传 — 后缀校验绕过(大小写/双写/截断/MIME)、路径穿越
+2. 文件下载/导出 — 路径遍历(../)、XXE
+3. 命令执行 — Runtime.exec/shell_exec/system/ProcessBuilder 参数可控性
+4. SQL注入 — MyBatis ${} 拼接(orderBy)、@Select/@Query 原生 SQL
+5. 反序列化 — readObject/fromJson/Fastjson 输入可控、AutoType
+6. SSTI — SpEL/PEL/OGNL/TemplateExpress/eval/Jinja2
+7. XXE — DocumentBuilderFactory/SAXParser 配置检查
+
+**维度三：零凭据获取 Admin Token 路径**
+核心目标：找到无需用户名密码即可获取管理员令牌的路径。
+1. login/auth/token 控制器 — 不校验密码即返回 Token 的特殊路径
+2. 硬编码超级凭证 — adminKey/jwt.secret/token.secret 静态密钥→伪造JWT
+3. 密码重置/验证码逻辑 — 重置Token可预测、验证码仅前端校验
+4. OAuth/SSO — state 校验缺失、redirect_uri 任意指向、callback 无鉴权
+5. Session — Token 生成可预测、Session Fixation
+6. 搜索贯穿: 硬编码凭证/Shrio.key默认密钥/测试接口/后门/补丁对比
+
+**输出**: 每发现：文件路径+行号+审计维度+类型+等级；零凭据 AdminToken 最高优先标记；CVE 给 POC；0day 标 potentially_0day
+
+只做本地分析，不在目标系统执行破坏性操作。`,
+        { label: '📦 本地部署+源码审计', schema: {
+          type: 'object',
+          properties: {
+            local_setups: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  system_name: { type: 'string' },
+                  version: { type: 'string' },
+                  setup_method: { type: 'string' },
+                  status: { type: 'string', enum: ['成功', '部分成功', '失败'] },
+                  notes: { type: 'string' },
+                },
+              },
+            },
+            audit_findings: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string' },
+                  type: { type: 'string', enum: ['硬编码凭证', 'SQL注入', '文件操作', '反序列化', '命令执行', '鉴权绕过', '表达式注入', 'XXE', '后门', '测试接口', '未授权接口', 'AdminToken绕过', '其他'] },
+                  severity: { type: 'string', enum: ['严重', '高危', '中危', '低危'] },
+                  audit_dimension: { type: 'string', enum: ['权限审计', '控制审计', '零凭据AdminToken'], description: '所属审计维度' },
+                  file_path: { type: 'string' },
+                  line_number: { type: 'number' },
+                  description: { type: 'string' },
+                  poc: { type: 'string' },
+                  is_known_cve: { type: 'boolean' },
+                  cve_id: { type: 'string' },
+                  is_potential_0day: { type: 'boolean' },
+                },
+                required: ['title', 'type', 'severity', 'description'],
+              },
+            },
+          },
+        }, phase: '漏洞挖掘' }
+      )
+
+      if (p3_codeaudit) {
+        const setupCount = p3_codeaudit.local_setups?.length || 0
+        const auditCount = p3_codeaudit.audit_findings?.length || 0
+        log(`  本地部署: ${setupCount} 个环境 | 源码审计: ${auditCount} 个发现`)
+        if (auditCount > 0) {
+          p3_codeaudit.audit_findings.forEach(f => {
+            const dimIcon = f.audit_dimension === '权限审计' ? '🔓' : f.audit_dimension === '控制审计' ? '🎮' : f.audit_dimension === '零凭据AdminToken' ? '👑' : ''
+            const icon = f.severity === '严重' ? '🔥' : f.severity === '高危' ? '🔴' : '🟡'
+            const extra = f.is_potential_0day ? ' [⚠️ 潜在0day]' : f.is_known_cve ? ` [CVE:${f.cve_id}]` : ''
+            const dim = f.audit_dimension ? ` [${f.audit_dimension}]` : ''
+            log(`    ${dimIcon}${icon} [${f.severity}] ${f.title}${dim}${extra}`)
+            if (f.file_path) log(`       → ${f.file_path}:${f.line_number || '?'}`)
+          })
+          p3_findings_data.push(...p3_codeaudit.audit_findings.map(f => ({
+            title: f.title, type: f.type, severity: f.severity,
+            target: p1_assets?.priority_targets?.[0]?.url || resolvedProject,
+            endpoint: f.file_path || f.title,
+            confidence: f.is_potential_0day ? 'exploratory' : 'suspected',
+            curl_command: f.poc || '',
+            phase_discovered: 'phase3_codeaudit', status: 'unverified'
+          })))
+        }
+      }
+    } else {
+      log('  源码审计: ⏭️ 无开源系统识别结果，跳过本地部署和源码审计')
+    }
+    // == 本地部署+源码审计结束 ==
+
+    // Tier 2: 剩余资产全量测试
+    const tier2_urls = allUrls.slice(0, 50)
+    if (tier2_urls.length > 0) {
+      p3_quick = await agent(
+        `对 ${resolvedProject} 的以下剩余资产做全量漏洞测试。
+
+剩余资产列表（${tier2_urls.length} 个）:
+${tier2_urls.map(u => `  ${u}`).join('\n')}
+
+执行全量测试:
+1. curl -sI 每个URL确认HTTP状态码
+2. 对返回200/401/403的，探测:
+   - 未授权API: /api/v1/user, /api/v1/config, /swagger-ui.html
+   - 后台管理: /admin/, /console/, /login, /manager/
+   - 配置泄露: /.env, /robots.txt, /WEB-INF/web.xml
+   - 组件端点: /actuator, /druid, /nacos
+   - 备份文件: *.bak, *.zip, *.tar.gz
+3. 每个发现附带 curl 命令`,
+        { label: '⚡ 剩余资产测试', schema: {
+          type: 'object',
+          properties: {
+            findings: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string' },
+                  type: { type: 'string' },
+                  severity: { type: 'string', enum: ['严重', '高危', '中危', '低危', '信息'] },
+                  target: { type: 'string' },
+                  endpoint: { type: 'string' },
+                  description: { type: 'string' },
+                  curl_command: { type: 'string' },
+                  confidence: { type: 'string', enum: ['confirmed', 'suspected', 'exploratory'] },
+                },
+                required: ['title', 'type', 'severity', 'target', 'endpoint', 'confidence'],
+              },
+            },
+          },
+        }, phase: '漏洞挖掘' }
+      )
+    }
+
+    // 记录维度
+    ;(targets || []).forEach(t => {
+      dimTracker.record(t.url, 'unauth_test', 'done')
+      if ((t.tags || []).includes('[管理后台]')) {
+        dimTracker.record(t.url, 'weak_pass', 'done')
+      }
+    })
+    ;(allUrls || []).forEach(u => dimTracker.record(u, 'unauth_test', 'done', { note: 'from allUrls' }))
+
+    // 合并发现
+    const allFindings = [
+      ...(p3_unauth?.findings || []),
+      ...(p3_other?.findings || []),
+      ...(p3_quick?.findings || []),
+    ]
+    progress.findings_count = allFindings.length
+
+    log(`  发现 ${allFindings.length} 个潜在漏洞:`)
+    allFindings.forEach(f => {
+      const icon = f.severity === '严重' ? '🔥' : f.severity === '高危' ? '🔴' : f.severity === '中危' ? '🟡' : '⚪'
+      log(`    ${icon} [${f.severity}] ${f.title} → ${f.endpoint} (${f.confidence})`)
+    })
+    p3_findings_data = allFindings.map(f => ({
+      title: f.title, type: f.type, severity: f.severity,
+      target: f.target || '', endpoint: f.endpoint,
+      confidence: f.confidence, curl_command: f.curl_command || '',
+      phase_discovered: 'phase3', status: 'unverified'
+    }))
+  }
+
+  markPhase(3, '✅')
+  showProgress()
+}
+
+// ============================================================
+// Phase 4: 验证与证据
+// ============================================================
+phase('验证取证')
+
+if (progress.findings_count === 0) {
+  log('[4/8] ⏭️ 无发现需要验证')
+  markPhase(4, '⏭️')
+} else {
+  log('[4/8] 验证与证据收集')
+
+  const p4_all_findings = [
+    ...(p3_unauth?.findings || []),
+    ...(p3_other?.findings || []),
+    ...(p3_quick?.findings || []),
+  ]
+  const p4_findings_json = JSON.stringify(p4_all_findings, null, 2)
+
+  if (p4_all_findings.length > 0) {
+    p4_verify = await agent(
+      `你是360众测漏洞验证专家，对 ${resolvedProject} 的发现做严格 curl 验证。
+
+====== Phase 3 传入的发现列表 ======
+${p4_findings_json.substring(0, 6000)}
+==================================
+
+### 验证规则
+对每个发现，必须执行以下流程：
+
+**Step 1: 提取可测试的 URL**
+- 如果 endpoint 是具体 URL → 直接测试
+- 如果 endpoint 是 "前端JS包" 或 "JS文件" → 从 target 提取域名，从描述中提取 API 路径
+
+**Step 2: 用 curl 测试**
+1. 先 \`curl -sk -o /dev/null -w "%{http_code}"\` 获取数字HTTP状态码
+2. 状态码 200/401/403 的，\`curl -sk\` 获取响应体
+
+**Step 3: 判定**
+| 判定 | 条件 |
+|------|------|
+| confirmed | curl 返回 200 + 响应体含实际敏感数据 |
+| suspected | 200/401 但响应体是权限错误 |
+| needs_manual_test | 无法构造可测试 URL |
+| false_positive | 404/超时/无敏感数据 |
+
+⚠️ confirmed 严格标准：必须有 curl_command + http_status(数字) + evidence
+
+**🔥 JSON空响应检测规则（硬性遵守）:**
+- data 为空列表/空对象/null → false_positive
+- 响应只含 code/msg/timestamp 等元数据但无业务数据 → false_positive
+
+**360众测特殊要求：**
+- 每个发现的证据需附带时间截图或时间信息
+- **高危和复杂漏洞需录屏保存**（避免后续产生争议）
+- **数据类漏洞需说明数量及泄露了哪些数据**（如：泄露 1000 条用户信息，包含姓名/手机号/身份证号）`,
+      { label: '🔍 漏洞复测验证', schema: {
+        type: 'object',
+        properties: {
+          confirmed_findings: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                type: { type: 'string' },
+                severity: { type: 'string', enum: ['严重', '高危', '中危', '低危', '信息'] },
+                target: { type: 'string' },
+                endpoint: { type: 'string' },
+                http_status: { type: 'number' },
+                evidence: { type: 'string' },
+                curl_command: { type: 'string' },
+                confidence: { type: 'string', enum: ['confirmed', 'suspected'] },
+              },
+              required: ['title', 'type', 'severity', 'endpoint', 'http_status', 'curl_command', 'confidence'],
+            },
+          },
+          false_positives: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                endpoint: { type: 'string' },
+                reason: { type: 'string' },
+              },
+            },
+          },
+          needs_manual_test: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                reason: { type: 'string' },
+              },
+            },
+          },
+        },
+        required: ['confirmed_findings'],
+      }, phase: '验证取证' }
+    )
+
+    if (p4_verify && p4_verify.confirmed_findings) {
+      // 程序化证据检查
+      const EMPTY_DATA_PATTERNS = [
+        '"data":[]', '"data":{}', '"data":null', '"data":""',
+        '"data":\n[]', '"data":\n{}',
+        '"list":[]', '"records":[]', '"rows":[]',
+        '"total":0}', '"size":0}',
+      ]
+      const AUDIT_EVIDENCE_MIN = 40
+      const audited = []
+      for (const f of p4_verify.confirmed_findings) {
+        let reason = null
+        const ev = (f.evidence || '').replace(/\s+/g, '')
+        if (!f.evidence || f.evidence.trim().length < 3) {
+          reason = 'evidence_empty_or_too_short'
+        } else if (EMPTY_DATA_PATTERNS.some(p => ev.includes(p))) {
+          reason = 'evidence_contains_empty_data_container'
+        } else if (f.evidence.length < AUDIT_EVIDENCE_MIN) {
+          reason = `evidence_too_short_${f.evidence.length}chars`
+        }
+        if (reason) {
+          log(`  🔧 化验货: [${f.severity}] ${f.title} -> ${reason}，降级`)
+          p4_verify.false_positives = p4_verify.false_positives || []
+          p4_verify.false_positives.push({
+            title: f.title, endpoint: f.endpoint,
+            reason: `自动证据检查: ${reason}`
+          })
+        } else {
+          audited.push(f)
+        }
+      }
+      const downgraded = p4_verify.confirmed_findings.length - audited.length
+      if (downgraded > 0) log(`  🔧 已自动降级 ${downgraded} 条空证据发现`)
+      p4_verify.confirmed_findings = audited
+
+      const fp_count = p4_verify.false_positives?.length || 0
+      const manual_count = p4_verify.needs_manual_test?.length || 0
+      log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效` +
+        (fp_count > 0 ? `, ${fp_count} false_positive` : '') +
+        (manual_count > 0 ? `, ${manual_count} 需手动验证` : ''))
+
+      p4_verify.confirmed_findings.forEach(f => {
+        const st = f.http_status || 0
+        log(`  ${st === 200 ? '✅' : '❓'} [${st}] ${f.title} → ${f.endpoint}`)
+      })
+      progress.findings_count = p4_verify.confirmed_findings.length
+
+      // 更新发现状态
+      if (p3_findings_data.length > 0) {
+        const confirmedEndpoints = new Set(
+          p4_verify.confirmed_findings.filter(f => f.confidence === 'confirmed' && f.curl_command).map(f => f.endpoint)
+        )
+        const fpEndpoints = new Set((p4_verify.false_positives || []).map(f => f.title))
+        const manualTitles = new Set((p4_verify.needs_manual_test || []).map(f => f.title))
+        p3_findings_data = p3_findings_data.map(f => {
+          if (fpEndpoints.has(f.title)) return { ...f, status: 'false_positive', phase_discovered: 'phase4' }
+          if (manualTitles.has(f.title)) return { ...f, status: 'needs_manual_test', phase_discovered: 'phase4' }
+          if (confirmedEndpoints.has(f.endpoint)) return { ...f, status: 'confirmed', phase_discovered: 'phase4' }
+          return f
+        })
+      }
+    }
+
+
+  // 目录扫描兜底
+  if (progress.findings_count < 3) {
+    p4_dirscan = await agent(
+      `对 ${resolvedProject} 执行目录扫描兜底（因当前发现较少）。
+
+目标URL:
+${(p1_assets.priority_targets || []).slice(0, 50).map(t => t.url).join('\n')}
+
+扫描常见路径:
+- 后台管理: /admin/, /manager/, /console/, /system/
+- 备份文件: /backup/, *.bak, *.zip, *.tar.gz
+- 配置泄露: /.git/, /.svn/, /.env, /WEB-INF/web.xml
+- 组件端点: /actuator/, /druid/, /nacos/
+
+用 curl 手动探测以上路径，输出所有发现。`,
+      { label: '📂 目录扫描兜底', schema: {
+        type: 'object',
+        properties: {
+          findings: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                endpoint: { type: 'string' },
+                severity: { type: 'string' },
+                status_code: { type: 'number' },
+                description: { type: 'string' },
+              },
+            },
+          },
+        },
+      }, phase: '验证取证' }
+    )
+    const extra = p4_dirscan?.findings || []
+    progress.findings_count += extra.length
+    if (extra.length > 0) {
+      log(`  目录扫描补充发现 ${extra.length} 个`)
+      p3_findings_data.push(...extra.map(f => ({
+        title: f.title, type: '目录枚举', severity: f.severity,
+        target: (p1_assets.priority_targets || [])[0]?.url || '',
+        endpoint: f.endpoint, confidence: 'exploratory',
+        curl_command: '', phase_discovered: 'phase4_dirscan', status: 'confirmed'
+      })))
+    }
+    ;(p1_assets.priority_targets || []).slice(0, 50).forEach(t => {
+      dimTracker.record(t.url, 'dir_enum', 'done')
+      if (extra.length > 0) dimTracker.record(t.url, 'dirsearch_scan', 'done')
+    })
+  }
+
+  markPhase(4, '✅')
+  showProgress()
+
+
+// ============================================================
+// Phase 5: 资产标记与状态存储
+// ============================================================
+phase('资产标记')
+
+if (mode.startsWith('phase5') || !p1_assets || !p1_assets.priority_targets || p1_assets.priority_targets.length === 0) {
+  log('[5/8] ⏭️ 跳过（无资产需标记）')
+  markPhase(5, '⏭️')
+} else {
+  markPhase(5, '🔄')
+  log('[5/8] 资产标记与状态存储')
+
+  const p5_all_assets = (p1_assets.priority_targets || []).map(t => ({
+    url: t.url, ip: t.ip, port: t.port, title: t.title || '', tags: t.tags || []
+  }))
+
+  if (p5_all_assets.length === 0) {
+    log('  ⏭️ 无具体资产需标记')
+    markPhase(5, '⏭️')
+  } else {
+    const p5_dim_rows = p5_all_assets.map(a => {
+      const isLogin = (a.tags || []).includes('[管理后台]')
+      const isWeb = !!a.title
+      const completed = dimTracker.completed(a.url)
+      const missing = dimTracker.missing(a.url, isWeb, isLogin)
+      const auto = dimTracker.judge(a.url, isWeb, isLogin)
+      return { ...a, isWeb, isLogin, completed, missing, auto }
+    })
+
+    const p5_dim_report = p5_dim_rows.map(a =>
+      `【${a.url}】${a.title ? ' ('+a.title+')' : ''}
+  已完成: ${a.completed.length > 0 ? a.completed.join(', ') : '(无)'}
+  缺漏:   ${a.missing.length > 0 ? a.missing.join(', ') : '(全部完成)'}
+  自动判定: ${a.auto}
+`).join('\n')
+
+    const p5_findings_json = JSON.stringify(p3_findings_data, null, 2)
+
+    const p5_mark = await agent(
+      `你是360众测资产状态管理专家，对 ${resolvedProject} 的资产做测试状态标记并持久化存储。
+
+===== 结构化测试维度数据 =====
+${p5_dim_report}
+==============================
+
+===== 本批次发现的线索/漏洞 =====
+${p3_findings_data.length > 0 ? p5_findings_json.substring(0, 4000) : '(无发现)'}
+================================
+
+=== 维度说明 ===
+| 维度 | 说明 |
+|------|------|
+| http_probe | HTTP探活 |
+| unauth_test | 无Cookie未授权探测 |
+| dir_enum | 手动目录枚举 |
+| dirsearch_scan | 全量目录扫描 |
+| weak_pass | 弱口令测试 |
+| js_analysis | JS逆向分析 |
+
+=== 任务 ===
+**Part A: 资产状态标记**
+对每个资产判断「已完全测试完毕 / 还未测试完毕 / 无法进行测试」。
+每次标记必须给出 reason 字段。
+
+**Part B: 线索/漏洞存档**
+1. 读取已有线索文件 ${findingsPath}（Read工具），如不存在则新建
+2. 合并本次发现的线索（按 endpoint 去重）
+3. 用Write工具写入 ${findingsPath}
+
+=== 操作要求 ===
+1. 先用Read读取 ${trackerPath}，保留旧记录
+2. 用Write写入 ${trackerPath}（合并写入）
+3. 用Read/Write处理 ${findingsPath}（合并写入）
+4. status+reason+phases_tested+last_tested 必填`,
+      { label: '🏷️ 资产状态+线索存档', schema: {
+        type: 'object',
+        properties: {
+          assets: {
+            type: 'object',
+            additionalProperties: {
+              type: 'object',
+              properties: {
+                status: { type: 'string', enum: ['已完全测试完毕', '还未测试完毕', '无法进行测试'] },
+                phases_tested: { type: 'array', items: { type: 'string' } },
+                last_tested: { type: 'string' },
+                reason: { type: 'string' },
+              },
+              required: ['status', 'phases_tested', 'last_tested', 'reason'],
+            },
+          },
+        },
+        required: ['assets'],
+      }, phase: '资产标记' }
+    )
+
+    if (p5_mark && p5_mark.assets) {
+      // 兼容处理：如果 agent 仍写了 notes 而非 reason，自动转换
+      Object.values(p5_mark.assets).forEach(a => {
+        if (!a.reason && a.notes) { a.reason = a.notes; delete a.notes }
+      })
+      const counts = { '已完全测试完毕': 0, '还未测试完毕': 0, '无法进行测试': 0, '无reason': 0 }
+      Object.values(p5_mark.assets).forEach(a => {
+        if (counts[a.status] !== undefined) counts[a.status]++
+        if (!a.reason) counts['无reason']++
+      })
+      log(`  📊 标记完成: 已完成 ${counts['已完全测试完毕']} | 未完成 ${counts['还未测试完毕']} | 无法测试 ${counts['无法进行测试']}`)
+      if (counts['无reason'] > 0) log(`  ⚠️ 有 ${counts['无reason']} 个资产缺少 reason 字段`)
+      if (p3_findings_data.length > 0) {
+        log(`  📝 线索已存档至 asset_findings.json（${p3_findings_data.length} 条）`)
+      }
+    }
+  }
+
+  markPhase(5, '✅')
+  showProgress()
+}
+
+// ============================================================
+// Phase 6: 报告编写
+// ============================================================
+phase('报告编写')
+
+if (progress.findings_count === 0) {
+  log('[6/8] ⏭️ 无有效发现，跳过报告编写')
+  markPhase(6, '⏭️')
+} else {
+  markPhase(6, '🔄')
+  log(`[6/8] 报告编写 — ${resolvedProject}`)
+
+  // 准备输出目录
+  const reportDir = `${PROJECT_DIR}/submittable_reports/`
+  await agent(
+    `执行命令创建报告输出目录:
+    mkdir -p ${reportDir}
+    确认目录已创建。`,
+    { label: '📁 准备输出目录', phase: '报告编写' }
+  )
+
+  // 列出已有报告
+  const existingReports = await agent(
+    `列出 ${reportDir} 下所有 .md 文件的文件名，每行一个。无文件则返回空。`,
+    { label: '📋 检查已有报告', phase: '报告编写' }
+  )
+  log(`  已有 ${(existingReports || '').split('\n').filter(Boolean).length} 个报告`)
+
+  // 汇总发现
+  const allFindingsData = [
+    ...(p3_unauth?.findings || []),
+    ...(p3_other?.findings || []),
+    ...(p4_dirscan?.findings || []),
+    ...(p3_quick?.findings || []),
+  ]
+  const findingsJSON = JSON.stringify(allFindingsData, null, 2)
+
+  // 规划报告分片
+  const p5_plan = await agent(
+    `你是360众测报告编写专家，为 ${resolvedProject} 的漏洞编写标准报告。
+
+任务：规划需要生成的报告清单（仅规划分片方案，不生成正文）。
+
+⚠️ 规则：
+1. 只对确认有效的漏洞写报告
+2. 同类漏洞合并为一个综合报告
+3. 多漏洞可形成利用链的，用利用链格式
+4. 文件名: {等级}_{漏洞类型}_{项目简称}_{简述}.md
+5. 低危默认不生成报告
+6. 360众测要求：报告需包含时间截图信息
+
+====== 发现数据 ======
+${findingsJSON}
+========================
+
+先检查 ${reportDir} 下已有报告避免重复。
+
+${existingReports ? `已有报告:\n${existingReports}` : ''}
+
+输出规划：file_name, severity, title, finding_indices`,
+    { label: '📝 规划报告分片', schema: {
+      type: 'object',
+      properties: {
+        reports: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              file_name: { type: 'string' },
+              severity: { type: 'string', enum: ['严重', '高危', '中危', '低危', '信息'] },
+              title: { type: 'string' },
+              finding_indices: { type: 'array', items: { type: 'number' } },
+            },
+            required: ['file_name', 'severity', 'title', 'finding_indices'],
+          },
+        },
+      },
+      required: ['reports'],
+    }, phase: '报告编写' }
+  )
+
+  if (p5_plan && p5_plan.reports && p5_plan.reports.length > 0) {
+    log(`  规划写入 ${p5_plan.reports.length} 份报告...`)
+    progress.reports_count = p5_plan.reports.length
+
+    const writeResults = await parallel(
+      p5_plan.reports.map((rpt) => () => {
+        const myFindings = (rpt.finding_indices || []).map(i => allFindingsData[i])
+        const myFindingsJSON = JSON.stringify(myFindings, null, 2)
+        const filePath = `${reportDir}${rpt.file_name}`
+
+        // 带重试机制的写入（最多2次）
+        const tryWrite = async (attempt = 1) => {
+          return await agent(
+          `【必须实际调用Write工具】你正在为360众测项目写入漏洞报告。
+
+报告信息:
+- 文件名: ${rpt.file_name}
+- 标题: ${rpt.title}
+- 严重等级: ${rpt.severity}
+- 项目: ${resolvedProject}
+- 目录: ${reportDir}
+
+====== 该报告包含的发现 ======
+${myFindingsJSON}
+==============================
+
+你的任务：
+1. 根据上述发现的原始数据，生成完整的Markdown格式报告
+2. 调用Write工具写入 ${filePath}
+3. 执行 ls -la 和 wc -l 确认写入成功
+
+报告格式要求：
+- 包含漏洞信息表（名称、等级、类型、影响范围、发现时间）
+- 包含漏洞描述 + 复现步骤 + HTTP请求/响应包 + curl命令
+- **360众测要求：需包含时间截图或时间信息**
+- 包含修复建议
+- 敏感数据脱敏
+
+注意：必须实际调用Write工具。`,
+          { label: `📄 ${rpt.file_name}`, phase: '报告编写' }
+        )}
+
+        return tryWrite(1).catch(err => {
+          log(`  ⚠️ 第1次写入失败: ${rpt.file_name} — ${err.message}`)
+          return tryWrite(2).catch(err2 => {
+            log(`  ❌ 重试也失败: ${rpt.file_name} — ${err2.message}`)
+            return { rpt, result: null, success: false }
+          })
+        })
+      })
+    )
+
+    const successCount = writeResults.filter(Boolean).length
+    log(`  ✅ 完成 ${successCount}/${p5_plan.reports.length} 份报告`)
+  }
+
+  // 生成HTML版本
+  const p6_html = await agent(
+    `运行HTML报告生成脚本:
+    python3 ${SKILL_SCRIPTS}/generate_html.py ${reportDir}
+
+    检查输出目录 ${reportDir}reports_html/ 是否生成了对应的 .html 文件。
+    如果脚本不可用或报错，说明原因。`,
+    { label: '🎨 生成HTML版本', phase: '报告编写' }
+  )
+
+  markPhase(6, '✅')
+  showProgress()
+}
+
+// ============================================================
+// Phase 7: 自审
+// ============================================================
+phase('自审')
+
+if (progress.reports_count === 0) {
+  log('[7/8] ⏭️ 无报告需自审')
+  markPhase(7, '⏭️')
+} else {
+  markPhase(7, '🔄')
+  log('[7/8] 报告自审')
+
+  const reportDir = `${PROJECT_DIR}/submittable_reports/`
+
+  const p6_rules = await agent(
+    `读取以下两个文件内容（用Read工具）:
+1. 判定规则: /home/my/.claude/skills/ZC_SKILLS_V1/references/judgment-rules.md
+2. 项目VulnType: ${PROJECT_DIR}/VULN_TYPE.html（如果不存在，查看目录下 *_Information.html 类似文件）
+
+输出读取结果摘要。`,
+    { label: '📖 读取判定规则 + VulnType', phase: '自审' }
+  )
+
+  const p6_audit = await agent(
+    `你是360众测报告审计专家，对 ${resolvedProject} 的报告做最终判定 (F/R/T)。
+
+判定规则:
+${(p6_rules || '(读取失败)').substring(0, 2500)}
+
+报告目录: ${reportDir}
+
+任务 — 对每份报告逐项判定：
+
+1. 文件格式检查:
+   - 命名规范: {等级}_{类型}_{项目}_{简述}.md
+   - 包含HTTP请求/响应包 + curl命令
+   - 敏感数据已脱敏
+   - **包含时间截图或时间信息（360众测要求）**
+
+2. 等级准确性: 对照judgment-rules判定
+
+3. 厂商接受度: 对照VulnType（接受类型？忽略清单？）
+
+4. 重复检测: 端点重叠检查
+
+5. 最终判定:
+   - T (属实) — 可提交
+   - R (保留) — 需进一步观察
+   - F (不符) — 移入 _invalid/
+
+输出JSON格式。`,
+    { label: '🔍 最终判定 (F/R/T)', schema: {
+      type: 'object',
+      properties: {
+        reports: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              file_name: { type: 'string' },
+              verdict: { type: 'string', enum: ['T', 'R', 'F', 'skip_duplicate'] },
+              severity_accurate: { type: 'boolean' },
+              type_accepted: { type: 'boolean' },
+              has_timestamp: { type: 'boolean', description: '是否包含时间截图/时间信息' },
+              issues: { type: 'array', items: { type: 'string' } },
+              suggestion: { type: 'string' },
+            },
+            required: ['file_name', 'verdict'],
+          },
+        },
+      },
+      required: ['reports'],
+    }, phase: '自审' }
+  )
+
+  if (p6_audit && p6_audit.reports) {
+    const tCount = p6_audit.reports.filter(r => r.verdict === 'T').length
+    const rCount = p6_audit.reports.filter(r => r.verdict === 'R').length
+    const fCount = p6_audit.reports.filter(r => r.verdict === 'F').length
+    log(`  📊 结果: T(可提交) ${tCount} | R(保留) ${rCount} | F(不符) ${fCount}`)
+    p6_audit.reports.filter(r => r.verdict === 'F').forEach(r => {
+      log(`    🗑️ ${r.file_name}: ${(r.issues || []).join('; ')}`)
+    })
+  }
+
+  markPhase(7, '✅')
+  showProgress()
+}
+
+// ============================================================
+// Phase 8: 提交准备
+// ============================================================
+phase('提交准备')
+markPhase(8, '🔄')
+log('[8/8] 提交准备')
+
+const reportDir_final = `${PROJECT_DIR}/submittable_reports/`
+
+await agent(
+  `提交准备 — 执行最终检查:
+
+**检查清单：**
+1. 文件名规范: ls "${reportDir_final}"*.md
+
+2. 完整HTTP请求/响应包确认:
+   Read每份md文件，确认包含HTTP请求/响应包 + curl命令
+
+3. **漏洞URL仍可访问**（复测要求）:
+   提取漏洞URL用 curl -sI 确认
+
+4. **时间截图检查**（360众测特殊要求）:
+   确认每份报告含 "时间截图" 或 "时间信息"
+
+5. 厂商合规: 类型在VulnType接受范围内
+
+    6. 敏感数据脱敏确认:
+       - 手机号/身份证号/真实Cookie/Token
+
+    7. **URL来源检查**（360众测特殊要求）:
+       确认每份报告包含了漏洞URL是从哪里发现的（如：从Hunter资产发现 / 从JS中发现的API / 从目录扫描发现等）
+
+    8. **弱口令来源检查**（360众测特殊要求）:
+       如果是弱口令/默认口令类漏洞，需确认报告说明了用户名密码的获取来源（如：框架默认口令库 / 从JS配置文件中发现 / 通用字典爆破等）
+
+    **输出：** 列出每份报告及检查结果（✅/❌），按严重→高危排序`,
+  { label: '✅ 最终检查', phase: '提交准备' }
+)
+
+markPhase(8, '✅')
+
+// ============================================================
+// 最终总结
+// ============================================================
+log('')
+log('╔══════════════════════════════════════════════════════════════╗')
+log('║              🎉  八阶段全流程执行完成                        ║')
+log('╠══════════════════════════════════════════════════════════════╣')
+log(`║  项目     │ ${(progress.project || '').padEnd(36)} ║`)
+log(`║  模式     │ ${String(mode).padEnd(36)} ║`)
+log(`║  发现数   │ ${String(progress.findings_count).padEnd(36)} ║`)
+log(`║  报告数   │ ${String(progress.reports_count).padEnd(36)} ║`)
+log('╠══════════════════════════════════════════════════════════════╣')
+log(`║  ① ${progress.phase1}   ② ${progress.phase2}   ③ ${progress.phase3}   ④ ${progress.phase4}   ⑤ ${progress.phase5}   ⑥ ${progress.phase6}   ⑦ ${progress.phase7}   ⑧ ${progress.phase8}   ║`)
+log('╚══════════════════════════════════════════════════════════════╝')
+showProgress()
+
+return {
+  project: resolvedProject,
+  mode,
+  progress: { ...progress },
+  summary: {
+    priority_targets: (p1_assets?.priority_targets || []).length,
+    findings: progress.findings_count,
+    reports: progress.reports_count,
+  },
+}

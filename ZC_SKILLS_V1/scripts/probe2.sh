@@ -1,0 +1,36 @@
+#!/bin/bash
+BASE="http://tzxzhxm.etz.gov.cn:8002"
+PATHS=(
+  "/api"
+  "/api/user/register"
+  "/api/user/logout"
+  "/api/user/check"
+  "/api/user/captcha"
+  "/api/user/getCaptcha"
+  "/api/captcha"
+  "/api/code"
+  "/api/v1/captcha"
+  "/api/verifyCode"
+  "/api/getCode"
+  "/api/sms"
+  "/api/sendSms"
+  "/api/user/sms"
+  "/api/v1/user/captcha"
+  "/api/common/captcha"
+  "/api/dict"
+  "/api/system"
+  "/api/role"
+  "/api/menu"
+  "/api/dept"
+  "/api/post"
+  "/api/config"
+  "/api/v1/dict"
+  "/api/v1/menu"
+  "/api/v1/role"
+  "/api/v1/user/page"
+  "/api/v1/common/captcha"
+)
+for path in "${PATHS[@]}"; do
+  resp=$(curl -s -o /dev/null -w "HTTP %{http_code} Size: %{size_download}" --connect-timeout 8 --max-time 10 "${BASE}${path}" 2>&1)
+  echo "${path} -> ${resp}"
+done

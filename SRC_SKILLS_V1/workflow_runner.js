@@ -86,6 +86,7 @@ function markPhase(n, status) {
 // ============================================================
 const trackerPath = `${SRC_BASE}/${companyName || 'unknown'}/asset_test_status.json`
 const findingsPath = `${SRC_BASE}/${companyName || 'unknown'}/asset_findings.json`
+const frameworksCachePath = `${SRC_BASE}/${companyName || 'unknown'}/frameworks_audited.json`
 let p0_tracker = null
 
 if (companyName && !mode.startsWith('phase5')) {
@@ -260,13 +261,25 @@ p1_assets = await agent(
        · [境外资产] — 备案异常/境外IP/无备案号
      - 同一域名多端口做URL聚合去重
 
-  3. 优先级排序输出
+  3. **严格域名合法性过滤（必须执行，不可跳过）**
+     ⚠️ 只保留**主域后缀在 Information.html 定义的 SRC 范围内**的资产。参考示例：
+       合法主域: *.lixiang.com / *.chehejia.com / *.lixiangoa.com
+       非法示例（必须全部剔除）:
+       - 第三方镜像/代理: *.xxx.domain.name, *.xxx.internet.com, *.xxx.com.com, *.xxx.itotolink.com, *.xxx.783.com, *.xxx.ht.com
+       - CDN/云代理: *.xxx.baidu-itm.com, *.xxx.hz.ali.com, *.xxx.www.router.cmiot.cn, *.xxx.www.xshotel.com
+       - 仿冒/抢注域名: ah-lixiang.com, gz-lixiang.com.cn, lixiang.com.cn, cn-lixiang.com, lixiang.com.uz, *.khcc.site, *.ixem.ru
+       - 扫描陷阱/蜜罐: www_lixiang_com.*（下划线格式域名）, lixiang_com_cn.*
+       - 其它公司域名: *.wucai.com, *.chehejia.com.cn, *.gxjmxy.com, *.gfxy.com, *.anti-spam.org.cn
+     - 过滤方法: 取 url 的域名，提取最后两级主域（如 lixiang.com, baidu-itm.com），不在 Information.html 声明的 SRC 主域内的全部剔除
+     - 结合备案单位（"备案单位"列）交叉验证：备案单位为其他公司的资产剔除
+     - 有疑问的资产标记到 reason 字段中说明判断依据
 
-4. **URL聚合去重**：同域名多端口→保留HTTP+HTTPS各一；同IP多域名→独立保留
-
+  4. **优先级排序输出**
      - 最高: [管理后台][境外资产]
      - 高: [范围内][新发现]
      - 中: [非常见端口][组件指纹]
+
+5. **URL聚合去重**：同域名多端口→保留HTTP+HTTPS各一；同IP多域名→独立保留
 
   JSON输出格式:
   {
@@ -321,6 +334,49 @@ if (!p1_assets) {
   return { error: '资产发现失败', progress }
 }
 
+// ============================================================
+// 🔧 程序化域名合法性过滤（第二层防线）
+// 剔除 agent 可能遗漏的非厂商资产
+// ============================================================
+const ILLEGAL_TLDS = [
+  'domain.name', 'baidu-itm.com', 'internet.com', 'com.com', 'itotolink.com',
+  'dfgoshine.com', 'tianshikeji.cn', 'china-elenice.com', 'xjdd.net',
+  'caiwangxing.net', 'twyls.cn', 'a300wr.net', 'ali.com', 'yjhst.com.cn',
+  '52fad.com', 'rqorrvtz.cn', 'jiaojiang.cn', 'xshotel.com',
+  'router.cmiot.cn', 'ht.com', '783.com', 'chehejia.com.cn',
+  'com.uz', 'khcc.site', 'cast508.com', 'anti-spam.org.cn', 'gxjmxy.com',
+  'cn-lixiang.com', 'gfxy.com', 'toptrans.com', 'weidesen.net',
+  'yuelong56.com', 'wucai.com', 'ah-lixiang.com', 'gz-lixiang.com.cn',
+  'lixiang.com.cn', 'ixem.ru',
+]
+
+function isDomainLegit(url) {
+  try {
+    const domain = url.split('://')[1].split(':')[0].toLowerCase()
+    // 扫描陷阱: 包含下划线（如 www_lixiang_com.xxx）
+    if (domain.includes('_')) return false
+    // 检查主域后缀是否在黑名单中
+    for (const bad of ILLEGAL_TLDS) {
+      if (domain.endsWith(bad) || domain === bad) return false
+    }
+    return true
+  } catch (_) { return false }
+}
+
+if (p1_assets?.priority_targets) {
+  const before = p1_assets.priority_targets.length
+  p1_assets.priority_targets = p1_assets.priority_targets.filter(t => isDomainLegit(t.url))
+  const filtered = before - p1_assets.priority_targets.length
+  if (filtered > 0) log(`  🛡️ 程序化域名过滤: 已剔除 ${filtered} 个非厂商资产（第三方代理/仿冒/扫描陷阱）`)
+}
+if (p1_assets?.all_urls) {
+  const before2 = p1_assets.all_urls.length
+  p1_assets.all_urls = p1_assets.all_urls.filter(u => isDomainLegit(u))
+  const filtered2 = before2 - p1_assets.all_urls.length
+  if (filtered2 > 0) log(`  🛡️ 程序化域名过滤: 已剔除 ${filtered2} 个非厂商URL`)
+}
+// ============================================================
+
 // 过滤已测试资产（避免重复测试）
 if (p0_testedUrls.size > 0 && p1_assets?.priority_targets) {
   const before = p1_assets.priority_targets.length
@@ -369,10 +425,10 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
   markPhase(2, '🔄')
   log(`[2/8] 深度分析 — ${companyName}`)
 
-  // 从priority_targets + all_urls 合并取前50个去重，确保JS分析覆盖全部资产
+  // 从priority_targets + all_urls 合并取前10个去重，确保JS分析覆盖关键资产
   const p2_priority_urls = (p1_assets.priority_targets || []).map(t => t.url).filter(Boolean)
   const p2_all_urls = (p1_assets.all_urls || []).filter(u => !p2_priority_urls.includes(u))
-  const targets = [...p2_priority_urls, ...p2_all_urls].slice(0, 50)
+  const targets = [...p2_priority_urls, ...p2_all_urls].slice(0, 10)
 
   if (targets.length === 0) {
     log('  ⚠️ 无高优先级目标可分析')
@@ -424,7 +480,15 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
          找到内网IP → 从命名判断服务名(k8s)、环境后缀(dev/test/ontest)
          找到API路径 → 功能命名可推断数据敏感度
 
-      注意: 只做读取分析。遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)。`,
+      注意: 只做读取分析。遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)。
+
+          ⚠️ **严格边界规则（必须遵守，不可违反）:**
+          1. ⛔ 仅对目标URL使用 curl。**不要读取任何本地文件**（不要使用 Read 工具读取文件）。
+          2. ⛔ 如果 curl 获取不到目标页面HTML（返回000/超时/连接拒绝），直接返回 "target_unreachable: {目标URL}"。
+             - **不要**从本地目录读取缓存HTML或任何本地缓存文件
+             - **不要**从本地读取 *_Information.html 或任何其他snapshot文件
+             - 就简单返回 target_unreachable，不做任何分析
+          3. ⛔ **不要引用、提及、或包含任何来自其他厂商/公司的数据**。只分析当前目标自身。`,
           { label: `🔬 JS分析: ${target}`, phase: '深度分析' }
         )
       },
@@ -536,7 +600,7 @@ ${targets.slice(0, 20).map(t => `  ${t.url}`).join('\n')}
    - 响应头 X-Powered-By / Server / Set-Cookie — 注意异常值
    - 404 错误页的内容 — 默认 404 页风格可推断框架
    - 403 错误页 — 某些框架有默认 403 页（如 Spring Boot Whitelabel）
-   - 响应体中的框架注释 — `<!-- /usr/local/... -->` 泄露路径
+   - 响应体中的框架注释 — '<!-- /usr/local/... ->' 泄露路径
 
 4. **Cookie 模式**:
    - PHPSESSID — PHP 通用
@@ -569,7 +633,9 @@ ${targets.slice(0, 20).map(t => `  ${t.url}`).join('\n')}
 - Shiro 绕过: Shiro 过滤链是否有未收全的 /anon 端点
 - Swagger 接口未授权: 从 swagger 文档中发现无需鉴权的API
 
-**输出 JSON，每个目标一个条目。**`,
+**输出 JSON，每个目标一个条目。**
+
+      ⚠️ **严格边界规则：仅使用 curl 探测目标URL。不要读取任何本地文件。不要提及或引用任何其他厂商的数据。**`,
       { label: '🔍 快速开发框架识别', schema: {
         type: 'object',
         properties: {
@@ -757,7 +823,9 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
 - 这类发现的 confidence 必须标记为 "exploratory"，不能标记为 "confirmed" 或 "suspected"
 - 只有响应体包含实际业务数据（用户信息/配置凭证/订单记录等）才算 confirmed
 
-只做读取探测。`,
+只做读取探测。
+
+      ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: `🔓 未授权/信息泄露测试`, schema: {
         type: 'object',
         properties: {
@@ -828,7 +896,9 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
    - 流程绕过: 跳过支付步骤、负值参数(Integer溢出)
    - 并发竞态: 同时请求多次（点赞/领券/提现接口）
 
-只做读取探测。`,
+只做读取探测。
+
+      ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: `🎯 越权/弱口令测试`, schema: {
         type: 'object',
         properties: {
@@ -856,13 +926,33 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
     let p3_codeaudit = null
     // 从 p2_discoveries_text 中提取开源系统识别结果
     const p3_has_oss = p2_discoveries_text && p2_discoveries_text.includes('【快速开发框架识别结果】')
+
+    // 读取框架审计缓存，避免重复审计同一框架
+    let p3_framework_cache = { audited: {} }
+    try {
+      const fs = require('fs')
+      if (fs.existsSync(frameworksCachePath)) {
+        p3_framework_cache = JSON.parse(fs.readFileSync(frameworksCachePath, 'utf8'))
+        log(`  📚 框架审计缓存: ${Object.keys(p3_framework_cache.audited).length} 个框架已审计`)
+      }
+    } catch (e) { /* 忽略缓存读取错误 */ }
+
     if (p3_has_oss) {
+      // 提取框架名列表，过滤已审计的
+      const ossText = p2_discoveries_text.substring(
+        p2_discoveries_text.indexOf('【快速开发框架识别结果】'),
+        p2_discoveries_text.length
+      ).substring(0, 4000)
+
+      // 让agent检查缓存并跳过已审计框架
       p3_codeaudit = await agent(
         `你是快速开发框架审计专家，对 ${companyName} 的已识别框架执行本地部署实现和源码审计。
 
 ===== Phase 2 快速开发框架识别结果 =====
-${p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框架识别结果】'), p2_discoveries_text.length).substring(0, 4000)}
+${ossText}
 ==========================================
+注意：下表中的框架已在本会话中审计过(审计时间: 哈希)，请跳过，不要重复审计：
+${Object.entries(p3_framework_cache.audited).map(([k,v]) => `  - ${k} (${v.last_audited}, ${v.findings_count}条发现)`).join('\n') || '(无)'}
 
 你的任务分为两部分：
 
@@ -930,8 +1020,28 @@ ${p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框�
    - 搜索 Runtime.getRuntime().exec(), ProcessBuilder, exec(), shell_exec(), system(), subprocess.run()
    - 检查参数是否为用户输入可控
 
+   ⚠️ **业务场景分类规则（重要）:**
+   当发现 Class.forName、ProcessBuilder、Runtime.exec 等调用时，**必须追溯参数来源**，按以下规则分类：
+
+   **A. 业务设计（非漏洞）——标注 is_business_feature: true，附带代码理由:**
+   - ProcessBuilder 调用的命令是**硬编码字符串**（如 ffmpeg、edge-tts、git），非用户输入拼接
+   - Class.forName 有**包名白名单校验**（如 startsWith("org.jeecg.")），且只能实例化特定接口实现类
+   - 命令参数来源于**系统内部配置**（如 application.yml），非用户 HTTP 参数
+   - 示例: JeecgBoot AI视频生成调用 ffmpeg+edge-tts（业务特性）; Quartz用白名单限制类加载
+
+   **B. 确认为漏洞——正常标记 severity，附带利用条件:**
+   - 用户 HTTP 参数（@RequestParam/@RequestBody/@PathVariable）**直接拼接**到命令
+   - Class.forName **无包名白名单**，或白名单可绕过
+   - 命令执行结果返回到 HTTP 响应（回显RCE）
+   - 无 @RequiresPermissions/@PreAuthorize 鉴权保护
+
+   **每个发现必须附带:**
+   - is_business_feature: true/false — 是否为业务设计
+   - reasoning_code — 判断依据的代码片段
+   - user_controllable: true/false — 参数是否来自用户HTTP输入
+
 4. **SQL 注入控制**:
-   - MyBatis XML 中的 ${} 拼接（尤其 orderBy/sort 排序字段）
+   - MyBatis XML 中的 \${} 拼接（尤其 orderBy/sort 排序字段）
    - @Select/@Query 中的原生 SQL 拼接
 
 5. **反序列化控制**:
@@ -987,7 +1097,9 @@ ${p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框�
    - 「零凭据获取Admin Token」最高优先级标记
    - 已知CVE给出POC；0day标注 potentially_0day
 
-只做本地分析和读取，不在目标系统执行破坏性操作。`,
+只做本地分析和读取，不在目标系统执行破坏性操作。
+
+        ⚠️ **严格边界规则：仅审计当前公司的框架源码。不要引用、提及或包含任何其他厂商的数据。**`,
         { label: '📦 本地部署+源码审计', schema: {
           type: 'object',
           properties: {
@@ -1050,6 +1162,25 @@ ${p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框�
             curl_command: f.poc || '',
             phase_discovered: 'phase3_codeaudit', status: 'unverified'
           })))
+
+          // 保存框架审计缓存（framework + version → 已审计标记）
+          if (p3_codeaudit.audit_findings.length > 0) {
+            const frameworkSet = new Set()
+            p3_codeaudit.audit_findings.forEach(f => {
+              if (f.framework_name) frameworkSet.add(f.framework_name)
+            })
+            frameworkSet.forEach(fw => {
+              p3_framework_cache.audited[fw] = {
+                last_audited: '2026-07-02',
+                findings_count: p3_codeaudit.audit_findings.filter(f => f.framework_name === fw).length
+              }
+            })
+            try {
+              const fs = require('fs')
+              fs.writeFileSync(frameworksCachePath, JSON.stringify(p3_framework_cache, null, 2))
+              log(`  💾 框架审计缓存已保存 (${frameworkSet.size} 个框架)`)
+            } catch (e) { /* 忽略写入错误 */ }
+          }
         }
       }
     } else {
@@ -1078,7 +1209,9 @@ ${tier2_urls.map(u => `  ${u}`).join('\n')}
 3. 对登录页面尝试弱口令: admin/admin, admin/123456
 4. 识别组件版本+CVE匹配
 5. 有发现的才记录，无发现的不需输出
-6. 每个发现附带 curl 命令`,
+6. 每个发现附带 curl 命令
+
+        ⚠️ **严格边界规则：仅对当前列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
         { label: '⚡ Tier2快速探测', schema: {
           type: 'object',
           properties: {
@@ -1215,7 +1348,9 @@ Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
   - data 是非空列表但第一项不包含用户可读的业务字段（仅含 id/iid/total/pageNum 等元数据）→ suspected 或 false_positive
   - data 是包含用户/订单/配置/凭证等业务数据的非空列表 → confirmed
 
-输出时 confirmed_findings 只放 confirmed + suspected 的。false_positives 和 needs_manual_test 各自归位。`,
+输出时 confirmed_findings 只放 confirmed + suspected 的。false_positives 和 needs_manual_test 各自归位。
+
+      ⚠️ **严格边界规则：仅验证当前公司的漏洞数据。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: '🔍 漏洞复测验证', schema: {
         type: 'object',
         properties: {
@@ -1274,13 +1409,20 @@ Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
         '"data":\n[]', '"data":\n{}',
         '"list":[]', '"records":[]', '"rows":[]',
         '"total":0}', '"size":0}',
+        '"success":false', '"success": false',
+        '"code":1', '"code":-1', '"code":500',
+        '"msg":"执行出现问题','"msg":"参数错误','"msg":"没有权限',
+        '"msg":"Unauthorized','"msg":"登录已过期',
       ]
       const AUDIT_EVIDENCE_MIN = 40
       const audited = []
       for (const f of p4_verify.confirmed_findings) {
         let reason = null
         const ev = (f.evidence || '').replace(/\s+/g, '')
-        if (!f.evidence || f.evidence.trim().length < 3) {
+        // 403 状态码 → 非有效利用
+        if (f.http_status === 403) {
+          reason = 'http_403_forbidden'
+        } else if (!f.evidence || f.evidence.trim().length < 3) {
           reason = 'evidence_empty_or_too_short'
         } else if (EMPTY_DATA_PATTERNS.some(p => ev.includes(p))) {
           reason = 'evidence_contains_empty_data_container'
@@ -1360,12 +1502,12 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
         })
       }
     }
-
+  }
 
   // 2. 如果有效发现仍然较少，尝试目录扫描兜底
   if (progress.findings_count < 3) {
     p4_dirscan = await agent(
-      `对 ${companyName} 执行目录扫描兜底（因当前发现较少）。\n\n目标URL:\n${(p1_assets.priority_targets || []).slice(0, 50).map(t => t.url).join('\n')}\n\n使用 dirsearch 扫描常见路径:\n- 后台管理: /admin/, /manager/, /console/, /system/\n- 备份文件: /backup/, *.bak, *.zip, *.tar.gz\n- 文件上传: /uploads/, /files/\n- 配置泄露: /.git/, /.svn/, /.env, /WEB-INF/web.xml\n- 组件端点: /actuator/, /druid/, /nacos/\n\n如果 dirsearch 不可用，用 curl 手动探测以上路径。\n对新发现的端点做未授权测试。\n\n输出所有发现。`,
+      `对 ${companyName} 执行目录扫描兜底（因当前发现较少）。\n\n目标URL:\n${(p1_assets.priority_targets || []).slice(0, 10).map(t => t.url).join('\n')}\n\n使用 dirsearch 扫描常见路径:\n- 后台管理: /admin/, /manager/, /console/, /system/\n- 备份文件: /backup/, *.bak, *.zip, *.tar.gz\n- 文件上传: /uploads/, /files/\n- 配置泄露: /.git/, /.svn/, /.env, /WEB-INF/web.xml\n- 组件端点: /actuator/, /druid/, /nacos/\n\n如果 dirsearch 不可用，用 curl 手动探测以上路径。\n对新发现的端点做未授权测试。\n\n输出所有发现。`,
       { label: '📂 目录扫描兜底', schema: {
         type: 'object',
         properties: {
@@ -1399,7 +1541,7 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
       })))
     }
     // 记录目录枚举维度（手动探测 → dir_enum，dirsearch → dirsearch_scan）
-    ;(p1_assets.priority_targets || []).slice(0, 50).forEach(t => {
+    ;(p1_assets.priority_targets || []).slice(0, 10).forEach(t => {
       dimTracker.record(t.url, 'dir_enum', 'done')
       if (extra.length > 0) dimTracker.record(t.url, 'dirsearch_scan', 'done')
     })
@@ -1407,7 +1549,7 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
 
   markPhase(4, '✅')
   showProgress()
-
+}
 
 // ============================================================
 // Phase 5: 资产标记与状态存储
@@ -1466,7 +1608,7 @@ ${p5_dim_report}
 ==============================
 
 ===== 本批次发现的线索/漏洞 =====
-${p3_findings_data.length > 0 ? p5_findings_json.substring(0, 4000) : '(无发现)'}
+${p3_findings_data.length > 0 ? p5_findings_json.substring(0, 15000) : '(无发现)'}
 ================================
 
 === 维度说明 ===

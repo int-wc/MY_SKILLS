@@ -59,6 +59,27 @@ const PROJECT_DIR = `${ZC_BASE}/${resolvedProject}`
 log(`📂 项目目录: ${PROJECT_DIR}`)
 log(`📋 模式: ${mode}`)
 
+// ============================================================
+// VPN 自动启动（渗透隔离 — 仅探测流量走 VPN）
+// ============================================================
+await agent(
+  `检查并启动 VPN（渗透隔离模式）。
+
+项目: ${resolvedProject}
+VPN 脚本: ${PROJECT_DIR}/OPENVPN/vpn-split.sh
+
+请执行以下步骤:
+1. 执行 bash 命令检查 VPN 脚本是否存在: ls -la ${PROJECT_DIR}/OPENVPN/vpn-split.sh
+2. 检查 VPN 当前状态: sudo ${PROJECT_DIR}/OPENVPN/vpn-split.sh status
+3. 如果 VPN 未运行，启动它: sudo ${PROJECT_DIR}/OPENVPN/vpn-split.sh up ${PROJECT_DIR}
+4. 如果已运行，跳过启动
+5. 确认双通道可用：curl -sk https://zhongce.360.net/（VPN） + curl -sk https://www.baidu.com（直连） 均应返回 200
+6. 输出 VPN IP 和 tun0 路由表
+
+注意：sudoers 已配置免密，sudo 命令可直接执行。`,
+  { label: '🔒 VPN 自动启动', phase: '项目信息+资产发现' }
+)
+
 // 目标进度追踪
 const progress = {
   project: resolvedProject,
@@ -89,6 +110,7 @@ function markPhase(n, status) {
 // ============================================================
 const trackerPath = `${PROJECT_DIR}/asset_test_status.json`
 const findingsPath = `${PROJECT_DIR}/asset_findings.json`
+const frameworksCachePath = `${PROJECT_DIR}/frameworks_audited.json`
 let p0_tracker = null
 
 if (!mode.startsWith('phase5')) {
@@ -269,11 +291,10 @@ if (mode.startsWith('phase5')) {
          · [非常见端口] — 非80/443端口
        - 如果 xlsx 无法读取或不存在，输出空列表并说明
 
-    4. **VPN 隔离连接确认（渗透与日常隔离）**
-       - 检查 ${PROJECT_DIR}/OPENVPN/vpn-split.sh 是否存在（通用脚本，适配任意项目）
-       - 执行 sudo ${PROJECT_DIR}/OPENVPN/vpn-split.sh up ${PROJECT_DIR} 启动 VPN（参数化，自动扫描资产文件）
-       - 如果未连接，提示用户执行 sudo 命令启动 VPN
-       - **关键检查**：双通道验证 — 众测平台(走VPN) + 百度(走外网) 均应可达
+    4. **VPN 隔离状态确认（已在启动时自动拉起）**
+       - 检查 ${PROJECT_DIR}/OPENVPN/vpn-split.sh 是否存在
+       - 执行 sudo ${PROJECT_DIR}/OPENVPN/vpn-split.sh status 确认 VPN 运行中
+       - 确认：众测平台(走VPN) + 百度(走外网) 双通道均可达
        - 记录 VPN IP 和路由表供后续参考
     5. **优先级排序输出**
        - 最高: [管理后台]
@@ -351,6 +372,34 @@ if (mode.startsWith('phase5')) {
     return { error: '资产发现失败', progress }
   }
 
+  // ============================================================
+  // 🔧 URL 合法性检查（剔除异常格式的资产）
+  // ============================================================
+  const ZC_ILLEGAL_PATTERNS = [
+    '_',              // 下划线域名（扫描陷阱）
+    '.domain.name',   // 域名停放
+    '.internet.com', '.com.com', '.itotolink.com',
+  ]
+  function isUrlValid(url) {
+    try {
+      const domain = url.split('://')[1].split(':')[0].toLowerCase()
+      for (const pat of ZC_ILLEGAL_PATTERNS) {
+        if (domain.includes(pat)) return false
+      }
+      return true
+    } catch (_) { return false }
+  }
+  if (p1_assets?.priority_targets) {
+    const before = p1_assets.priority_targets.length
+    p1_assets.priority_targets = p1_assets.priority_targets.filter(t => isUrlValid(t.url))
+    const filtered = before - p1_assets.priority_targets.length
+    if (filtered > 0) log(`  🛡️ 已剔除 ${filtered} 个异常格式资产`)
+  }
+  if (p1_assets?.all_urls) {
+    p1_assets.all_urls = p1_assets.all_urls.filter(u => isUrlValid(u))
+  }
+  // ============================================================
+
   // 输出项目信息摘要
   log(`  📋 项目: ${p1_assets.project_name}`)
   log(`  📐 范围: ${p1_assets.scope_summary || '未知'}`)
@@ -396,7 +445,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
 
   const p2_priority_urls = (p1_assets.priority_targets || []).map(t => t.url).filter(Boolean)
   const p2_all_urls = (p1_assets.all_urls || []).filter(u => !p2_priority_urls.includes(u))
-  const targets = [...p2_priority_urls, ...p2_all_urls].slice(0, 50)
+  const targets = [...p2_priority_urls, ...p2_all_urls].slice(0, 10)
 
   if (targets.length === 0) {
     log('  ⚠️ 无高优先级目标可分析')
@@ -407,10 +456,11 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
       async (target) => {
         return await agent(
           `你是JS逆向和API发现专家，分析目标: ${target}
+🔒 VPN: 所有 curl 必须加 --interface tun0
 
       执行四层分析：
       1. 第一层 - 定位API入口:
-         curl -s 获取页面HTML，提取 <script src>
+         curl --interface tun0 -s 获取页面HTML，提取 <script src>
          对每个JS，查找 baseURL/API_HOST/API_BASE/gatewayUrl/serverUrl
 
       2. 第二层 - 路径模式提取:
@@ -457,6 +507,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
     log('  🔍 执行开源系统识别（快速开发框架/低代码平台）...')
     const p2_oss = await agent(
       `你是快速开发框架识别专家，对 ${resolvedProject} 的以下目标执行开源系统识别。
+🔒 VPN: 所有 curl 探测必须加 --interface tun0
 重点识别：JeecgBoot、RuoYi（若依）、JeeSite、Guns、TeaWeb、BladeX、低代码平台等。
 
 目标列表（前 20 个）:
@@ -596,6 +647,48 @@ ${targets.slice(0, 20).map(t => `  ${t}`).join('\n')}
 
   markPhase(2, '✅')
   showProgress()
+
+  // ============================================================
+  // Phase 2.5: 新发现目标加入 VPN 路由（确保后续探测全走 VPN）
+  // ============================================================
+  const VPN_SCRIPT = `${PROJECT_DIR}/OPENVPN/vpn-split.sh`
+  const ALL_TARGETS = [
+    ...(p1_assets?.priority_targets || []).map(t => t.url || t.ip || t),
+    ...(p1_assets?.all_urls || []),
+  ]
+  // 去重提取域名和 IP
+  const TARGET_IPS = [...new Set(ALL_TARGETS.map(t => {
+    try { return new URL(t).hostname } catch { return t.split(':')[0] }
+  }).filter(t => t && !t.startsWith('{')))]
+
+  if (TARGET_IPS.length > 0) {
+    await agent(
+      `将已知目标 + Phase 2 新发现目标的 IP 全部加入 VPN 路由表，确保后续探测全走 VPN。
+
+VPN 脚本: ${VPN_SCRIPT}
+
+已知目标（${TARGET_IPS.length} 个）:
+${TARGET_IPS.map(t => `  - ${t}`).join('\n')}
+
+执行步骤:
+1. 确认 VPN 运行中: sudo ${VPN_SCRIPT} status
+2. 先添加已知目标: sudo ${VPN_SCRIPT} add-target ${TARGET_IPS.join(' ')}
+
+3. **关键 — 从 Phase 2 分析结果中提取新发现的目标域名/IP**:
+   - 本次 JS 逆向分析中发现的新 API 域名、子域名、第三方接口
+   - 开源系统识别中发现的新后端地址
+   - 组件审计中发现的新端点
+   - 提取出来后执行: sudo ${VPN_SCRIPT} add-target <新IP或域名>
+
+4. 验证路由已添加: ip route show dev tun0
+5. 验证众测平台可达（走VPN）: curl -sk --max-time 5 https://zhongce.360.net/
+
+注意: sudo 已配置免密，所有 ip route / curl 命令均可直接执行。`,
+      { label: '🔒 更新 VPN 路由表', phase: '项目信息+资产发现' }
+    )
+  } else {
+    log('  ℹ️ 无目标需加入 VPN 路由')
+  }
 }
 
 // ============================================================
@@ -611,6 +704,9 @@ if (mode.startsWith('phase5')) {
   markPhase(3, '🔄')
   log(`[3/8] 漏洞挖掘 — ${resolvedProject}`)
 
+  // ⚡ VPN 强制指令：所有 curl/HTTP 请求必须走 VPN 接口
+  const VPN_CURL = 'curl --interface tun0 -sk'
+
   const P3_TIER1_MAX = 50
   const targets = (p1_assets.priority_targets || []).slice(0, P3_TIER1_MAX)
   const allUrls = [ ...(p1_assets.all_urls || []) ]
@@ -622,6 +718,8 @@ if (mode.startsWith('phase5')) {
     // 3.1 未授权/信息泄露测试
     p3_unauth = await agent(
       `你是360众测项目漏洞挖掘专家，对 ${resolvedProject} 执行未授权访问和信息泄露测试。
+
+🔒 VPN 强制要求: 所有 curl/HTTP 请求必须使用 --interface tun0 参数走 VPN 隧道（如: curl --interface tun0 -sk https://target）
 
 高优目标列表:
 ${targets.map(t => `  ${t.priority} | ${t.url} | tags: ${(t.tags||[]).join(',')}`).join('\n')}
@@ -653,7 +751,7 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
 
 3. **RCE 测试**（参数含 exec/cmd/command/shell/action）:
    - 表达式注入: \${7*7}, #{7*7}, \${{7*7}} 模板语法测试
-   - 命令注入: ;id, |id, `id`, \$(id) 参数值注入
+   - 命令注入: ;id, |id, 'id', \$(id) 参数值注入
    - 反序列化: 检查 Content-Type 为 application/x-java-serialized-object 的请求
    - 文件上传: 尝试上传 jsp/php/jspx 文件（仅上传普通文件证明存在即可）
 
@@ -698,6 +796,8 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
     // 3.2 越权/弱口令/其他测试
     p3_other = await agent(
       `对 ${resolvedProject} 执行越权/弱口令等测试。
+
+🔒 VPN 强制要求: 所有 curl/HTTP 请求必须使用 --interface tun0 参数走 VPN 隧道
 
 高优目标:
 ${targets.map(t => `  ${t.url}`).join('\n')}
@@ -754,12 +854,27 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
     // 3.3 本地部署实现 + 源码审计（对 Phase 2 识别的开源系统进行深度审计）
     let p3_codeaudit = null
     const p3_has_oss = p2_discoveries_text && p2_discoveries_text.includes('【快速开发框架识别结果】')
+
+    // 读取框架审计缓存，避免重复审计同一框架
+    let p3_framework_cache = { audited: {} }
+    try {
+      const fs = require('fs')
+      if (fs.existsSync(frameworksCachePath)) {
+        p3_framework_cache = JSON.parse(fs.readFileSync(frameworksCachePath, 'utf8'))
+        log(`  📚 框架审计缓存: ${Object.keys(p3_framework_cache.audited).length} 个框架已审计`)
+      }
+    } catch (e) { /* 忽略缓存读取错误 */ }
+
     if (p3_has_oss) {
+      const ossText = p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框架识别结果】'), p2_discoveries_text.length).substring(0, 4000)
+      const cacheNote = Object.keys(p3_framework_cache.audited).length > 0
+        ? `\n\n注意：下表中的框架已审计过，请跳过不要重复审计:\n${Object.entries(p3_framework_cache.audited).map(([k,v]) => `  - ${k} (${v.last_audited}, ${v.findings_count}条发现)`).join('\n')}`
+        : ''
       p3_codeaudit = await agent(
         `你是快速开发框架审计专家，对 ${resolvedProject} 的已识别框架执行本地部署实现和源码审计。
 
 ===== Phase 2 快速开发框架识别结果 =====
-${p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框架识别结果】'), p2_discoveries_text.length).substring(0, 4000)}
+${ossText}${cacheNote}
 ==========================================
 
 **【Part A: 本地部署实现】**
@@ -780,8 +895,19 @@ ${p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框�
 核心目标：找到可被利用的命令执行/文件读写/SQL注入。
 1. 文件上传 — 后缀校验绕过(大小写/双写/截断/MIME)、路径穿越
 2. 文件下载/导出 — 路径遍历(../)、XXE
-3. 命令执行 — Runtime.exec/shell_exec/system/ProcessBuilder 参数可控性
-4. SQL注入 — MyBatis ${} 拼接(orderBy)、@Select/@Query 原生 SQL
+3. **命令执行 — Runtime.exec/shell_exec/system/ProcessBuilder 参数可控性**
+   ⚠️ **必须追溯参数来源，按场景分类:**
+   **A. 业务设计（非漏洞）→ 标注 `is_business_feature: true` + `reasoning_code`:**
+      - ProcessBuilder 命令硬编码（如 ffmpeg/edge-tts/git），非用户输入
+      - Class.forName 有包名白名单（如 startsWith("org.jeecg.")）+ 接口校验
+      - 参数来自系统配置，非 HTTP 参数
+   **B. 确认为漏洞 → 正常标 severity:**
+      - @RequestParam/@RequestBody 直接拼接到命令
+      - Class.forName 无白名单/白名单可绕过
+      - 无 @RequiresPermissions/@PreAuthorize 保护
+   **每个发现必须附带:** `is_business_feature`, `reasoning_code`(代码片段), `user_controllable`
+
+4. **SQL注入 — MyBatis \${} 拼接(orderBy)、@Select/@Query 原生 SQL**
 5. 反序列化 — readObject/fromJson/Fastjson 输入可控、AutoType
 6. SSTI — SpEL/PEL/OGNL/TemplateExpress/eval/Jinja2
 7. XXE — DocumentBuilderFactory/SAXParser 配置检查
@@ -859,6 +985,24 @@ ${p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框�
             curl_command: f.poc || '',
             phase_discovered: 'phase3_codeaudit', status: 'unverified'
           })))
+          // 保存框架审计缓存
+          if (p3_codeaudit.audit_findings.length > 0) {
+            const frameworkSet = new Set()
+            p3_codeaudit.audit_findings.forEach(f => {
+              if (f.framework_name) frameworkSet.add(f.framework_name)
+            })
+            frameworkSet.forEach(fw => {
+              p3_framework_cache.audited[fw] = {
+                last_audited: new Date().toISOString().split('T')[0],
+                findings_count: p3_codeaudit.audit_findings.filter(f => f.framework_name === fw).length
+              }
+            })
+            try {
+              const fs = require('fs')
+              fs.writeFileSync(frameworksCachePath, JSON.stringify(p3_framework_cache, null, 2))
+              log(`  💾 框架审计缓存已保存 (${frameworkSet.size} 个框架)`)
+            } catch (e) { /* 忽略写入错误 */ }
+          }
         }
       }
     } else {
@@ -867,7 +1011,7 @@ ${p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框�
     // == 本地部署+源码审计结束 ==
 
     // Tier 2: 剩余资产全量测试
-    const tier2_urls = allUrls.slice(0, 50)
+    const tier2_urls = allUrls.slice(0, 10)
     if (tier2_urls.length > 0) {
       p3_quick = await agent(
         `对 ${resolvedProject} 的以下剩余资产做全量漏洞测试。
@@ -965,6 +1109,8 @@ if (progress.findings_count === 0) {
     p4_verify = await agent(
       `你是360众测漏洞验证专家，对 ${resolvedProject} 的发现做严格 curl 验证。
 
+🔒 VPN 强制要求: 所有 curl 命令必须加 --interface tun0（如: curl --interface tun0 -sk ...）
+
 ====== Phase 3 传入的发现列表 ======
 ${p4_findings_json.substring(0, 6000)}
 ==================================
@@ -983,16 +1129,30 @@ ${p4_findings_json.substring(0, 6000)}
 **Step 3: 判定**
 | 判定 | 条件 |
 |------|------|
-| confirmed | curl 返回 200 + 响应体含实际敏感数据 |
-| suspected | 200/401 但响应体是权限错误 |
+| confirmed | curl 返回 **200 + 响应体含实际敏感数据**（用户信息/订单/配置/凭证/业务记录），且**不是**权限错误 |
+| suspected | 返回 200/401 但响应体是权限错误，或需复杂利用条件 |
 | needs_manual_test | 无法构造可测试 URL |
-| false_positive | 404/超时/无敏感数据 |
+| false_positive | 404/403/超时/返回无敏感数据/仅状态码无业务数据 |
 
-⚠️ confirmed 严格标准：必须有 curl_command + http_status(数字) + evidence
+⚠️ **confirmed 的严格标准：**
+1. 必须有 curl_command + http_status(数字) + evidence
+2. **HTTP 200 + 权限错误（"没有接口访问权限"/"Unauthorized"/"需要登录"）= NOT confirmed**，这是认证在正常工作
+3. **HTTP 403 + 任何响应体 = NOT confirmed**，403 表示服务端拒绝了请求，不等于存在漏洞
+4. **\`{"success":false}\`、\`{"code":xxx,"msg":"xxx"}\` 等纯元数据响应 = NOT confirmed**，无实际业务数据泄露
+5. **JS/Actuator 中找到的端点 + curl 返回 403 或空数据 = NOT confirmed**，端点存在不等于可未授权利用
+6. **证据必须是实际敏感数据片段，不是状态码本身或 HTTP 头信息**
+7. 三项条件缺一不可，不满足的降级为 suspected 或 false_positive
 
-**🔥 JSON空响应检测规则（硬性遵守）:**
-- data 为空列表/空对象/null → false_positive
-- 响应只含 code/msg/timestamp 等元数据但无业务数据 → false_positive
+**🔥 JSON空响应检测规则（必须硬性遵守）：**
+- 对每个 JSON 响应体，提取 data/records/rows/list/content/items 等业务数据字段：
+- **[data] 字段为 []（空数组）或 {}（空对象）或 null → false_positive**，理由: data_empty
+- **响应只含 code/msg/timestamp/success 等元数据但无业务数据 → false_positive**
+- **data 字段长度 < 30 字符 → false_positive**
+- **不要因为 HTTP 200 + JSON 包含"成功"字样就认为是真数据，必须检查 data 字段是否包含有意义的业务记录**
+- **检测步骤（按顺序执行）:**
+  Step A: curl -sk -o /tmp/zc_verify.json -w "%{http_code}" "<URL>"
+  Step B: python3 -c "import json; d=json.load(open('/tmp/zc_verify.json')); print(json.dumps(d,ensure_ascii=False)[:300])"
+  Step C: 提取 d.get('data') 或 d.get('rows') 或 d.get('records') 判断是否含业务数据
 
 **360众测特殊要求：**
 - 每个发现的证据需附带时间截图或时间信息
@@ -1046,19 +1206,26 @@ ${p4_findings_json.substring(0, 6000)}
     )
 
     if (p4_verify && p4_verify.confirmed_findings) {
-      // 程序化证据检查
+      // 程序化证据检查（多层过滤）
       const EMPTY_DATA_PATTERNS = [
         '"data":[]', '"data":{}', '"data":null', '"data":""',
         '"data":\n[]', '"data":\n{}',
         '"list":[]', '"records":[]', '"rows":[]',
         '"total":0}', '"size":0}',
+        '"success":false', '"success": false',
+        '"code":1', '"code":-1', '"code":500',
+        '"msg":"执行出现问题','"msg":"参数错误','"msg":"没有权限',
+        '"msg":"Unauthorized','"msg":"登录已过期',
       ]
       const AUDIT_EVIDENCE_MIN = 40
       const audited = []
       for (const f of p4_verify.confirmed_findings) {
         let reason = null
         const ev = (f.evidence || '').replace(/\s+/g, '')
-        if (!f.evidence || f.evidence.trim().length < 3) {
+        // 403 状态码 → 非有效利用
+        if (f.http_status === 403) {
+          reason = 'http_403_forbidden'
+        } else if (!f.evidence || f.evidence.trim().length < 3) {
           reason = 'evidence_empty_or_too_short'
         } else if (EMPTY_DATA_PATTERNS.some(p => ev.includes(p))) {
           reason = 'evidence_contains_empty_data_container'
@@ -1107,15 +1274,16 @@ ${p4_findings_json.substring(0, 6000)}
         })
       }
     }
-
+  }
 
   // 目录扫描兜底
   if (progress.findings_count < 3) {
     p4_dirscan = await agent(
       `对 ${resolvedProject} 执行目录扫描兜底（因当前发现较少）。
+🔒 VPN: 所有 curl 探测必须加 --interface tun0
 
 目标URL:
-${(p1_assets.priority_targets || []).slice(0, 50).map(t => t.url).join('\n')}
+${(p1_assets.priority_targets || []).slice(0, 10).map(t => t.url).join('\n')}
 
 扫描常见路径:
 - 后台管理: /admin/, /manager/, /console/, /system/
@@ -1154,7 +1322,7 @@ ${(p1_assets.priority_targets || []).slice(0, 50).map(t => t.url).join('\n')}
         curl_command: '', phase_discovered: 'phase4_dirscan', status: 'confirmed'
       })))
     }
-    ;(p1_assets.priority_targets || []).slice(0, 50).forEach(t => {
+    ;(p1_assets.priority_targets || []).slice(0, 10).forEach(t => {
       dimTracker.record(t.url, 'dir_enum', 'done')
       if (extra.length > 0) dimTracker.record(t.url, 'dirsearch_scan', 'done')
     })
@@ -1162,7 +1330,7 @@ ${(p1_assets.priority_targets || []).slice(0, 50).map(t => t.url).join('\n')}
 
   markPhase(4, '✅')
   showProgress()
-
+}
 
 // ============================================================
 // Phase 5: 资产标记与状态存储
@@ -1210,7 +1378,7 @@ ${p5_dim_report}
 ==============================
 
 ===== 本批次发现的线索/漏洞 =====
-${p3_findings_data.length > 0 ? p5_findings_json.substring(0, 4000) : '(无发现)'}
+${p3_findings_data.length > 0 ? p5_findings_json.substring(0, 15000) : '(无发现)'}
 ================================
 
 === 维度说明 ===
@@ -1515,6 +1683,26 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
     p6_audit.reports.filter(r => r.verdict === 'F').forEach(r => {
       log(`    🗑️ ${r.file_name}: ${(r.issues || []).join('; ')}`)
     })
+    // F判定报告 → 移入 _invalid/ → 运行整合脚本
+    if (fCount > 0) {
+      const fNames = p6_audit.reports.filter(r => r.verdict === 'F').map(r => r.file_name)
+      await agent(
+        `执行以下命令处理F判定的报告（${fCount} 份）:
+
+1. 创建 _invalid/ 目录:
+   mkdir -p ${reportDir}_invalid/
+
+2. 将以下报告移入 _invalid/ 目录:
+${fNames.map(n => '   mv "' + reportDir + n + '" "' + reportDir + '_invalid/' + n + '"').join('\n')}
+
+3. 运行整合脚本:
+   python3 ${SKILL_SCRIPTS}/consolidate_findings.py ${reportDir}
+
+4. 确认文件已移动:
+   ls -la "${reportDir}_invalid/"`,
+        { label: '🗑️ 处理F判定报告', phase: '自审' }
+      )
+    }
   }
 
   markPhase(7, '✅')

@@ -454,167 +454,63 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
     const analyses = await pipeline(
       targets,
       async (target) => {
+        // === Step A: 脚本下载JS到本地 ===
+        const dl_result_raw = await agent(
+          `执行 python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/js_dumps" --ua "${REAL_UA}"
+    输出最后一行为JSON结果。提取 dump_dir、file_count、target_hash。`,
+          { label: `📥 下载JS: ${target}`, phase: '深度分析' }
+        )
+
+        // 解析下载结果
+        let dl_dump_dir = "${SRC_BASE}/${companyName}/js_dumps"
+        let dl_file_count = 0
+        try {
+          const dl_lines = (dl_result_raw || '').split('\\n').filter(l => l.trim().startsWith('{'))
+          if (dl_lines.length > 0) {
+            const dl = JSON.parse(dl_lines[dl_lines.length-1])
+            if (dl.dump_dir) dl_dump_dir = dl.dump_dir
+            if (dl.file_count) dl_file_count = dl.file_count
+          }
+        } catch(e) {}
+        if (dl_file_count > 0) log(`  📥 ${target}: 下载 ${dl_file_count} 个文件`)
+
+        // === Step B: 脚本枚举chunk补下载 ===
+        await agent(
+          `执行 python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "${dl_dump_dir}" "${target}" --ua "${REAL_UA}"
+    输出最后一行为JSON结果。提取 new_count。`,
+          { label: '🧩 枚举chunk', phase: '深度分析' }
+        )
+
+        // === Step C: Agent 阅读本地文件 + 创造性分析 ===
         return await agent(
-          `你是JS逆向和API发现专家，分析目标: ${target}
+          `你是JS逆向和API发现专家，分析已下载到本地的JS文件: ${target}
 
-      执行四层分析：
+    已下载文件目录: ${dl_dump_dir}
+    下载文件数: ${dl_file_count}
 
-      **核心操作模式变更: 所有JS源码必须先下载到本地，再对本地文件进行审计。**
+    **你的任务：用Read工具阅读本地JS文件，发挥创造性分析以下内容：**
 
-      ===== 第一步：下载JS源码到本地(必须执行) =====
-      1. 创建缓存子目录: mkdir -p ${SRC_BASE}/${companyName}/js_dumps/$(echo "${target}" | sed 's|https\?://||;s|[:/]|_|g')
-      2. 使用 curl -s -H 'User-Agent: Mozilla/5.0 ...' 获取页面HTML（务必使用浏览器UA绕过WAF），提取 <script src>
-      3. 对每个提取到的 JS URL，执行:
-         curl -s -o "${SRC_BASE}/${companyName}/js_dumps/<target_hash>/<js_filename>.js" "<js_full_url>" -H 'User-Agent: ${REAL_UA}'
-      4. 检查 sourceMappingURL=，如果有则下载 .js.map:
-         curl -s -o "${SRC_BASE}/${companyName}/js_dumps/<target_hash>/<js_filename>.js.map" "<map_url>" -H 'User-Agent: ${REAL_UA}'
-      5. 记录已下载的文件列表: ls -la "${SRC_BASE}/${companyName}/js_dumps/<target_hash>/"
+    1. **定位API入口** — 查找 baseURL/API_HOST/API_BASE/gatewayUrl/serverUrl 等配置
+    2. **路径模式提取** — 提取所有 "/xxx/yyy" 路径，关注非标准前缀 /gateway/ /dwr/ /sys/ /manage/ /crm/ /erp/
+    3. **敏感信息提取** — 查找 AccessKey、SecretKey、JWT(eyJ...)、数据库连接串(mongodb://...)、内网IP、硬编码密码
+    4. **鉴权方式识别** — Authorization: Bearer/Basic/X-TOKEN/Cookie/localStorage Token存放
+    5. **凭证反思（关键思维环节）**:
+       - 找到accessKey+secretKey → 哪个云服务？试枚举 OBS/S3/OSS Bucket
+       - 找到JWT → 解码看user/role，试调API看是否越权
+       - 找到API路径 → 功能命名推断数据敏感度
+       - 找到内部域名 → 判断环境(dev/test/prod)
 
-      ===== 第二步：对本地JS文件做审计分析 =====
-      在已下载到本地的 JS 文件上执行以下分析（基于已下载的本地文件，不重复curl）：
+    **注意：**
+    - 遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)
+    - 本地文件分析完成后不要删除缓存文件，留作证据
+    - 发挥第一性原理和创造性思维，不要局限于固定模式
+    - 注意看Source Map还原出的文件: 检查是否有 reconstructed/ 目录（包含原始TS/Vue/React源码）
 
-      1. **定位API入口**:
-         grep -oP '(baseURL|API_HOST|API_BASE|gatewayUrl|serverUrl)[[:space:]]*[:=][[:space:]]*["\'"'"'"'][^"\'"'"'"']+["\'"'"'"']' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
-         grep -rn 'axios\|fetch\|ajax\|XMLHttpRequest' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>/"
-
-      2. **路径模式提取**:
-         grep -ohP '(?<=")/[a-zA-Z][a-zA-Z0-9/_-]*(?=")' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js | sort | uniq -c | sort -rn
-         关注非标准前缀: /gateway/, /dwr/, /sys/, /manage/, /crm/, /erp/
-
-      3. **Source Map还原 + 原始源码审计（关键）**:
-         .js.map 文件中的 sourcesContent 字段包含编译前的原始 TypeScript/Vue/React 源码，
-         还原后可看到完整业务逻辑、真实API路径、未混淆的变量名。
-
-         执行以下还原流程（对每个已下载的 .js.map 文件）:
-
-         a) 用 python3 解析 .js.map，将 sourcesContent 写出到本地文件:
-            python3 << 'PYEOF'
-            import json, os, re
-            map_file = "${JS_DUMP_DIR}/<target_hash>/<js_filename>.js.map"
-            out_dir = "${JS_DUMP_DIR}/<target_hash>/reconstructed/"
-            os.makedirs(out_dir, exist_ok=True)
-
-            with open(map_file, 'r', encoding='utf-8') as f:
-                sm = json.load(f)
-
-            # 写出还原的原始源码
-            sources = sm.get('sources', [])
-            contents = sm.get('sourcesContent', [])
-            if contents:
-                for i, (src_path, src_content) in enumerate(zip(sources, contents)):
-                    if src_content is None:
-                        continue
-                    # 将 source 路径转为合法文件名
-                    safe_name = re.sub(r'[^a-zA-Z0-9/_-]', '_', src_path).lstrip('/')
-                    if not safe_name:
-                        safe_name = f'source_{i:04d}.js'
-                    file_out = os.path.join(out_dir, safe_name)
-                    os.makedirs(os.path.dirname(file_out), exist_ok=True)
-                    with open(file_out, 'w', encoding='utf-8') as sf:
-                        sf.write(src_content)
-                print(f"✅ 还原 {len([c for c in contents if c])}/{len(sources)} 个原始源码文件 → {out_dir}")
-            else:
-                print("ℹ️ sourcesContent 不存在，仅提取 sources 路径列表")
-
-            # 打印路径列表供后续参考
-            for s in sources:
-                print(f"  源文件: {s}")
-            PYEOF
-
-         b) 对还原出的原始源码执行审计（与 Step 2 相同维度）:
-            # 未混淆的 API 路径（原始源码中路径更清晰）
-            grep -ohP '(axios\.(get|post|put|delete)\(\s*["'"'"'][^"'"'"']+|fetch\(\s*["'"'"'][^"'"'"']+)' "${JS_DUMP_DIR}/<target_hash>/reconstructed/"/*.js 2>/dev/null
-            # TypeScript 接口定义（.ts 文件中的真实数据结构）
-            grep -rn 'interface\|type\|export class' "${JS_DUMP_DIR}/<target_hash>/reconstructed/" --include="*.ts" --include="*.tsx" 2>/dev/null
-            # 路由定义（Vue Router / React Router 未混淆路由表）
-            grep -rn 'path:\s*["'"'"']' "${JS_DUMP_DIR}/<target_hash>/reconstructed/"/*.js 2>/dev/null
-            # 环境变量 / 配置常量
-            grep -rn 'process\.env\|import\.meta\|VITE_\|REACT_APP_\|NEXT_PUBLIC_' "${JS_DUMP_DIR}/<target_hash>/reconstructed/"/*.js 2>/dev/null
-            # 鉴权中间件/拦截器
-            grep -rn 'interceptor\|response.use\|request.use\|Authorization\|withCredentials' "${JS_DUMP_DIR}/<target_hash>/reconstructed/"/*.js 2>/dev/null
-
-         c) Webpack chunk 分析: 从 .js.map 的 sources 字段提取模块路径结构，
-            推断项目是 Vue/React/Angular 项目，定位完整目录树和功能模块划分
-
-      4. **敏感信息提取**（在本地文件上执行）:
-         - AccessKey: grep -ohP '(AKID[\\w+=]+|AKIA[\\w+=]{16}|LTAI[\\w+=]+)' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
-         - OSS存储桶密钥: grep -ohP '(OBS_ACCESS_KEY|OSS_ACCESS_KEY|AWS_ACCESS_KEY|accessKeyId|accessKeySecret)[^;,\"'"'"']+' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
-         - SecretKey/Token/密码硬编码:
-           grep -ohP '(secret|token|password|pwd|privateKey)\\s*[:=]\s*["'"'"'][^"'"'"']+["'"'"']' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
-         - JWT (eyJ...格式): grep -ohP 'eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
-           找到JWT后用 python3 解码: echo '<jwt>' | cut -d. -f2 | base64 -d 2>/dev/null | python3 -m json.tool
-         - 数据库连接串: grep -ohP '(mongodb|mysql|postgresql|redis)://[^\s"'"'"']+' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
-         - 内网IP/域名: grep -ohP '(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
-         - 测试账号硬编码
-         - 编码检测: Base64、Hex(0x..)、Unicode(\\u00xx)
-
-      5. **鉴权方式识别**:
-         - Authorization: Bearer / Basic
-         - X-TOKEN / X-Auth-Token
-         - Cookie + sessionId
-         - localStorage Token存放
-
-      6. **凭证反思（关键思维环节 — 找到凭证后必须思考）**:
-         找到accessKey+secretKey → 这是哪个云服务的？试列举 OBS/S3/OSS Bucket
-         找到OSS连接信息 → endpoint + bucket → 直接测试 ListObjects
-         找到账号密码 → 这是哪个系统的？钉钉/LDAP/数据库/邮件
-         找到JWT → 解码看user/role，试调API看是否越权
-         找到内网IP → 从命名判断服务名(k8s)、环境后缀(dev/test/ontest)
-         找到API路径 → 功能命名可推断数据敏感度
-
-      注意: 遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)。**本地文件分析完成后不要删除缓存文件**，留作证据。
-
-      ===== 第三步：弥补 F12 差异 — 枚举 Webpack chunk + 登录态补下（关键） =====
-      为尽可能接近浏览器 F12 看到的完整 JS 集，执行以下补下载策略：
-
-      **3a. 从已下载的 JS 中提取所有模块/路径引用**
-      查找以下模式并提取路径，对每个提取到的路径尝试补下载：
-      - Webpack chunk: grep -ohP '(chunk-[a-f0-9]{8,64}|[a-f0-9]{20,64}\.chunk)' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
-      - 动态 import: grep -ohP 'import\s*\(\s*["'"'"']([./][^"'"'"']+\.js)["'"'"']\s*\)' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
-      - require.ensure: grep -ohP 'require\.ensure\(\s*["'"'"'][^"'"'"']+\.js["'"'"']' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
-      - __webpack_public_path__ + 路径拼接: grep -ohP '["'"'"'](js/|pages/|components/|views/|modules/)[a-zA-Z0-9/_-]+\.js["'"'"']' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
-      - Vite 分块: grep -ohP 'assets/[a-f0-9-]+\.js' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
-      - JSONP callback: grep -ohP 'jsonp[a-f0-9]{8,}' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
-      - 非标准路径前缀: grep -ohP '["'"'"'](static/|dist/|build/|output/|public/)[a-zA-Z0-9/_-]+\.js["'"'"']' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
-
-      **3b. 对提取到的所有路径尝试下载（按目录结构拼接）**
-      BASE_URL=$(echo "${target}" | sed 's|/\+$||')
-      # 遍历提取的路径，基础目录尝试 /js/, /assets/, /static/, /dist/, /chunk/, /_nuxt/ 等常见前缀
-      for path in $(grep -ohP '(chunk-[a-f0-9]{8,64}|[a-f0-9]{20,64}\.chunk|assets/[a-f0-9-]+\.js|static/js/[a-f0-9]+\.js|_nuxt/[a-f0-9]+\.js)' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u); do
-        curl -s -o "${JS_DUMP_DIR}/<target_hash>/lazy_$(basename $path)" "${BASE_URL}/${path}" -H 'User-Agent: ${REAL_UA}'
-        # 如果第一个路径404，尝试 /js/ 前缀
-        [ ! -s "${JS_DUMP_DIR}/<target_hash>/lazy_$(basename $path)" ] && curl -s -o "${JS_DUMP_DIR}/<target_hash>/lazy_$(basename $path)" "${BASE_URL}/js/${path}" -H 'User-Agent: ${REAL_UA}'
-      done
-
-      **3c. 登录态页面 JS 补下载（模拟已登录）**
-      如果目标有关联的登录页面并且能找到登录 API，尝试获取 Token/Cookie 后重新下载需要认证的页面 JS：
-      - 找到登录 API 后发送有效凭据获取 Cookie
-      - 用 Cookie 重新 curl 下载登录后才能访问的页面 JS
-      - 对比带 Cookie 与无 Cookie 下载的 JS 差异
-      - （**注意：仅做读取探测，不暴力破解**）
-
-      **3d. 检查 CommonJS/AMD 模块系统**
-      - grep -ohP 'define\(["'"'"'][^"'"'"']+["'"'"']' "${JS_DUMP_DIR}/<target_hash>"/*.js | sort -u（AMD/RequireJS 模块路径）
-      - 检查 System.import 动态加载（Angular）
-
-      **3e. 对补下载完成的 JS 做去重**
-      所有下载完成后重新执行 Step 2 的完整分析。
-
-          ${UA_INSTR}
-
-          **严格边界规则（必须遵守，不可违反）:**
-          1. 仅对目标URL使用 curl 获取页面HTML和JS文件。**不要读取任何本地非缓存文件**（不要用 Read 工具读取公司目录下的非JS缓存文件）。
-          2. 如果 curl 获取不到目标页面HTML（返回000/超时/连接拒绝），直接返回 "target_unreachable: {目标URL}"。
-             - **不要**从本地目录读取缓存HTML或任何其他缓存文件
-             - **不要**从本地读取 *_Information.html 或任何其他snapshot文件
-             - 就简单返回 target_unreachable，不做任何分析
-          3. **不要引用、提及、或包含任何来自其他厂商/公司的数据**。只分析当前目标自身。
-          4. **允许**对已下载到 ${SRC_BASE}/${companyName}/js_dumps/ 下的本地JS文件使用 grep/python3/bash 进行审计分析。`,
-          { label: `🔬 JS分析: ${target}`, phase: '深度分析' }
+    ${UA_INSTR}`,
+          { label: `🔬 分析: ${target}`, phase: '深度分析' }
         )
       },
       (result, target) => {
-        // aggregate findings
         return result
       }
     )
@@ -827,126 +723,43 @@ ${targets.slice(0, 20).map(t => `  ${t.url}`).join('\n')}
     // ============================================================
     log('  🔍 执行智能路径枚举（基于系统特征自动泛化fuzz）...')
     const P2_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
-    const p2_targets_for_fuzz = targets.slice(0, 15)
 
-    const p2_fuzz = await agent(
-      `你是目录枚举专家，对 ${companyName} 的目标执行基于系统特征的智能fuzz。
-
-===== 已识别的框架 =====
-${(p2_discoveries_text || '').includes('【快速开发框架识别结果】') ? p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框架识别结果】'), p2_discoveries_text.length).substring(0, 3000) : '（无框架识别结果）'}
-========================
-
-===== 已发现的API路径 =====
-${(p2_discoveries_text || '').length > 0 ? p2_discoveries_text.substring(0, 2000) : '（无JS分析数据）'}
-===========================
-
-目标列表（前 15 个）:
-${targets.slice(0, 15).map(t => `  ${t}`).join('
-')}
-
-**核心方法：基于系统特征自动泛化fuzz**
-
-对每个目标依次执行：
-
-**Step 1: 从JS和框架识别结果提取路径模式**
-- 从前面的 JS 分析中提取 baseURL / API_HOST / 自定义前缀（如 /jeecg-boot/、/prod-api/、/gateway/、/dwr/）
-- 从框架识别中提取框架特有目录结构
-
-**Step 2: 对找到的每个API前缀 + 通用路径段做笛卡尔积组合fuzz**
-- 先Read本地字典文件 ${P2_DICT_PATH}（用Read工具），提取 path_segments 和 framework_patterns
-- 对每个API前缀，组合以下路径段进行探测:
-  upload, download, export, import, user, admin, login, config, file,
-  backup, log, report, data, api, auth, token, session, manage, system,
-  order, payment, account, search, query, list, page, delete, remove,
-  test, dev, debug, swagger, doc, health, monitor, dashboard, console
-- 对已识别的框架，加上框架特有路径（从字典的 framework_patterns 中取）
-
-**Step 3: 从已下载的JS中智能推断路径结构**
-- 对已下载到 ${SRC_BASE}/${companyName}/js_dumps 下的JS文件，提取所有字符串字面量中的 "/xxx/yyy" 路径
-- 对这些路径按一级前缀去重，对去重后的每个前缀做泛化: /prefix/ + {上传,下载,用户列表,配置} → 映射为 /prefix/{upload, download, user, config}
-- 对每个组合用 curl -s -o /dev/null -w "%{http_code}" 测试状态码
-
-**Step 4: 输出发现的端点**
-只记录状态码 200/401/403 的端点，每次附带完整URL。
-
-**⚠️ 边界规则：** 只对目标列表中的URL进行路径探测。使用浏览器UA绕过WAF。
-
-      ${UA_INSTR}`,
-      { label: '🔍 智能路径枚举 (dir_enum)', schema: {
-        type: 'object',
-        properties: {
-          findings: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                target: { type: 'string' },
-                endpoint: { type: 'string' },
-                status_code: { type: 'number' },
-                source: { type: 'string', description: '来自: 框架特征/JS推断/字典组合/通用路径' },
-                description: { type: 'string' },
-                severity: { type: 'string', enum: ['高危', '中危', '低危', '信息'] },
-              },
-              required: ['target', 'endpoint', 'status_code', 'source'],
-            },
-          },
-          extracted_patterns: {
-            type: 'object',
-            description: '本次新发现的API前缀/路径模式，用于更新字典本',
-            properties: {
-              new_prefixes: { type: 'array', items: { type: 'string' }, description: '新发现的API前缀列表，如 ["/api/v3/", "/custom/"]' },
-              new_segments: { type: 'array', items: { type: 'string' }, description: '新发现的路径段，如 ["v3", "graphql"]' },
-              framework_hits: { type: 'array', items: { type: 'string' }, description: '实际命中的框架路径' },
-            },
-          },
-        },
-        required: ['findings'],
-      }, phase: '深度分析' }
-    )
-
-    if (p2_fuzz && p2_fuzz.findings && p2_fuzz.findings.length > 0) {
-      log(`  智能fuzz发现 ${p2_fuzz.findings.length} 个端点:`)
-      p2_fuzz.findings.forEach(f => {
-        const icon = f.status_code === 200 ? '✅' : f.status_code === 401 ? '🔒' : f.status_code === 403 ? '🚫' : '❓'
-        log(`    ${icon} [${f.status_code}] ${f.endpoint} (${f.source})`)
-      })
-      // 记录维度
-      targets.forEach(t => dimTracker.record(t, 'dir_enum', 'done'))
-    } else {
-      log('  智能fuzz: 未发现新端点')
+    // 对每个目标执行 smart_fuzz.py
+    const fuzz_targets = targets.slice(0, 15)
+    for (const ft of fuzz_targets) {
+      const fuzz_out = "/tmp/smart_fuzz_" + companyName.replace(/[^a-zA-Z0-9]/g,'_') + "_" + ft.replace(/[^a-zA-Z0-9]/g,'_') + ".json"
+      const fuzz_cmd = `python3 ${SKILL_SCRIPTS}/smart_fuzz.py "${ft}" --dict ${P2_DICT_PATH} --output ${fuzz_out} --ua "${REAL_UA}"`
+      
+      const fuzz_raw = await agent(
+        `执行fuzz:
+${fuzz_cmd}
+echo "---RESULT_JSON---"
+cat ${fuzz_out}`,
+        { label: `🤖 fuzz: ${ft}`, phase: '深度分析' }
+      )
+      
+      // 解析并记录发现
+      try {
+        const jsonPart = (fuzz_raw || '').split('---RESULT_JSON---').pop()
+        const fuzzData = JSON.parse(jsonPart.trim())
+        const findings = fuzzData.findings || []
+        if (findings.length > 0) {
+          log(`  ${ft}: 发现 ${findings.length} 个端点`)
+          findings.forEach(f => log(`    [${f.status_code}] ${f.path}`))
+        }
+        // 更新字典本
+        if (fuzzData.extracted_patterns || (fuzzData.new_endpoints && fuzzData.new_endpoints.length > 0)) {
+          await agent(
+            `python3 ${SKILL_SCRIPTS}/update_dict.py ${P2_DICT_PATH} --add ${fuzz_out}`,
+            { label: '📚 更新字典', phase: '深度分析' }
+          )
+        }
+      } catch(e) {
+        log(`  ⚠️ fuzz结果解析失败: ${e.message}`)
+      }
     }
-
-    // ============================================================
-    // 2.6 更新API模式字典本（经验积累）
-    // ============================================================
-    log('  📚 更新API模式字典本...')
-    const p2_dict_update = await agent(
-      `你是API模式管理专家，负责将本次发现的路径模式更新到共享字典本中。
-
-字典文件: ${P2_DICT_PATH}
-
-===== 本次新发现的API模式 =====
-${JSON.stringify(p2_fuzz?.extracted_patterns || {}, null, 2)}
-
-===== JS分析发现的API路径摘要 =====
-${(p2_discoveries_text || '').substring(0, 2000)}
-================================
-
-你的任务：
-1. 用Read工具读取 ${P2_DICT_PATH}
-2. 将本次发现的 new_prefixes 合并到 api_prefixes 中（增加count）
-3. 将 new_segments 合并到 path_segments 中（去重）
-4. 将 framework_hits 完善到 framework_patterns 中
-5. 将任何新的200/401/403端点追加到 common_endpoints 中
-6. 更新 updated 日期为今日（2026-07-09）
-7. 用Write工具写入 ${P2_DICT_PATH}
-
-注意：只做模式记录，不删除已有条目。经验需要积累。`,
-      { label: '📚 更新API模式字典', phase: '深度分析' }
-    )
-
-  }
-
+    // 记录维度
+    targets.forEach(t => dimTracker.record(t, 'dir_enum', 'done'))
   markPhase(2, '✅')
   showProgress()
 }
@@ -1097,6 +910,18 @@ ${p3_dirsearch.new_endpoints.map(e => `  - ${e}`).join('
       ;(targets || []).forEach(t => dimTracker.record(t.url, 'dirsearch_scan', 'done'))
     } else {
       log('  目录扫描: 未发现新端点')
+    }
+
+    // dirsearch发现的端点 → 注入到unauth_test上下文
+    let p3_dirsearch_context = ''
+    if (typeof p3_dirsearch !== 'undefined' && p3_dirsearch?.findings && p3_dirsearch.findings.length > 0) {
+      const dseps = p3_dirsearch.findings
+        .filter(f => f.status_code === 200 || f.status_code === 401 || f.status_code === 403)
+        .map(f => `  ${f.endpoint} [${f.status_code}] (${f.source || 'dirsearch'})`)
+      if (dseps.length > 0) {
+        p3_dirsearch_context = `\n**【dirsearch发现的端点 — 需对这些端点做未授权/越权测试】**\n${dseps.join('\n')}\n`
+        log(`  🔄 dirsearch ${dseps.length} 个端点回注到未授权测试`)
+      }
     }
 
     // 3.1 未授权/信息泄露测试（遵循: 反思为主→迁跃为辅→分析为底→扩展为路）
@@ -1575,6 +1400,21 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
         if (f.curl_command) log(`     curl: ${f.curl_command.substring(0, 120)}`)
       })
       progress.findings_count = p4_verify.confirmed_findings.length
+
+      // P2: 验证通过的端点 → 更新字典本
+      if (p4_verify.confirmed_findings.length > 0) {
+        const confirmed_endpoints = p4_verify.confirmed_findings
+          .filter(f => f.http_status === 200 && f.confidence === 'confirmed')
+          .map(f => f.endpoint)
+        if (confirmed_endpoints.length > 0) {
+          const endpoints_json = JSON.stringify(confirmed_endpoints)
+          await agent(
+            `python3 ${SKILL_SCRIPTS}/update_dict.py ${SKILL_SCRIPTS}/../references/api_patterns.json --endpoints '${endpoints_json}'`,
+            { label: '📚 验证通过端点到字典', phase: '验证取证' }
+          )
+          log(`  📚 已将 ${confirmed_endpoints.length} 个已验证端点加入字典本`)
+        }
+      }
       // 更新发现状态（含 http_status + curl_command 要求检查）
       if (p3_findings_data.length > 0) {
         const confirmedEndpoints = new Set(
@@ -1673,108 +1513,47 @@ if (mode.startsWith('phase5') || typeof p1_assets === 'undefined' || !p1_assets 
     // 🔧 程序化合并写入 — 确保 asset_test_status.json + asset_findings.json 为追加/合并模式
     // 不依赖AI agent自觉性，硬性执行读-合并-写
     // ============================================================
-    log('  🔧 程序化合并 asset 状态文件...')
-    const p5_merge = await agent(
-      `你是文件合并专家，严格按以下步骤操作 ${companyName} 的资产状态文件。
+    log('  🔧 程序化合并 asset 文件 (merge_assets.py)...')
 
-**任务A: 合并 asset_test_status.json（追加模式，不可覆盖）**
-
-文件: ${trackerPath}
-
-操作步骤:
-1. 用Read工具读取 ${trackerPath}
-   - 如果文件不存在（Read报错），初始化为 {"assets": {}}
-   - 如果文件存在，解析JSON保留所有已有记录
-2. 将本次运行的新资产记录**追加/更新**到 assets 对象中
-   - 新记录（url不在已有数据中）→ 追加
-   - 已有记录（url已存在）→ **合并 phas_tested 数组**（去重），更新 last_tested
-   - **绝对不能删除**旧资产中不在本次清单的记录
-3. 用Write工具写回 ${trackerPath}
-
-本次需要追加/更新的资产数据（来自 dimTracker）:
-${JSON.stringify(dimTracker.toJSON(), null, 2)}
-
-对应的完整资产信息:
-${p5_dim_rows.map(a =>
-  `  ${a.url}: title="${a.title}", tags=[${(a.tags||[]).join(',')}], completed=[${a.completed.join(',')}], missing=[${a.missing.join(',')}]`
-).join('\n')}
-
-**任务B: 合并 asset_findings.json（追加模式，按 endpoint 去重）**
-
-文件: ${findingsPath}
-
-操作步骤:
-1. 用Read工具读取 ${findingsPath}
-   - 如果不存在，初始化为 {"findings": []}
-2. 将本次发现的线索**追加**到 findings 数组中
-   - 按 endpoint 去重：如果 endpoint 已存在，更新其 status/phase_discovered
-   - 如果 endpoint 不存在，追加新条目
-3. 用Write工具写回 ${findingsPath}
-
-本次需要追加的发现数据（${p3_findings_data.length} 条）:
-${JSON.stringify(p3_findings_data, null, 2).substring(0, 10000)}
-
-**硬性规则（必须遵守）：**
-- ⚠️ **不能覆盖已有文件**，只能读取→合并→写入
-- ⚠️ **不能删除**旧资产记录，只能追加和更新
-- ⚠️ findings 按 endpoint 去重，不是按 title
-- ⚠️ 保持JSON格式正确，不能截断
-- ✅ 写入后执行一次 ls -la 确认文件大小正常`,
-      { label: '🔧 程序化合并 asset 文件', phase: '资产标记' }
+    // 合并 asset_test_status.json
+    const dim_json = JSON.stringify(dimTracker.toJSON())
+    const p5_dim_info = JSON.stringify(p5_dim_rows.map(a => ({url: a.url, title: a.title, ip: a.ip, port: a.port})))
+    await agent(
+      `python3 ${SKILL_SCRIPTS}/merge_assets.py status "${trackerPath}" \
+  --dim-data '${dim_json}' \
+  --asset-info '${p5_dim_info}'`,
+      { label: '📊 合并状态文件', phase: '资产标记' }
     )
 
+    // 合并 asset_findings.json
+    if (p3_findings_data.length > 0) {
+      const findings_json_str = JSON.stringify(p3_findings_data)
+      await agent(
+        `python3 ${SKILL_SCRIPTS}/merge_assets.py findings "${findingsPath}" \
+  --new-findings '${findings_json_str}'`,
+        { label: '📝 合并发现文件', phase: '资产标记' }
+      )
+      log(`  📝 线索已存档至 asset_findings.json（${p3_findings_data.length} 条）`)
+    }
+
+    // 仍保留AI标记环节（仅做状态判定，文件由上面脚本处理）
+    const p5_dim_report_short = p5_dim_rows.map(a =>
+      `【${a.url}】completed=[${a.completed.join(',')}] missing=[${a.missing.join(',')}] auto=${a.auto}`
+    ).join('\n')
+
     const p5_mark = await agent(
-      `你是SRC资产状态管理专家，对 ${companyName || ''} 的资产做测试状态标记并持久化存储。
+      `你是SRC资产状态管理专家，对 ${companyName || ''} 的资产做测试状态判定。
 
-===== 结构化测试维度数据 =====
-${p5_dim_report}
-==============================
+结构化维度数据:
+${p5_dim_report_short}
 
-===== 本批次发现的线索/漏洞 =====
-${p3_findings_data.length > 0 ? p5_findings_json.substring(0, 15000) : '(无发现)'}
-================================
+对每个资产判断「已完全测试完毕 / 还未测试完毕 / 无法进行测试」并给出 reason。
 
-=== 维度说明 ===
-| 维度 | 说明 |
-|------|------|
-| http_probe | HTTP探活，确认是否Web服务 |
-| unauth_test | 无Cookie/Token的未授权端点探测 |
-| dir_enum | 手动目录枚举（含自定义前缀，如 /gateway/ /dwr/ /sys/） |
-| dirsearch_scan | 全量dirsearch目录扫描 |
-| weak_pass | 弱口令/默认凭证测试 |
-| js_analysis | JS逆向+API端点提取 |
-
-=== 你的任务分为两部分 ===
-
-**Part A: 资产状态标记（必做）**
-对每个资产判断「已完全测试完毕 / 还未测试完毕 / 无法进行测试」。
-
-自动判定仅供参考，请结合你的专家判断确认或修正：
-
-- **「已完全测试完毕」** — 所有适用维度已完成 + 无发现或已出报告
-- **「还未测试完毕」** — 存在缺漏维度（尤其是你判断仍可深入的维度）或发现了可疑点但未跟进
-  - 即使「已完成」列表填满了，如果你认为某个维度测试不充分（如 dir_enum 只扫了通用路径，没试自定义前缀），可降级
-- **「无法进行测试」** — 端口关闭/非HTTP/不在范围/已知第三方CDN
-
-每次标记必须给出 reason 字段（不要用 notes 字段，必须用 reason ），例如：
-- "已完成全部7维度测试，无新发现"
-- "缺漏 dir_enum, dirsearch_scan 维度，仅做了HTTP探活和未授权探测"
-- "端口关闭，无法建立TCP连接"
-- "仅做了 http_probe 探活，未授权检测和目录枚举均未执行"
-
-**Part B: 线索/漏洞存档（如有发现）**
-1. 读取已有线索文件 ${findingsPath}（Read工具），如不存在则新建
-2. 合并本次发现的线索到已有记录中（按 endpoint 去重）
-3. 用Write工具写入 ${findingsPath}
-
-=== 操作要求 ===
-1. 先用Read读取 ${trackerPath}，保留不在本次清单中的旧资产记录
-2. 用Write写入 ${trackerPath}（合并写入）
-3. 用Read/Write处理 ${findingsPath}（合并写入）
-4. status字段必填，reason字段必填（不要用notes代替），phases_tested必填
-5. last_tested 格式: 2026-06-19
-6. ⚠️ 如果之前文件中有 notes 字段，请改为 reason 字段输出。不要保留 notes 字段。`,
-      { label: '🏷️ 资产状态+线索存档', schema: {
+自动判定参考:
+- 已完全测试完毕 = 所有适用维度已完成 + 无发现或已出报告
+- 还未测试完毕 = 存在缺漏维度或可疑点未跟进
+- 无法进行测试 = 端口关闭/非HTTP/不在范围`,
+      { label: '🏷️ AI状态判定', schema: {
         type: 'object',
         properties: {
           assets: {
@@ -1783,18 +1562,9 @@ ${p3_findings_data.length > 0 ? p5_findings_json.substring(0, 15000) : '(无发�
               type: 'object',
               properties: {
                 status: { type: 'string', enum: ['已完全测试完毕', '还未测试完毕', '无法进行测试'] },
-                phases_tested: {
-                  type: 'array',
-                  items: {
-                    type: 'string',
-                    enum: ['http_probe', 'unauth_test', 'dir_enum', 'dirsearch_scan', 'weak_pass', 'js_analysis'],
-                  },
-                  description: '该资产已完成的测试维度，agent可基于泛化判断增减'
-                },
-                last_tested: { type: 'string' },
-                reason: { type: 'string', description: '标记理由，必须给出具体依据。如：缺漏哪些维度/端口关闭/全部完成。这是必填字段，不能为空。' },
+                reason: { type: 'string' },
               },
-              required: ['status', 'phases_tested', 'last_tested', 'reason'],
+              required: ['status', 'reason'],
             },
           },
         },
@@ -1803,24 +1573,10 @@ ${p3_findings_data.length > 0 ? p5_findings_json.substring(0, 15000) : '(无发�
     )
 
     if (p5_mark && p5_mark.assets) {
-      // 兼容处理：如果agent仍写了notes而非reason，自动转换
-      Object.values(p5_mark.assets).forEach(a => {
-        if (!a.reason && a.notes) { a.reason = a.notes; delete a.notes }
-      })
-      const counts = { '已完全测试完毕': 0, '还未测试完毕': 0, '无法进行测试': 0, '无reason': 0 }
-      Object.values(p5_mark.assets).forEach(a => {
-        if (counts[a.status] !== undefined) counts[a.status]++
-        if (!a.reason) counts['无reason']++
-      })
-      log(`  📊 标记完成: 已完成 ${counts['已完全测试完毕']} | 未完成 ${counts['还未测试完毕']} | 无法测试 ${counts['无法进行测试']}`)
-      if (counts['无reason'] > 0) log(`  ⚠️ 有 ${counts['无reason']} 个资产缺少 reason 字段`)
-      // 线索已由agent写入文件
-      if (p3_findings_data.length > 0) {
-        log(`  📝 线索已存档至 asset_findings.json（${p3_findings_data.length} 条）`)
-      }
+      const counts = { '已完全测试完毕': 0, '还未测试完毕': 0, '无法进行测试': 0 }
+      Object.values(p5_mark.assets).forEach(a => { if (counts[a.status] !== undefined) counts[a.status]++ })
+      log(`  📊 AI判定: 已完成 ${counts['已完全测试完毕']} | 未完成 ${counts['还未测试完毕']} | 无法测试 ${counts['无法进行测试']}`)
     }
-  }
-
   markPhase(5, '✅')
   showProgress()
 }

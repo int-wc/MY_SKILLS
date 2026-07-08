@@ -18,9 +18,8 @@ import os
 import json
 from datetime import date
 
-def merge_status(tracker_path, dim_data=None, asset_info=None):
-    """合并 asset_test_status.json"""
-    # 初始化
+def merge_status(tracker_path, dim_data=None, asset_info=None, ttl_days=30):
+    """合并 asset_test_status.json（含TTL管理）"""
     if os.path.exists(tracker_path):
         try:
             with open(tracker_path, 'r') as f:
@@ -34,6 +33,25 @@ def merge_status(tracker_path, dim_data=None, asset_info=None):
     today = str(date.today())
     changed = False
 
+    # E: TTL过期检查 + 自动降级
+    expired = 0
+    for url, info in list(assets.items()):
+        if info.get('status') in ('已完全测试完毕', '无法进行测试'):
+            ttl = info.get('ttl_days', ttl_days)
+            last = info.get('last_tested', '')
+            if last:
+                try:
+                    from datetime import datetime, timedelta
+                    last_dt = datetime.strptime(last, '%Y-%m-%d')
+                    if datetime.now() - last_dt > timedelta(days=ttl):
+                        info['status'] = '还未测试完毕'
+                        info['reason'] = f'TTL过期({ttl}天)，自动降级重新测试'
+                        info.pop('ttl_days', None)
+                        expired += 1
+                        changed = True
+                except:
+                    pass
+
     # 合并 dimTracker 数据
     if dim_data:
         for url, info in dim_data.items():
@@ -43,24 +61,25 @@ def merge_status(tracker_path, dim_data=None, asset_info=None):
             completed_dims = [d for d, v in dims.items() if v.get('status') == 'done']
 
             if url in assets:
-                # 更新已有资产：合并 phases_tested
                 existing_phases = set(assets[url].get('phases_tested', []))
                 new_phases = [p for p in completed_dims if p not in existing_phases]
                 if new_phases:
                     assets[url]['phases_tested'] = list(existing_phases.union(completed_dims))
                     assets[url]['last_tested'] = today
+                    # 重置TTL（有新的测试活动）
+                    assets[url]['ttl_days'] = ttl_days
                     changed = True
             else:
-                # 追加新资产
                 assets[url] = {
                     "status": "还未测试完毕",
                     "phases_tested": completed_dims,
                     "last_tested": today,
-                    "reason": f"已完成维度: {', '.join(completed_dims) if completed_dims else '暂无'}"
+                    "reason": f"已完成维度: {', '.join(completed_dims) if completed_dims else '暂无'}",
+                    "ttl_days": ttl_days,
                 }
                 changed = True
 
-    # 补充资产信息（title, ip, port等）
+    # 补充资产信息
     if asset_info:
         for item in asset_info:
             url = item.get('url')
@@ -72,7 +91,10 @@ def merge_status(tracker_path, dim_data=None, asset_info=None):
     with open(tracker_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-    return {"assets_count": len(assets), "changed": changed}
+    result = {"assets_count": len(assets), "changed": changed}
+    if expired:
+        result["expired_ttl"] = expired
+    return result
 
 def merge_findings(findings_path, new_findings=None):
     """合并 asset_findings.json"""

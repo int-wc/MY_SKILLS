@@ -169,6 +169,27 @@ if (!mode.startsWith('phase5')) {
   )
 }
 
+// E: TTL 过期检查
+if (p0_tracker?.exists && p0_tracker?.assets) {
+  const _today = new Date()
+  for (const [url, info] of Object.entries(p0_tracker.assets)) {
+    const ttl = info.ttl_days || 30
+    const lastTested = info.last_tested
+    if (lastTested && (info.status === '已完全测试完毕' || info.status === '无法进行测试')) {
+      try {
+        const last = new Date(lastTested)
+        const daysSinceTest = (_today - last) / (1000 * 60 * 60 * 24)
+        if (daysSinceTest > ttl) {
+          info.status = '还未测试完毕'
+          info.reason = `TTL过期(${ttl}天，距上次测试${Math.round(daysSinceTest)}天)，自动降级`
+          delete info.ttl_days
+          log(`  ⏰ TTL过期: ${url} (${Math.round(daysSinceTest)}天前，已降级)`)
+        }
+      } catch(e) {}
+    }
+  }
+}
+
 // 构建已测试资产URL集合
 const p0_testedUrls = new Set()
 if (p0_tracker?.exists && p0_tracker?.assets) {
@@ -736,6 +757,18 @@ ${targets.slice(0, 20).map(t => `  ${t}`).join('\n')}
     }
     // == 开源系统识别结束 ==
 
+    // Fix B: 结构化框架指纹
+    if (p2_oss && p2_oss.findings && p2_oss.findings.length > 0) {
+      const fwInfo = p2_oss.findings.map(f => ({
+        target: f.target,
+        framework_name: f.framework_name || '未知',
+        confidence: f.confidence || '低',
+        default_credentials: f.default_credentials || [],
+        attack_surface: f.attack_surface || [],
+      }))
+      globalThis.__zc_fw_info = JSON.stringify(fwInfo)
+    }
+
     // ============================================================
     // 2.5 dir_enum — 基于系统特征的智能路径枚举（智能fuzz）
     // ============================================================
@@ -1031,6 +1064,13 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分
    - 观察响应差异
 
 2. 弱口令枚举:
+   - **Phase 2 识别的框架默认口令（结构化提取，优先级最高）**:
+     ${typeof globalThis.__zc_fw_info !== 'undefined' ? (() => {
+       const fw = JSON.parse(globalThis.__zc_fw_info)
+       return fw.filter(f => f.default_credentials.length > 0).map(f =>
+         `   · ${f.framework_name} [${f.confidence}]: ${f.default_credentials.join(', ')}`
+       ).join('\n') || '   （无）'
+     })() : '   （无框架识别）'}
    - **通用字典暴力枚举**（按优先级排列）:
      · 组合1: admin/admin, admin/123456, admin/Admin@123
      · 组合2: admin/Admin@123456, admin/password, admin/12345678

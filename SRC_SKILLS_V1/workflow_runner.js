@@ -1023,7 +1023,7 @@ ${allUrls.map(u => `  ${u}`).join('\n')}
 第2阶段JS逆向发现的隐藏端点/API路径:
 ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
 
-**【Phase 2 提取的结构化凭证 — 可直接复用到测试中】**
+**【Phase 2 提取的结构化凭证（优先级高 — 结构化数据优先于下方文本描述）】**
 ${typeof globalThis.__p2_creds_json !== 'undefined' ? '以下凭证可直接用于越权/认证测试:\n' + JSON.stringify(JSON.parse(globalThis.__p2_creds_json).slice(0, 15), null, 2).substring(0, 2000) : '（无结构化凭证提取）'}
 
 

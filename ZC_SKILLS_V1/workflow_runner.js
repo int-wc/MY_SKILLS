@@ -922,7 +922,7 @@ dirsearch -u "<target_url>" \
     }
 
     // dirsearch结果回注到unauth_test
-    let zc_dirsearch_ctx \n\n\t**Phase 2提取的结构化凭证（可直接使用）**:\n\t${{typeof globalThis.__zc_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__zc_creds_json).slice(0, 10), null, 2) : '（无）'}}\n\n\t**JS缓存目录（可回查本地JS及还原源码）**:\n\t${{typeof globalThis.__zc_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__zc_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\\n') : '（无）'}}\n= ''
+    let zc_dirsearch_ctx \n\n\t**Phase 2提取的结构化凭证（优先级高，优先于下方文本）**:\n\t${{typeof globalThis.__zc_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__zc_creds_json).slice(0, 10), null, 2) : '（无）'}}\n\n\t**JS缓存目录（可回查本地JS及还原源码）**:\n\t${{typeof globalThis.__zc_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__zc_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\\n') : '（无）'}}\n= ''
     if (typeof p3_dirsearch !== 'undefined' && p3_dirsearch?.findings && p3_dirsearch.findings.length > 0) {
       const deps = p3_dirsearch.findings.filter(f => [200,401,403].includes(f.status_code)).map(f => `  ${f.endpoint} [${f.status_code}]`)
       if (deps.length > 0) {
@@ -944,7 +944,7 @@ ${allUrls.map(u => `  ${u}`).join('\n')}
 
 第2阶段JS逆向发现的隐藏端点:
 ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}\n\n\t${zc_dirsearch_ctx}
-\n	**Phase 2提取的结构化凭证（可直接使用）**:
+\n	**Phase 2提取的结构化凭证（优先级高，优先于下方文本）**:
 	${typeof globalThis.__zc_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__zc_creds_json).slice(0, 10), null, 2) : '（无）'}
 
 	**JS缓存目录（可回查本地JS及还原源码）**:

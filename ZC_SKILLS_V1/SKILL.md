@@ -35,6 +35,13 @@ ZC_SKILLS_V1/
 ├── SKILL.md                    ← 本文件：核心流程指令
 ├── workflow_runner.js          ← 全自动8阶段workflow编排
 ├── scripts/                    ← 自动化脚本
+│   ├── download_js.py          # JS下载到本地
+│   ├── enumerate_chunks.py     # Webpack chunk枚举补下载
+│   ├── extract_creds.py        # 从JS提取鉴权凭证
+│   ├── find_js_dumps.py        # 查找JS缓存/还原目录
+│   ├── smart_fuzz.py           # 基于系统特征的智能路径枚举
+│   ├── merge_assets.py         # 程序化合并asset文件
+│   ├── update_dict.py          # 更新API模式字典(LRU裁剪)
 │   ├── generate_html.py        # MD→HTML 批量转换
 │   ├── audit_reports.py        # 报告质量审计
 │   ├── consolidate_findings.py # 报告整合/无效归档

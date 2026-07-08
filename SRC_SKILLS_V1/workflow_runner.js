@@ -481,11 +481,11 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
 # 1. 下载JS
 python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/js_dumps" --ua "${REAL_UA}"
 # 2. 枚举chunk补下
-python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "${target_dump}" "${target}" --ua "${REAL_UA}"
+python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "<从下载结果提取的dump_dir>" "${target}" --ua "${REAL_UA}"
 # 3. 提取凭证
 python3 ${SKILL_SCRIPTS}/extract_creds.py "${target_dump}" 2>&1
 
-注意: target_dump 通过下载结果的 dump_dir 获取。
+注意: <DUMP_DIR> 通过下载结果的 dump_dir 获取。
 先执行1，从JSON输出提取dump_dir，再执行2和3。
 
 输出格式要求：
@@ -917,6 +917,16 @@ cat ${fuzz_out}`,
       log(`  🔄 ${globalThis.__p2_fuzz_findings.length} 个fuzz发现已注入Phase3上下文`)
     }
     targets.forEach(t => dimTracker.record(t, 'dir_enum', 'done'))
+  // P0-2: 持久化 accumulated 状态到临时文件（避免agent崩溃丢失）
+  try {
+    const stateToSave = {
+      creds: globalThis.__p2_creds_json || '[]',
+      js_dirs: globalThis.__p2_js_dirs_json || '[]',
+      fw_info: globalThis.__p2_fw_info || '[]',
+    }
+    require('fs').writeFileSync('/tmp/workflow_phase2_state.json', JSON.stringify(stateToSave))
+  } catch(e) {}
+
   markPhase(2, '✅')
   showProgress()
 }

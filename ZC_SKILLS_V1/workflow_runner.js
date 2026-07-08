@@ -508,7 +508,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
 # 1. 下载JS(VPN)
 python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${PROJECT_DIR}/js_dumps" --ua "${REAL_UA}" --interface tun0
 # 2. 枚举chunk补下
-python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "${target_dump}" "${target}" --ua "${REAL_UA}" --interface tun0
+python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "<从下载结果提取的dump_dir>" "${target}" --ua "${REAL_UA}" --interface tun0
 # 3. 提取凭证
 python3 ${SKILL_SCRIPTS}/extract_creds.py "${target_dump}" 2>&1
 
@@ -838,6 +838,16 @@ cat ${fuzz_out_zc}`,
       p2_discoveries_text += `\n\n【智能fuzz发现端点】\n${fuzzSum}\n`
     }
     targets.forEach(t => dimTracker.record(t, 'dir_enum', 'done'))
+  // P0-2: 持久化 accumulated 状态到临时文件（避免agent崩溃丢失）
+  try {
+    const stateToSave = {
+      creds: globalThis.__p2_creds_json || '[]',
+      js_dirs: globalThis.__p2_js_dirs_json || '[]',
+      fw_info: globalThis.__p2_fw_info || '[]',
+    }
+    require('fs').writeFileSync('/tmp/workflow_phase2_state.json', JSON.stringify(stateToSave))
+  } catch(e) {}
+
   markPhase(2, '✅')
   showProgress()
 

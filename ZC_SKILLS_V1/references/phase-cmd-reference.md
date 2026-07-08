@@ -7,37 +7,11 @@
 
 ## 阶段1: 资产发现命令
 
-### 全端口扫描 (masscan/nmap)
-
-```bash
-# Masscan 全端口快速扫描（需root，使用sudo_helper）
-# rate=100  → 家庭宽带/代理
-# rate=1000 → 云VPS/内网（推荐）
-# rate=10000 → 高配VPS同网段
-sudo_helper.sh "masscan -iL targets_ip.txt -p0-65535 --rate=1000 -oG masscan_results.gnmap"
-
-# Nmap 服务识别
-sudo_helper.sh "nmap -iL targets_ip.txt -p- -sV -sC -T4 -oA fullport_scan"
-
-# sudo_helper.sh 路径: /home/my/.local/bin/sudo_helper.sh
-```
-
 ### URL聚合去重
 
 ```bash
 # 建立 IP→域名 映射表
 awk -F',' 'NR>1 && $3!="" {print $1","$3}' hunter.csv | sort -u > ip_domain_map.csv
-
-# 拼接全端口URL
-while IFS=',' read -r ip domain; do
-  ports=$(grep "$ip" masscan_results.gnmap | grep -oP '\d+/open' | cut -d'/' -f1)
-  for port in $ports; do
-    case $port in
-      443|8443|9443) echo "https://$domain:$port" ;;
-      *)             echo "http://$domain:$port" ;;
-    esac
-  done
-done < ip_domain_map.csv > full_urls.txt
 
 # 批量探活
 cat full_urls.txt | httpx -status-code -title -tech-detect -o alive_results.txt

@@ -73,13 +73,17 @@ ZC_SKILLS_V1/
 ## 启动检查
 
 ```bash
+# 0. 首次使用：配置 sudoers（一次即可，此后 VPN 自动免密启动）
+echo "my ALL=(ALL) NOPASSWD: $(pwd)/OPENVPN/vpn-split.sh" | sudo tee /etc/sudoers.d/vpn-split
+sudo chmod 440 /etc/sudoers.d/vpn-split
+
 # 1. 检查必要工具
 for tool in curl jq httpx dirsearch hydra python3 awk sed grep; do
   command -v $tool &>/dev/null && echo "[✓] $tool" || echo "[✗] $tool 缺失"
 done
 python3 -c "import requests, bs4, lxml, openpyxl" 2>/dev/null || echo "pip install requests bs4 lxml openpyxl"
 
-# 2. VPN 检查（隔离模式 — 仅渗透流量走VPN）
+# 2. VPN 检查（workflow 启动时会自动拉起，这里仅手动验证）
 OPENVPN/vpn-split.sh status 2>/dev/null && echo "[✓] 隔离VPN已就绪" || echo "[✗] VPN未连接 - 请执行: sudo OPENVPN/vpn-split.sh up"
 
 # 3. 验证隔离生效（众测走VPN + 外网直连 均可达）
@@ -114,6 +118,12 @@ echo "[✓] 众测: HTTP $ZC_CHECK | 外网: HTTP $BAIDU_CHECK"
    - 按标签分类：`[范围内]` `[管理后台]` `[新发现]` `[非常见端口]`
 4. **VPN 隔离连接（渗透与日常隔离）**：
    - **原则**：仅渗透测试探测流量走 VPN 隧道，日常上网走外网直连
+   - **自动启动**：workflow 启动时自动执行 `sudo OPENVPN/vpn-split.sh up`（需提前配置 sudoers）
+   - **配置 sudoers（一次即可）**：
+     ```bash
+     echo "my ALL=(ALL) NOPASSWD: $(pwd)/OPENVPN/vpn-split.sh" | sudo tee /etc/sudoers.d/vpn-split
+     sudo chmod 440 /etc/sudoers.d/vpn-split
+     ```
    - **通用脚本**：`OPENVPN/vpn-split.sh`（适配任意项目，无需硬编码）
      - `sudo ./vpn-split.sh up [项目目录]` — 启动 VPN，自动扫描项目资产文件添加路由
      - `sudo ./vpn-split.sh down` — 关闭 VPN 并清理路由
@@ -212,9 +222,16 @@ echo "[✓] 众测: HTTP $ZC_CHECK | 外网: HTTP $BAIDU_CHECK"
 - 数据类的需说明数量及泄漏了哪些数据
 
 **有效性判定：**
-- **F(不符)**: 资产不符/无复现/漏洞不成立/明确不收
-- **R(保留)**: 非敏感泄露/利用门槛高/暴露未深入
-- **T(属实)**: 完整攻击链/高敏感数据未授权获取
+- **F(不符)**: 资产不符/无复现/漏洞不成立/明确不收/403无权访问/空响应无业务数据
+- **R(保留)**: 非敏感泄露/利用门槛高/暴露未深入/仅端点存在无实际数据
+- **T(属实)**: 完整攻击链/高敏感数据未授权获取/有实际业务数据泄露
+
+**判定红线（硬性遵守）：**
+- HTTP 403 + 任何响应 ≠ 漏洞 — 403 表示服务端正常拒绝了请求
+- `{"success":false}`、`{"code":-1,"msg":"xxx"}` 等纯元数据响应 ≠ 漏洞
+- JS 中找到 API 端点但 curl 未返回实际数据 ≠ 未授权漏洞
+- Actuator/Swagger 端点返回 403 或空数据 ≠ 可被利用的漏洞
+- HTTP 200 + 权限错误（"Unauthorized"/"需要登录"）→ 认证在正常工作，非漏洞
 
 ---
 

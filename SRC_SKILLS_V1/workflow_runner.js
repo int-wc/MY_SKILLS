@@ -8,7 +8,7 @@ export const meta = {
   phases: [
     { title: '资产发现', detail: '读取厂商信息 + 解析Hunter资产 + 目标分类标记' },
     { title: '深度分析', detail: 'JS逆向 + API枚举 + 组件审计 + 开源系统识别' },
-    { title: '漏洞挖掘', detail: '按优先级测试所有攻击面 + 本地部署 + 源码审计' },
+    { title: '漏洞挖掘', detail: '按优先级测试所有攻击面 + 框架识别线索指向测试' },
     { title: '验证取证', detail: '复现确认 + 证据收集' },
     { title: '资产标记', detail: '标记已测资产状态并存储，避免重复测试' },
     { title: '报告编写', detail: 'MD+HTML双格式输出' },
@@ -23,6 +23,13 @@ export const meta = {
 const SRC_BASE = '/home/my/butiansrc/Exclusive_SRC'
 const SKILL_SCRIPTS = '/home/my/.claude/skills/SRC_SKILLS_V1/scripts'
 
+// ============================================================
+// 真实 User-Agent 配置 — 所有 curl 请求使用浏览器UA
+// ============================================================
+const REAL_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+const UA_FLAG = `-H 'User-Agent: ${REAL_UA}'`
+const UA_INSTR = `⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: ${REAL_UA}'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**`
+
 let companyName, mode, singleUrl
 if (typeof args === 'string') {
   // 修复：Workflow 工具传递的对象 args 可能被序列化为 JSON 字符串
@@ -30,7 +37,7 @@ if (typeof args === 'string') {
   let parsed = null
   try { parsed = JSON.parse(args) } catch (_) {}
   if (parsed && typeof parsed === 'object') {
-    companyName = parsed.company || '货讯通科技'
+    companyName = parsed.company || null
     mode = parsed.mode || 'full'
     singleUrl = parsed.url || null
   } else {
@@ -38,7 +45,7 @@ if (typeof args === 'string') {
     mode = 'full'
   }
 } else if (typeof args === 'object' && args) {
-  companyName = args.company || '货讯通科技'
+  companyName = args.company || null
   mode = args.mode || 'full'
   singleUrl = args.url || null
   if (mode === 'url' && !singleUrl) {
@@ -48,6 +55,17 @@ if (typeof args === 'string') {
 } else {
   companyName = null
   mode = 'full'
+}
+
+// 未指定公司名时从URL自动提取
+if (!companyName && singleUrl) {
+  try {
+    const u = new URL(singleUrl)
+    companyName = u.hostname
+  } catch (_) {
+    companyName = singleUrl.replace(/^https?:\/\//, '').replace(/[:\/?#].*$/, '')
+  }
+  log(`ℹ️ 未指定公司名，自动使用URL域名 "${companyName}" 作为公司标识`)
 }
 
 // 目标进度追踪
@@ -86,7 +104,6 @@ function markPhase(n, status) {
 // ============================================================
 const trackerPath = `${SRC_BASE}/${companyName || 'unknown'}/asset_test_status.json`
 const findingsPath = `${SRC_BASE}/${companyName || 'unknown'}/asset_findings.json`
-const frameworksCachePath = `${SRC_BASE}/${companyName || 'unknown'}/frameworks_audited.json`
 let p0_tracker = null
 
 if (companyName && !mode.startsWith('phase5')) {
@@ -231,7 +248,7 @@ if (mode.startsWith('phase5')) {
   log(listing || '（无法列出）')
   log('')
   log('使用方式: 在 Workflow args 中指定 company 参数')
-  log('  例: Workflow({scriptPath: "...", args: {company: "货讯通科技", mode: "full"}})')
+  log('  例: Workflow({scriptPath: "...", args: {company: "理想汽车", mode: "full"}})')
   return { status: 'need_company', message: '请指定目标公司名' }
   } else {
 
@@ -442,7 +459,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
 
       执行四层分析：
       1. 第一层 - 定位API入口:
-         curl -s 获取页面HTML，提取 <script src>
+         使用 curl -s -H 'User-Agent: Mozilla/5.0 ...' 获取页面HTML（务必使用浏览器UA绕过WAF），提取 <script src>
          对每个JS，查找 baseURL/API_HOST/API_BASE/gatewayUrl/serverUrl
          grep -oP '(baseURL|API_HOST|API_BASE)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"]+["'"'"]'
 
@@ -481,6 +498,8 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
          找到API路径 → 功能命名可推断数据敏感度
 
       注意: 只做读取分析。遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)。
+
+          ${UA_INSTR}
 
           ⚠️ **严格边界规则（必须遵守，不可违反）:**
           1. ⛔ 仅对目标URL使用 curl。**不要读取任何本地文件**（不要使用 Read 工具读取文件）。
@@ -521,7 +540,7 @@ ${targets.slice(0, 20).map(t => `  ${t.url}`).join('\n')}
 对每个目标执行以下步骤：
 
 **Step 1: 指纹采集**
-对每个目标执行 curl -sI 获取响应头 + curl -s 获取首页内容 + curl -sk 获取 /swagger-ui.html /doc.html /v2/api-docs
+对每个目标执行 curl -sI -H 'User-Agent: ...' 获取响应头 + curl -s -H 'User-Agent: ...' 获取首页内容 + curl -sk -H 'User-Agent: ...' 获取 /swagger-ui.html /doc.html /v2/api-docs
 
 **Step 2: 快速开发框架识别**
 
@@ -635,6 +654,7 @@ ${targets.slice(0, 20).map(t => `  ${t.url}`).join('\n')}
 
 **输出 JSON，每个目标一个条目。**
 
+      ${UA_INSTR}
       ⚠️ **严格边界规则：仅使用 curl 探测目标URL。不要读取任何本地文件。不要提及或引用任何其他厂商的数据。**`,
       { label: '🔍 快速开发框架识别', schema: {
         type: 'object',
@@ -825,6 +845,9 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
 
 只做读取探测。
 
+
+      ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
+
       ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: `🔓 未授权/信息泄露测试`, schema: {
         type: 'object',
@@ -898,6 +921,9 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
 
 只做读取探测。
 
+
+      ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
+
       ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: `🎯 越权/弱口令测试`, schema: {
         type: 'object',
@@ -922,271 +948,14 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
       }, phase: '漏洞挖掘' }
     )
 
-    // 3.3 本地部署实现 + 源码审计（对 Phase 2 识别的开源系统进行深度审计）
-    let p3_codeaudit = null
-    // 从 p2_discoveries_text 中提取开源系统识别结果
-    const p3_has_oss = p2_discoveries_text && p2_discoveries_text.includes('【快速开发框架识别结果】')
-
-    // 读取框架审计缓存，避免重复审计同一框架
-    let p3_framework_cache = { audited: {} }
-    try {
-      const fs = require('fs')
-      if (fs.existsSync(frameworksCachePath)) {
-        p3_framework_cache = JSON.parse(fs.readFileSync(frameworksCachePath, 'utf8'))
-        log(`  📚 框架审计缓存: ${Object.keys(p3_framework_cache.audited).length} 个框架已审计`)
-      }
-    } catch (e) { /* 忽略缓存读取错误 */ }
-
-    if (p3_has_oss) {
-      // 提取框架名列表，过滤已审计的
-      const ossText = p2_discoveries_text.substring(
-        p2_discoveries_text.indexOf('【快速开发框架识别结果】'),
-        p2_discoveries_text.length
-      ).substring(0, 4000)
-
-      // 让agent检查缓存并跳过已审计框架
-      p3_codeaudit = await agent(
-        `你是快速开发框架审计专家，对 ${companyName} 的已识别框架执行本地部署实现和源码审计。
-
-===== Phase 2 快速开发框架识别结果 =====
-${ossText}
-==========================================
-注意：下表中的框架已在本会话中审计过(审计时间: 哈希)，请跳过，不要重复审计：
-${Object.entries(p3_framework_cache.audited).map(([k,v]) => `  - ${k} (${v.last_audited}, ${v.findings_count}条发现)`).join('\n') || '(无)'}
-
-你的任务分为两部分：
-
-**【Part A: 本地部署实现】**
-对每个已识别的快速开发框架/低代码平台：
-
-1. **源码获取** — 根据框架名+版本，从 GitHub Releases 下载对应版本
-   - JeecgBoot: https://github.com/jeecg-boot/jeecg-boot/releases
-   - RuoYi: https://github.com/yangzongzhuan/RuoYi/releases
-   - JeeSite: https://github.com/thinkgem/jeesite/releases
-   - Guns: https://github.com/stylefeng/Guns/releases
-   - BladeX: https://github.com/chillzhuang/BladeX/releases
-   - 其他: 根据框架名搜索 GitHub
-
-2. **本地环境搭建**（在 /tmp/zc_local_audit/ 下）:
-   - Java项目(JeecgBoot/RuoYi/JeeSite/Guns/BladeX): 用 mvn spring-boot:run 或 java -jar
-   - 需要数据库的: 用 Docker 启动 MySQL/Redis，修改配置连接
-   - Docker 项目: docker-compose up（优先使用避免环境冲突）
-   - 如果源码无法下载/编译失败，从 Docker Hub 拉取官方镜像
-
-3. **漏洞复现分析**:
-   - 在本地验证 Phase 2 识别的特有攻击面（默认口令、Shiro绕过、代码生成器）
-   - 分析漏洞触发条件、请求构造细节、绕过手法
-   - 对比本地和目标系统的差异（路径前缀、鉴权方式、WAF等）
-   - 记录完整的 POC 请求包
-
-**【Part B: 源码审计 — 三大审计维度】**
-对下载的快速开发框架源码执行深入审计，按以下三个维度逐一排查：
-
-**维度一：权限审计（未授权探查）**
-核心目标：找到**无需任何凭证即可访问**的接口。
-
-1. **Shiro/Spring Security 过滤链审计**:
-   - 找到 ShiroConfig.java / SecurityConfig.java / WebSecurityConfigurerAdapter
-   - 提取 filterChainDefinitionMap 中所有标记为 /anon 或 .permitAll() 的路径
-   - 对照 Controller 路由表，检查这些路径对应的 Controller 方法是否真的有公开权限
-   - 特别关注: /actuator/**、/druid/**、/swagger**、/v2/api-docs、/doc.html 是否被放行
-
-2. **Controller 鉴权注解审计**:
-   - 搜索 @RequiresPermissions, @RequiresRoles, @PreAuthorize, @Secured 在各 Controller 的使用情况
-   - 找出没有注解的方法——那就是未授权入口
-   - 关注: 代码生成器、文件上传、定时任务、系统配置等控制器
-
-3. **Swagger 接口逐条测试**:
-   - 从 /doc.html 或 /v2/api-docs 提取所有 API 端点
-   - 每一条用 curl 测试不带任何 Cookie/Token 是否能返回数据
-
-4. **路由表遍历**:
-   - 找到 @RequestMapping 或 @GetMapping/@PostMapping 定义的完整路由
-   - 逐个检查可匿名访问的管理后台/敏感功能
-
-**维度二：控制审计**
-核心目标：找到**可被利用实现命令执行/文件读写/SQL注入**的代码路径。
-
-1. **文件上传控制**:
-   - 后缀白名单校验是否能绕过(大小写/双写/截断/MIME)
-   - 路径拼接是否存在 ../ 问题
-   - 上传文件是否可被直接访问
-
-2. **文件下载/导出控制**:
-   - 路径参数是否使用 ../ 跳出目录
-   - 导出功能是否存在 XXE
-
-3. **命令执行控制**:
-   - 搜索 Runtime.getRuntime().exec(), ProcessBuilder, exec(), shell_exec(), system(), subprocess.run()
-   - 检查参数是否为用户输入可控
-
-   ⚠️ **业务场景分类规则（重要）:**
-   当发现 Class.forName、ProcessBuilder、Runtime.exec 等调用时，**必须追溯参数来源**，按以下规则分类：
-
-   **A. 业务设计（非漏洞）——标注 is_business_feature: true，附带代码理由:**
-   - ProcessBuilder 调用的命令是**硬编码字符串**（如 ffmpeg、edge-tts、git），非用户输入拼接
-   - Class.forName 有**包名白名单校验**（如 startsWith("org.jeecg.")），且只能实例化特定接口实现类
-   - 命令参数来源于**系统内部配置**（如 application.yml），非用户 HTTP 参数
-   - 示例: JeecgBoot AI视频生成调用 ffmpeg+edge-tts（业务特性）; Quartz用白名单限制类加载
-
-   **B. 确认为漏洞——正常标记 severity，附带利用条件:**
-   - 用户 HTTP 参数（@RequestParam/@RequestBody/@PathVariable）**直接拼接**到命令
-   - Class.forName **无包名白名单**，或白名单可绕过
-   - 命令执行结果返回到 HTTP 响应（回显RCE）
-   - 无 @RequiresPermissions/@PreAuthorize 鉴权保护
-
-   **每个发现必须附带:**
-   - is_business_feature: true/false — 是否为业务设计
-   - reasoning_code — 判断依据的代码片段
-   - user_controllable: true/false — 参数是否来自用户HTTP输入
-
-4. **SQL 注入控制**:
-   - MyBatis XML 中的 \${} 拼接（尤其 orderBy/sort 排序字段）
-   - @Select/@Query 中的原生 SQL 拼接
-
-5. **反序列化控制**:
-   - readObject, fromJson, JSON.parse(Fastjson) — 输入是否可控
-   - AutoType 是否开启
-
-6. **表达式注入/SSTI**:
-   - SpEL/PEL/OGNL/TemplateExpress — 模板解析是否依赖用户输入
-   - eval/assert/create_function/Jinja2
-
-7. **XXE**:
-   - DocumentBuilderFactory, SAXParser, SimpleXMLElement — disable-doctype-decl 是否设置
-
-**维度三：零凭据获取 Admin Token 路径**
-核心目标：找到**无需用户名密码即可获取管理员 Token 或会话**的路径。
-
-1. **login/auth/token 控制器鉴权逻辑**:
-   - 搜索 LoginController / AuthController / TokenController
-   - 查找可**不校验密码**就返回 Token 的特殊路径：
-     - 仅校验 IP 白名单 → X-Forwarded-For 伪造绕过
-     - 仅校验 Referer 头 → 可伪造
-     - 仅校验时间戳签名 → 可重放/推导
-     - 存在 debug=true / test=true 参数可跳过
-
-2. **硬编码超级凭证**:
-   - 搜索 adminKey, superKey, masterKey, jwt.secret, token.secret
-   - 静态 JWT 密钥 → 可伪造任意用户的 JWT
-   - 搜索 defaultPassword, initPassword, superAdmin 硬编码账号
-
-3. **密码重置/验证码逻辑缺陷**:
-   - 搜索 resetPassword, /forgot, /reset, /changePassword
-   - 验证码是否仅前端校验
-   - 重置 Token 是否可预测
-
-4. **OAuth/SSO/社交登录回调**:
-   - state 参数是否校验（CSRF 绑定攻击者账号）
-   - redirect_uri 是否可任意指向
-   - callback 是否无鉴权即可换 token
-
-5. **Session 预测/固定**:
-   - sessionId/token 生成是否可预测
-   - 是否存在 Session Fixation
-
-6. **搜索模式（贯穿三个维度）**:
-   - 硬编码凭证: password/secret/key/token/shrio.key 在配置中硬编码
-   - Shrio.key 默认密钥: 搜索配置值, 比对应知默认密钥
-   - 测试接口: test/debug/demo/mock 后缀的控制器
-   - 后门: eval/exec/shell/system 无过滤调用
-   - 对比补丁: commit diff 定位新修复的漏洞
-
-**输出**:
-   - 每个审计发现：文件路径+行号+审计维度+问题类型+风险等级
-   - 「零凭据获取Admin Token」最高优先级标记
-   - 已知CVE给出POC；0day标注 potentially_0day
-
-只做本地分析和读取，不在目标系统执行破坏性操作。
-
-        ⚠️ **严格边界规则：仅审计当前公司的框架源码。不要引用、提及或包含任何其他厂商的数据。**`,
-        { label: '📦 本地部署+源码审计', schema: {
-          type: 'object',
-          properties: {
-            local_setups: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  system_name: { type: 'string' },
-                  version: { type: 'string' },
-                  setup_method: { type: 'string', description: '本地部署方式（docker/php/java/python/npm）' },
-                  status: { type: 'string', enum: ['成功', '部分成功', '失败'] },
-                  notes: { type: 'string' },
-                },
-              },
-            },
-            audit_findings: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  title: { type: 'string' },
-                  type: { type: 'string', enum: ['硬编码凭证', 'SQL注入', '文件操作', '反序列化', '命令执行', '鉴权绕过', '表达式注入', 'XXE', '后门', '测试接口', '未授权接口', 'AdminToken绕过', '其他'] },
-                  severity: { type: 'string', enum: ['严重', '高危', '中危', '低危'] },
-                  audit_dimension: { type: 'string', enum: ['权限审计', '控制审计', '零凭据AdminToken'], description: '所属审计维度' },
-                  file_path: { type: 'string' },
-                  line_number: { type: 'number' },
-                  description: { type: 'string' },
-                  poc: { type: 'string', description: 'POC/EXP' },
-                  is_known_cve: { type: 'boolean' },
-                  cve_id: { type: 'string' },
-                  is_potential_0day: { type: 'boolean' },
-                },
-                required: ['title', 'type', 'severity', 'description'],
-              },
-            },
-          },
-        }, phase: '漏洞挖掘' }
-      )
-
-      if (p3_codeaudit) {
-        const setupCount = p3_codeaudit.local_setups?.length || 0
-        const auditCount = p3_codeaudit.audit_findings?.length || 0
-        log(`  本地部署: ${setupCount} 个环境 | 源码审计: ${auditCount} 个发现`)
-        if (auditCount > 0) {
-          p3_codeaudit.audit_findings.forEach(f => {
-            const dimIcon = f.audit_dimension === '权限审计' ? '🔓' : f.audit_dimension === '控制审计' ? '🎮' : f.audit_dimension === '零凭据AdminToken' ? '👑' : ''
-            const icon = f.severity === '严重' ? '🔥' : f.severity === '高危' ? '🔴' : '🟡'
-            const extra = f.is_potential_0day ? ' [⚠️ 潜在0day]' : f.is_known_cve ? ` [CVE:${f.cve_id}]` : ''
-            const dim = f.audit_dimension ? ` [${f.audit_dimension}]` : ''
-            log(`    ${dimIcon}${icon} [${f.severity}] ${f.title}${dim}${extra}`)
-            if (f.file_path) log(`       → ${f.file_path}:${f.line_number || '?'}`)
-          })
-          // 将源码审计发现的漏洞纳入总发现列表，供 Phase 4 验证
-          p3_findings_data.push(...p3_codeaudit.audit_findings.map(f => ({
-            title: f.title, type: f.type, severity: f.severity,
-            target: p1_assets?.priority_targets?.[0]?.url || companyName,
-            endpoint: f.file_path || f.title,
-            confidence: f.is_potential_0day ? 'exploratory' : 'suspected',
-            curl_command: f.poc || '',
-            phase_discovered: 'phase3_codeaudit', status: 'unverified'
-          })))
-
-          // 保存框架审计缓存（framework + version → 已审计标记）
-          if (p3_codeaudit.audit_findings.length > 0) {
-            const frameworkSet = new Set()
-            p3_codeaudit.audit_findings.forEach(f => {
-              if (f.framework_name) frameworkSet.add(f.framework_name)
-            })
-            frameworkSet.forEach(fw => {
-              p3_framework_cache.audited[fw] = {
-                last_audited: '2026-07-02',
-                findings_count: p3_codeaudit.audit_findings.filter(f => f.framework_name === fw).length
-              }
-            })
-            try {
-              const fs = require('fs')
-              fs.writeFileSync(frameworksCachePath, JSON.stringify(p3_framework_cache, null, 2))
-              log(`  💾 框架审计缓存已保存 (${frameworkSet.size} 个框架)`)
-            } catch (e) { /* 忽略写入错误 */ }
-          }
-        }
-      }
+    // 3.3 快速开发框架识别 → 作为线索传递到 Phase 3（不执行本地部署和源码审计）
+    if (p2_discoveries_text && p2_discoveries_text.includes('【快速开发框架识别结果】')) {
+      log('  🔍 快速开发框架识别结果已作为线索传递到 Phase 3 漏洞挖掘（跳过本地部署和源码审计）')
     } else {
-      log('  源码审计: ⏭️ 无开源系统识别结果，跳过本地部署和源码审计')
+      log('  ⏭️ 无开源系统识别结果')
     }
-    // == 本地部署+源码审计结束 ==
+    // == 框架识别线索传递结束（不执行本地部署和源码审计） ==
+
 
     // Tier 2: 剩余资产全量测试（非快速探测，所有目标做完整维度测试）
     p3_quick = null
@@ -1198,7 +967,7 @@ ${Object.entries(p3_framework_cache.audited).map(([k,v]) => `  - ${k} (${v.last_
 ${tier2_urls.map(u => `  ${u}`).join('\n')}
 
 执行全量测试（每个目标深入测试）:
-1. curl -sI 每个URL确认HTTP状态码
+1. curl -sI -H 'User-Agent: ...' 每个URL确认HTTP状态码（必须带浏览器UA）
 2. 对返回200/401/403的，探测以下维度:
    - 未授权API: /api/v1/user, /api/v1/config, /swagger-ui.html, /v2/api-docs
    - 后台管理: /admin/, /console/, /login, /manager/
@@ -1210,6 +979,9 @@ ${tier2_urls.map(u => `  ${u}`).join('\n')}
 4. 识别组件版本+CVE匹配
 5. 有发现的才记录，无发现的不需输出
 6. 每个发现附带 curl 命令
+
+
+        ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
 
         ⚠️ **严格边界规则：仅对当前列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
         { label: '⚡ Tier2快速探测', schema: {
@@ -1311,8 +1083,8 @@ ${p4_findings_json.substring(0, 6000)}
 - 如果完全无法提取可测试 URL → 标记为 needs_manual_test
 
 **Step 2: 用 curl 测试**
-1. 先 \`curl -sk -o /dev/null -w "%{http_code}"\` 获取数字HTTP状态码
-2. 状态码 200/401/403 的，\`curl -sk\` 获取响应体
+1. 先 \`curl -sk -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' -o /dev/null -w "%{http_code}"\` 获取数字HTTP状态码（必须带浏览器UA）
+2. 状态码 200/401/403 的，\`curl -sk -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'\` 获取响应体
 3. 对比 带Cookie vs 无Cookie 的响应差异
 4. **http_status 必须是数字，不能是字符串。每个 confirmed/suspected 发现都必须有。**
 
@@ -1339,7 +1111,7 @@ ${p4_findings_json.substring(0, 6000)}
 - **不要因为 HTTP 200 + JSON 包含 "成功" 字样就认为是真数据，必须检查 data 字段是否包含有意义的业务记录**
 
 **检测步骤（按顺序执行，不可跳过）：**
-Step A: 执行 curl -sk -o /tmp/verify_resp.json -w "%{http_code}" "<URL>" 获取完整响应体
+Step A: 执行 curl -sk -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' -o /tmp/verify_resp.json -w "%{http_code}" "<URL>" 获取完整响应体
 Step B: 用 python3 -c "import json; d=json.load(open('/tmp/verify_resp.json')); print(json.dumps(d, ensure_ascii=False)[:200])" 查看响应前200字符
 Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
   - data 是空列表 [] → false_positive (理由: data_empty_list)
@@ -1349,6 +1121,9 @@ Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
   - data 是包含用户/订单/配置/凭证等业务数据的非空列表 → confirmed
 
 输出时 confirmed_findings 只放 confirmed + suspected 的。false_positives 和 needs_manual_test 各自归位。
+
+
+      ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
 
       ⚠️ **严格边界规则：仅验证当前公司的漏洞数据。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: '🔍 漏洞复测验证', schema: {
@@ -1507,7 +1282,9 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
   // 2. 如果有效发现仍然较少，尝试目录扫描兜底
   if (progress.findings_count < 3) {
     p4_dirscan = await agent(
-      `对 ${companyName} 执行目录扫描兜底（因当前发现较少）。\n\n目标URL:\n${(p1_assets.priority_targets || []).slice(0, 10).map(t => t.url).join('\n')}\n\n使用 dirsearch 扫描常见路径:\n- 后台管理: /admin/, /manager/, /console/, /system/\n- 备份文件: /backup/, *.bak, *.zip, *.tar.gz\n- 文件上传: /uploads/, /files/\n- 配置泄露: /.git/, /.svn/, /.env, /WEB-INF/web.xml\n- 组件端点: /actuator/, /druid/, /nacos/\n\n如果 dirsearch 不可用，用 curl 手动探测以上路径。\n对新发现的端点做未授权测试。\n\n输出所有发现。`,
+      `${UA_STR}
+
+对 ${companyName} 执行目录扫描兜底（因当前发现较少）。\n\n目标URL:\n${(p1_assets.priority_targets || []).slice(0, 10).map(t => t.url).join('\n')}\n\n使用 dirsearch 扫描常见路径:\n- 后台管理: /admin/, /manager/, /console/, /system/\n- 备份文件: /backup/, *.bak, *.zip, *.tar.gz\n- 文件上传: /uploads/, /files/\n- 配置泄露: /.git/, /.svn/, /.env, /WEB-INF/web.xml\n- 组件端点: /actuator/, /druid/, /nacos/\n\n如果 dirsearch 不可用，用 curl -H 'User-Agent: Mozilla/5.0 ...' 手动探测以上路径（必须带浏览器UA绕过WAF）。\n对新发现的端点做未授权测试。\n\n输出所有发现。`,
       { label: '📂 目录扫描兜底', schema: {
         type: 'object',
         properties: {
@@ -2036,7 +1813,7 @@ const p7_final = await agent(
    - curl可复现命令
 
 3. 漏洞URL复测:
-   提取每份报告中的漏洞URL，用 curl -sI 确认当前仍可访问且返回200
+   提取每份报告中的漏洞URL，用 curl -sI -H 'User-Agent: Mozilla/5.0 ...' 确认当前仍可访问且返回200（必须带浏览器UA）
 
 4. HTML版本确认:
    ls "${SRC_BASE}/${companyName}/submittable_reports/reports_html/"*.html

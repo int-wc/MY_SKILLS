@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Convert all Markdown reports to styled HTML reports."""
+"""Convert all Markdown reports to styled HTML reports.
+Usage: python3 generate_html.py [base_dir]
+  - Without argument: uses default Butian SRC path
+  - With argument: uses specified directory (for ZC projects)
+"""
 import os
+import sys
 import markdown
 import re
 from pathlib import Path
 
-BASE_DIR = "/home/my/butiansrc/Exclusive_SRC"
+DEFAULT_BASE_DIR = "/home/my/butiansrc/Exclusive_SRC"
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -97,10 +102,21 @@ def process_directory(company_dir):
 
 
 def main():
+    # Accept optional base directory argument
+    if len(sys.argv) > 1:
+        base_dir = sys.argv[1]
+    else:
+        base_dir = DEFAULT_BASE_DIR
+
+    if not os.path.isdir(base_dir):
+        print(f"ERROR: Directory not found: {base_dir}")
+        sys.exit(1)
+
+    print(f"Processing reports under: {base_dir}")
     total_html = 0
     total_md = 0
-    for entry in sorted(os.listdir(BASE_DIR)):
-        company_dir = os.path.join(BASE_DIR, entry)
+    for entry in sorted(os.listdir(base_dir)):
+        company_dir = os.path.join(base_dir, entry)
         if not os.path.isdir(company_dir):
             continue
         has_reports = False

@@ -1422,7 +1422,24 @@ ${p4_findings_json.substring(0, 6000)}
 **360众测特殊要求：**
 - 每个发现的证据需附带时间截图或时间信息
 - **高危和复杂漏洞需录屏保存**（避免后续产生争议）
-- **数据类漏洞需说明数量及泄露了哪些数据**（如：泄露 1000 条用户信息，包含姓名/手机号/身份证号）`,
+- **数据类漏洞需说明数量及泄露了哪些数据**（如：泄露 1000 条用户信息，包含姓名/手机号/身份证号）
+
+---
+### 🎯 Step 4: Agent 发散扩展（验证一个点时思考变种，不要只机械复述）
+
+发散方向（对每个确认有效的发现依次思考）:
+- **参数发散**: /api/user?id=1 → 试 /api/user?orderId=2, /api/user?page=1&size=100
+- **方法发散**: GET → 试 PUT（修改）/ DELETE（删除）/ POST（创建）
+- **路径发散**: /api/v1/user → 试 /api/v1/admin, /api/v1/config, /api/v2/user
+- **鉴权发散**: 无Cookie→空Bearer→伪造Token→X-Admin:true header
+- **内容类型发散**: JSON→XML（XXE测试）
+- **利用链思考**: 能否与其他发现串联升级为更高危
+
+对发散出的变种用 curl --interface tun0 快速验证。
+有实际数据返回的追加到 new_variants 字段。
+无新发现正常结束，不要虚构。
+
+`,
       { label: '🔍 漏洞复测验证', schema: {
         type: 'object',
         properties: {
@@ -1453,6 +1470,23 @@ ${p4_findings_json.substring(0, 6000)}
                 endpoint: { type: 'string' },
                 reason: { type: 'string' },
               },
+            },
+          },
+          new_variants: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                endpoint: { type: 'string' },
+                http_status: { type: 'number' },
+                curl_command: { type: 'string' },
+                evidence: { type: 'string' },
+                confidence: { type: 'string', enum: ['confirmed', 'suspected'] },
+                divergence_type: { type: 'string', enum: ['参数发散', '方法发散', '路径发散', '鉴权发散', '内容类型发散', '利用链'] },
+                parent_finding: { type: 'string' },
+              },
+              required: ['title', 'endpoint', 'http_status', 'divergence_type'],
             },
           },
           needs_manual_test: {

@@ -1442,6 +1442,65 @@ Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
 
 输出时 confirmed_findings 只放 confirmed + suspected 的。false_positives 和 needs_manual_test 各自归位。
 
+---
+### 🎯 Step 4: Agent 发散扩展（关键思维环节 — 不要跳过）
+
+**验证一个发现时，发散思考是否存在变种/扩展，不要只复述已有发现。**
+
+发散方向（对每个发现依次思考）：
+
+**4a. 参数发散 — 同一端点的其他参数**
+发现 /api/user?id=1 → 发散试:
+- /api/user?orderId=2       (是否越权查其他资源)
+- /api/user?page=1&size=100 (是否分页遍历)
+- /api/user?id[0]=1&id[1]=2 (参数注入)
+- /api/user?name=admin      (换个参数名)
+
+**4b. HTTP方法发散 — 同一端点的其他方法**
+GET /api/user/1 → 发散试:
+- PUT /api/user/1  (Body: {"role":"admin"})  — 修改越权
+- DELETE /api/user/1                           — 删除越权
+- PATCH /api/user/1                            — 部分更新
+- POST /api/user                               — 创建越权
+
+**4c. 路径发散 — 同一前缀的其他路径**
+发现 /api/v1/user → 发散试:
+- /api/v1/admin, /api/v1/config, /api/v1/log
+- /api/v1/user/export, /api/v1/user/import
+- /api/v2/user（版本遍历）
+
+**4d. 鉴权发散 — 不同认证方式的绕过尝试**
+- 无Cookie → 带空Authorization: Bearer → 带伪造Token
+- Cookie A → 替换为Cookie B（水平越权）
+- 去除 X-Forwarded-For / Origin / Referer 头（看鉴权是否依赖）
+- 添加 X-Admin: true / X-Role: admin（未授权header）
+
+**4e. 内容类型发散 — 切换解析方式看后端行为差异**
+JSON → XML（XXE测试）
+JSON → Form-URLEncoded（参数解析差异）
+
+**4f. 基于 Phase 2 JS 分析的发散**
+如果 Phase 2 发现了隐藏API路径或凭证，思考这些路径是否存在与当前发现类似的漏洞模式。
+访问本地JS文件确认（路径见上方JS缓存目录）。
+
+**4g. 利用链思考 — 当前发现能否与其他发现串联**
+存在利用链可能 → 报告时标记为利用链格式
+
+**Step 5: 变种验证**
+对 Step 4 发散出的每个有潜力的变种，用 curl 快速验证状态码。
+只记录 200/401/403 且有实际响应内容的新发现（追加到 confirmed_findings）。
+无新发现的正常结束，不是每个发散方向都必须有结果。
+
+**关键原则：**
+- 发散不是漫无目的，每个发散方向必须有「为什么这么试」的理由
+- 发现一个IDOR → 思考同一资源类的其他端点是否也有IDOR（横向发散）
+- 发现一个SSRF → 思考能否升级为RCE或内网扫描（纵向发散）
+- 确认无新发现后正常收尾，不要虚构
+- 发散结果追加到 new_variants 字段
+
+---
+之前发现的 false_positives 继续保留。
+新增的变种发现追加到 confirmed_findings 数组。
 
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
 
@@ -1477,6 +1536,26 @@ Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
                 reason: { type: 'string' },
               },
               required: ['title', 'reason'],
+            },
+          },
+          new_variants: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                type: { type: 'string' },
+                severity: { type: 'string', enum: ['严重', '高危', '中危', '低危', '信息'] },
+                target: { type: 'string' },
+                endpoint: { type: 'string' },
+                http_status: { type: 'number' },
+                evidence: { type: 'string' },
+                curl_command: { type: 'string' },
+                confidence: { type: 'string', enum: ['confirmed', 'suspected'] },
+                parent_finding: { type: 'string', description: '从哪个原始发现发散而来' },
+                divergence_type: { type: 'string', enum: ['参数发散', '方法发散', '路径发散', '鉴权发散', '内容类型发散', 'JS分析发散', '利用链'] },
+              },
+              required: ['title', 'endpoint', 'http_status', 'divergence_type'],
             },
           },
           needs_manual_test: {
@@ -1556,6 +1635,25 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
         if (f.curl_command) log(`     curl: ${f.curl_command.substring(0, 120)}`)
       })
       progress.findings_count = p4_verify.confirmed_findings.length
+
+      // 合并发散结果到主体发现
+      if (p4_verify.new_variants && p4_verify.new_variants.length > 0) {
+        log(`  🎯 发散发现 ${p4_verify.new_variants.length} 个变种:`)
+        p4_verify.new_variants.forEach(v => {
+          log(`    [${v.http_status}] ${v.endpoint} (${v.divergence_type} ← ${v.parent_finding || '原始发现'})`)
+        })
+        // 将发散结果追加到confirmed_findings
+        p4_verify.confirmed_findings = p4_verify.confirmed_findings || []
+        p4_verify.confirmed_findings.push(...p4_verify.new_variants)
+        // 同时更新p3_findings_data
+        p3_findings_data.push(...p4_verify.new_variants.map(v => ({
+          title: v.title, type: v.type || '变种发现', severity: v.severity || '中危',
+          target: v.target || '', endpoint: v.endpoint,
+          confidence: v.confidence || 'suspected',
+          curl_command: v.curl_command || '',
+          phase_discovered: 'phase4_variant', status: v.confidence === 'confirmed' ? 'confirmed' : 'suspected'
+        })))
+      }
 
       // P2: 验证通过的端点 → 更新字典本
       if (p4_verify.confirmed_findings.length > 0) {

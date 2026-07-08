@@ -715,6 +715,8 @@ cat ${fuzz_out_zc}`,
         const jsonPart = (fuzz_raw_zc || '').split('---RESULT_JSON---').pop()
         const fuzzData = JSON.parse(jsonPart.trim())
         const findings = fuzzData.findings || []
+        if (!globalThis.__zc_fuzz_findings) globalThis.__zc_fuzz_findings = []
+        globalThis.__zc_fuzz_findings.push(...findings.map(f => ({...f, source_target: ft})))
         if (findings.length > 0) log(`  ${ft}: 发现 ${findings.length} 个端点`)
         if (fuzzData.extracted_patterns || (fuzzData.new_endpoints && fuzzData.new_endpoints.length > 0)) {
           await agent(
@@ -723,6 +725,11 @@ cat ${fuzz_out_zc}`,
           )
         }
       } catch(e) {}
+    }
+    if (globalThis.__zc_fuzz_findings && globalThis.__zc_fuzz_findings.length > 0) {
+      const fuzzSum = globalThis.__zc_fuzz_findings.filter(f => [200,401,403].includes(f.status_code))
+        .map(f => `  [${f.status_code}] ${f.endpoint}`).join('\n')
+      p2_discoveries_text += `\n\n【智能fuzz发现端点】\n${fuzzSum}\n`
     }
     targets.forEach(t => dimTracker.record(t, 'dir_enum', 'done'))
   markPhase(2, '✅')
@@ -891,7 +898,7 @@ ${targets.map(t => `  ${t.priority} | ${t.url} | tags: ${(t.tags||[]).join(',')}
 ${allUrls.map(u => `  ${u}`).join('\n')}
 
 第2阶段JS逆向发现的隐藏端点:
-${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分析数据）'}\n\n\t${zc_dirsearch_ctx}
+${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}\n\n\t${zc_dirsearch_ctx}
 
 **【核心策略 — 根据 API 命名推断功能，针对性利用】**
 1. 分析 API 命名 → 推断功能 → 对应攻击:
@@ -966,7 +973,7 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
 ${targets.map(t => `  ${t.url}`).join('\n')}
 
 第2阶段JS逆向发现的隐藏端点:
-${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分析数据）'}
+${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
 
 1. 越权测试:
    - 对含数字ID的路径，尝试替换ID值
@@ -1647,8 +1654,9 @@ if (progress.findings_count === 0) {
   const allFindingsData = [
     ...(p3_unauth?.findings || []),
     ...(p3_other?.findings || []),
-    ...(p4_dirscan?.findings || []),
     ...(p3_quick?.findings || []),
+    ...(typeof p3_dirsearch !== 'undefined' && p3_dirsearch?.findings ? p3_dirsearch.findings : []),
+    ...(typeof p3_codeaudit !== 'undefined' && p3_codeaudit?.audit_findings ? p3_codeaudit.audit_findings : []),
   ]
   const findingsJSON = JSON.stringify(allFindingsData, null, 2)
 

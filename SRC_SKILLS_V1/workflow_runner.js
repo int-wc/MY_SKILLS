@@ -743,6 +743,9 @@ cat ${fuzz_out}`,
         const jsonPart = (fuzz_raw || '').split('---RESULT_JSON---').pop()
         const fuzzData = JSON.parse(jsonPart.trim())
         const findings = fuzzData.findings || []
+        // 存入全局变量供Phase3使用
+        if (!globalThis.__p2_fuzz_findings) globalThis.__p2_fuzz_findings = []
+        globalThis.__p2_fuzz_findings.push(...findings.map(f => ({...f, source_target: ft})))
         if (findings.length > 0) {
           log(`  ${ft}: 发现 ${findings.length} 个端点`)
           findings.forEach(f => log(`    [${f.status_code}] ${f.path}`))
@@ -759,6 +762,15 @@ cat ${fuzz_out}`,
       }
     }
     // 记录维度
+    // 将fuzz发现注入p2_discoveries_text供Phase3使用
+    if (globalThis.__p2_fuzz_findings && globalThis.__p2_fuzz_findings.length > 0) {
+      const fuzzSummary = globalThis.__p2_fuzz_findings
+        .filter(f => f.status_code === 200 || f.status_code === 401 || f.status_code === 403)
+        .map(f => `  [${f.status_code}] ${f.endpoint} (${f.source_target})`)
+        .join('\n')
+      p2_discoveries_text += `\n\n【智能fuzz发现的潜在端点】\n${fuzzSummary}\n`
+      log(`  🔄 ${globalThis.__p2_fuzz_findings.length} 个fuzz发现已注入Phase3上下文`)
+    }
     targets.forEach(t => dimTracker.record(t, 'dir_enum', 'done'))
   markPhase(2, '✅')
   showProgress()
@@ -943,7 +955,7 @@ ${targets.map(t => `  ${t.priority} | ${t.url} | tags: ${(t.tags||[]).join(',')}
 ${allUrls.map(u => `  ${u}`).join('\n')}
 
 第2阶段JS逆向发现的隐藏端点/API路径:
-${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分析数据）'}
+${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
 
 测试矩阵（按优先级执行）:
 
@@ -1054,7 +1066,7 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分�
 ${targets.map(t => `  ${t.url}`).join('\n')}
 
 第2阶段JS逆向发现的隐藏端点/API路径:
-${p2_discoveries_text ? p2_discoveries_text.substring(0, 4000) : '（无 JS 分析数据）'}
+${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
 
 1. 越权测试:
    - 对含数字ID的路径，尝试替换ID值
@@ -1614,8 +1626,9 @@ if (progress.findings_count === 0) {
   const allFindingsData = [
     ...(typeof p3_unauth !== 'undefined' && p3_unauth?.findings ? p3_unauth.findings : []),
     ...(typeof p3_other !== 'undefined' && p3_other?.findings ? p3_other.findings : []),
-    ...(typeof p4_dirscan !== 'undefined' && p4_dirscan?.findings ? p4_dirscan.findings : []),
     ...(typeof p3_quick !== 'undefined' && p3_quick?.findings ? p3_quick.findings : []),
+    ...(typeof p3_dirsearch !== 'undefined' && p3_dirsearch?.findings ? p3_dirsearch.findings : []),
+    ...(typeof p3_codeaudit !== 'undefined' && p3_codeaudit?.audit_findings ? p3_codeaudit.audit_findings : []),
   ]
   const findingsJSON = JSON.stringify(allFindingsData, null, 2)
 

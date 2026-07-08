@@ -458,38 +458,53 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
           `你是JS逆向和API发现专家，分析目标: ${target}
 
       执行四层分析：
-      1. 第一层 - 定位API入口:
-         使用 curl -s -H 'User-Agent: Mozilla/5.0 ...' 获取页面HTML（务必使用浏览器UA绕过WAF），提取 <script src>
-         对每个JS，查找 baseURL/API_HOST/API_BASE/gatewayUrl/serverUrl
-         grep -oP '(baseURL|API_HOST|API_BASE)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"]+["'"'"]'
 
-      2. 第二层 - 路径模式提取:
-         全量提取 "/xxx/yyy" 路径，按一级目录分组统计
+      **核心操作模式变更: 所有JS源码必须先下载到本地，再对本地文件进行审计。**
+
+      ===== 第一步：下载JS源码到本地(必须执行) =====
+      1. 创建缓存子目录: mkdir -p ${SRC_BASE}/${companyName}/js_dumps/$(echo "${target}" | sed 's|https\?://||;s|[:/]|_|g')
+      2. 使用 curl -s -H 'User-Agent: Mozilla/5.0 ...' 获取页面HTML（务必使用浏览器UA绕过WAF），提取 <script src>
+      3. 对每个提取到的 JS URL，执行:
+         curl -s -o "${SRC_BASE}/${companyName}/js_dumps/<target_hash>/<js_filename>.js" "<js_full_url>" -H 'User-Agent: ${REAL_UA}'
+      4. 检查 sourceMappingURL=，如果有则下载 .js.map:
+         curl -s -o "${SRC_BASE}/${companyName}/js_dumps/<target_hash>/<js_filename>.js.map" "<map_url>" -H 'User-Agent: ${REAL_UA}'
+      5. 记录已下载的文件列表: ls -la "${SRC_BASE}/${companyName}/js_dumps/<target_hash>/"
+
+      ===== 第二步：对本地JS文件做审计分析 =====
+      在已下载到本地的 JS 文件上执行以下分析（基于已下载的本地文件，不重复curl）：
+
+      1. **定位API入口**:
+         grep -oP '(baseURL|API_HOST|API_BASE|gatewayUrl|serverUrl)[[:space:]]*[:=][[:space:]]*["\'"'"'"'][^"\'"'"'"']+["\'"'"'"']' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
+         grep -rn 'axios\|fetch\|ajax\|XMLHttpRequest' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>/"
+
+      2. **路径模式提取**:
+         grep -ohP '(?<=")/[a-zA-Z][a-zA-Z0-9/_-]*(?=")' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js | sort | uniq -c | sort -rn
          关注非标准前缀: /gateway/, /dwr/, /sys/, /manage/, /crm/, /erp/
-         不要只找 /api/ — 真正的API常在自定义前缀下
 
-      3. 第三层 - Source Map还原:
-         检查 //# sourceMappingURL= 并尝试下载 .js.map
+      3. **Source Map还原**:
+         检查本地下载的 .js.map 文件，用 python3 解析:
+         python3 -c "import json; d=json.load(open('file.js.map')); print(json.dumps(d.get('sources',[]),indent=2))"
          Webpack chunk分析: chunks/ js/ 命名暴露功能模块
 
-      4. 第四层 - 敏感信息提取:
-         - AccessKey: AKID模式、AKIA模式、LTAI(阿里云)
-         - OSS存储桶密钥: OBS_ACCESS_KEY / OSS_ACCESS_KEY / AWS_ACCESS_KEY
-         - SecretKey/Token/密码硬编码
-         - 拼接模式: accessKey分段存储在多个变量中(key_part + key_part2)
-         - 编码检测: Base64(A-Za-z0-9+/=)、Hex(0x..)、Unicode(\\u00xx)
-         - JWT (eyJ...格式) → 解码看payload中user/role/exp
-         - 数据库连接串 → mongodb/mysql/postgresql/redis://
-         - 内网IP/域名 → 判断是哪个环境(dev/test/prod)
+      4. **敏感信息提取**（在本地文件上执行）:
+         - AccessKey: grep -ohP '(AKID[\\w+=]+|AKIA[\\w+=]{16}|LTAI[\\w+=]+)' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
+         - OSS存储桶密钥: grep -ohP '(OBS_ACCESS_KEY|OSS_ACCESS_KEY|AWS_ACCESS_KEY|accessKeyId|accessKeySecret)[^;,\"'"'"']+' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
+         - SecretKey/Token/密码硬编码:
+           grep -ohP '(secret|token|password|pwd|privateKey)\\s*[:=]\s*["'"'"'][^"'"'"']+["'"'"']' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
+         - JWT (eyJ...格式): grep -ohP 'eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
+           找到JWT后用 python3 解码: echo '<jwt>' | cut -d. -f2 | base64 -d 2>/dev/null | python3 -m json.tool
+         - 数据库连接串: grep -ohP '(mongodb|mysql|postgresql|redis)://[^\s"'"'"']+' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
+         - 内网IP/域名: grep -ohP '(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js
          - 测试账号硬编码
+         - 编码检测: Base64、Hex(0x..)、Unicode(\\u00xx)
 
-      5. 鉴权方式识别:
+      5. **鉴权方式识别**:
          - Authorization: Bearer / Basic
          - X-TOKEN / X-Auth-Token
          - Cookie + sessionId
          - localStorage Token存放
 
-      ⚡ 6. 凭证反思（关键思维环节 — 找到凭证后必须思考）:
+      6. **凭证反思（关键思维环节 — 找到凭证后必须思考）**:
          找到accessKey+secretKey → 这是哪个云服务的？试列举 OBS/S3/OSS Bucket
          找到OSS连接信息 → endpoint + bucket → 直接测试 ListObjects
          找到账号密码 → 这是哪个系统的？钉钉/LDAP/数据库/邮件
@@ -497,17 +512,18 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
          找到内网IP → 从命名判断服务名(k8s)、环境后缀(dev/test/ontest)
          找到API路径 → 功能命名可推断数据敏感度
 
-      注意: 只做读取分析。遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)。
+      注意: 遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)。**本地文件分析完成后不要删除缓存文件**，留作证据。
 
           ${UA_INSTR}
 
-          ⚠️ **严格边界规则（必须遵守，不可违反）:**
-          1. ⛔ 仅对目标URL使用 curl。**不要读取任何本地文件**（不要使用 Read 工具读取文件）。
-          2. ⛔ 如果 curl 获取不到目标页面HTML（返回000/超时/连接拒绝），直接返回 "target_unreachable: {目标URL}"。
-             - **不要**从本地目录读取缓存HTML或任何本地缓存文件
+          **严格边界规则（必须遵守，不可违反）:**
+          1. 仅对目标URL使用 curl 获取页面HTML和JS文件。**不要读取任何本地非缓存文件**（不要用 Read 工具读取公司目录下的非JS缓存文件）。
+          2. 如果 curl 获取不到目标页面HTML（返回000/超时/连接拒绝），直接返回 "target_unreachable: {目标URL}"。
+             - **不要**从本地目录读取缓存HTML或任何其他缓存文件
              - **不要**从本地读取 *_Information.html 或任何其他snapshot文件
              - 就简单返回 target_unreachable，不做任何分析
-          3. ⛔ **不要引用、提及、或包含任何来自其他厂商/公司的数据**。只分析当前目标自身。`,
+          3. **不要引用、提及、或包含任何来自其他厂商/公司的数据**。只分析当前目标自身。
+          4. **允许**对已下载到 ${SRC_BASE}/${companyName}/js_dumps/ 下的本地JS文件使用 grep/python3/bash 进行审计分析。`,
           { label: `🔬 JS分析: ${target}`, phase: '深度分析' }
         )
       },

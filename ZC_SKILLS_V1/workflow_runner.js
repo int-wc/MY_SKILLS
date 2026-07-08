@@ -456,22 +456,30 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
       async (target) => {
         return await agent(
           `你是JS逆向和API发现专家，分析目标: ${target}
-🔒 VPN: 所有 curl 必须加 --interface tun0
 
-      执行四层分析：
-      1. 第一层 - 定位API入口:
-         curl --interface tun0 -s 获取页面HTML，提取 <script src>
-         对每个JS，查找 baseURL/API_HOST/API_BASE/gatewayUrl/serverUrl
+      **核心操作模式变更: 所有JS源码必须先下载到本地，再对本地文件进行审计。**
 
-      2. 第二层 - 路径模式提取:
+      ===== 第一步：下载JS源码到本地(必须执行) =====
+      1. 创建缓存子目录: mkdir -p ${PROJECT_DIR}/js_dumps/$(echo "${target}" | sed 's|https\?://||;s|[:/]|_|g')
+      2. 使用 curl --interface tun0 -s 获取页面HTML，提取 <script src>
+      3. 对每个提取到的 JS URL，执行:
+         curl --interface tun0 -s -o "${PROJECT_DIR}/js_dumps/<target_hash>/<js_filename>.js" "<js_full_url>"
+      4. 检查 sourceMappingURL=，如果有则下载 .js.map:
+         curl --interface tun0 -s -o "${PROJECT_DIR}/js_dumps/<target_hash>/<js_filename>.js.map" "<map_url>"
+      5. 记录已下载的文件列表: ls -la "${PROJECT_DIR}/js_dumps/<target_hash>/"
+
+      ===== 第二步：对本地JS文件做审计分析 =====
+      在已下载到本地的 JS 文件上执行以下分析（基于已下载的本地文件，不重复curl）：
+
+      1. **定位API入口**:
+         grep -oP '(baseURL|API_HOST|API_BASE|gatewayUrl|serverUrl)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"]+["'"'"]' "${PROJECT_DIR}/js_dumps/<target_hash>"/*.js
+      2. **路径模式提取**:
          全量提取 "/xxx/yyy" 路径，按一级目录分组统计
          关注非标准前缀: /gateway/, /dwr/, /sys/, /manage/, /crm/, /erp/
-
-      3. 第三层 - Source Map还原:
-         检查 //# sourceMappingURL= 并尝试下载 .js.map
+      3. **Source Map还原**:
+         检查本地下载的 .js.map 文件，用 python3 解析
          Webpack chunk分析: chunks/ js/ 命名暴露功能模块
-
-      4. 第四层 - 敏感信息提取:
+      4. **敏感信息提取**（在本地文件上执行）:
          - AccessKey: AKID模式、AKIA模式、LTAI(阿里云)
          - OSS存储桶密钥: OBS_ACCESS_KEY / OSS_ACCESS_KEY / AWS_ACCESS_KEY
          - SecretKey/Token/密码硬编码
@@ -479,14 +487,20 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
          - 数据库连接串 → mongodb/mysql/postgresql/redis://
          - 内网IP/域名 → 判断是哪个环境(dev/test/prod)
          - 测试账号硬编码
-
-      5. 鉴权方式识别:
+      5. **鉴权方式识别**:
          - Authorization: Bearer / Basic
          - X-TOKEN / X-Auth-Token
          - Cookie + sessionId
          - localStorage Token存放
+      6. **凭证反思**:
+         找到accessKey+secretKey → 哪个云服务的？试列举 OBS/S3/OSS Bucket
+         找到OSS连接信息 → endpoint + bucket → 直接测试 ListObjects
+         找到账号密码 → 哪个系统的？钉钉/LDAP/数据库/邮件
+         找到JWT → 解码看user/role，试调API看是否越权
+         找到API路径 → 功能命名可推断数据敏感度
 
-      只做读取分析。`,
+      注意: 只做读取分析。遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)。
+      本地文件分析完成后不要删除缓存文件，留作证据。`,
           { label: `🔬 JS分析: ${target}`, phase: '深度分析' }
         )
       },

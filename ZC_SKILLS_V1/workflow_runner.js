@@ -865,20 +865,42 @@ if (mode.startsWith('phase5')) {
     log('  📂 执行字典目录扫描 (dirsearch)...')
     const P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
 
-    const p3_dirsearch = await agent(
-      `对 ${resolvedProject} 执行基于字典的标准目录扫描。
-🔒 VPN: 所有 curl 探测必须加 --interface tun0
+        const p3_dirsearch = await agent(
+      `对 ${resolvedProject} 执行 dirsearch 目录扫描（使用 dirsearch 内置字典 + 积累字典）。
+🔒 VPN: 所有 dirsearch 和 curl 命令必须加 --interface tun0
 
-目标:
-${targets.slice(0, 20).map(t => `  ${t.url}`).join('
+===== 目标列表（前20个） =====
+${targets.slice(0, 20).map(t => `  ${t.url} — ${(t.tags||[]).join(',')}`).join('
 ')}
+============================
 
-1. 先Read字典 ${P3_DICT_PATH} 获取积累路径
-2. 组合扫描: framework_patterns + api_prefixes/path_segments + common_endpoints
-3. 通用兜底: /admin/, /swagger-ui.html, /.env, /actuator, /druid/ 等
-4. 对200/401/403端点记录
+**操作方法（必须按顺序执行）：**
 
-输出: endpoint, status_code, source, response_preview`,
+**Step 1: 准备积累字典扩展词表**
+先Read ${P3_DICT_PATH} 获取积累的API模式。
+从JSON提取: framework_patterns 路径, api_prefixes+path_segments 组合, common_endpoints。
+写入临时文件: /tmp/zc_dirsearch_custom.txt（每行一个路径，无前导/）
+
+**Step 2: 对每个目标执行 dirsearch 命令**
+dirsearch 内置字典: /home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt（9482条）
+
+对每个目标URL依次执行:
+\`\`\`bash
+cat /home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt /tmp/zc_dirsearch_custom.txt | sort -u > /tmp/zc_merged_dict.txt
+dirsearch -u "<target_url>" \
+  -w /tmp/zc_merged_dict.txt \
+  --interface tun0 \
+  -e php,asp,aspx,jsp,html,js,json,xml,txt,sql,conf,zip,tar.gz,bak,old,log \
+  -t 10 --timeout=5 \
+  -o /tmp/zc_dirsearch_results.txt --format plain 2>&1 | tail -50
+\`\`\`
+
+**Step 3: 解析结果**
+读取 /tmp/zc_dirsearch_results.txt，提取 200/301/401/403 的端点。
+对200端点用 curl --interface tun0 -s 确认非空。
+
+**输出要求：**
+只记录确认有效的端点。new_endpoints 输出本次新发现的可积累端点。`,
       { label: '📂 字典目录扫描 (dirsearch)', schema: {
         type: 'object',
         properties: {
@@ -890,14 +912,17 @@ ${targets.slice(0, 20).map(t => `  ${t.url}`).join('
                 target: { type: 'string' },
                 endpoint: { type: 'string' },
                 status_code: { type: 'number' },
-                source: { type: 'string', enum: ['框架路径', '字典积累', '通用路径', 'JS推断', '组件端点'] },
+                source: { type: 'string', enum: ['dirsearch内置', '积累字典', '混合', '通用路径'] },
                 response_preview: { type: 'string' },
                 severity: { type: 'string', enum: ['高危', '中危', '低危', '信息'] },
               },
               required: ['target', 'endpoint', 'status_code', 'source'],
             },
           },
-          new_endpoints: { type: 'array', items: { type: 'string' } },
+          new_endpoints: {
+            type: 'array',
+            items: { type: 'string' },
+          },
         },
         required: ['findings'],
       }, phase: '漏洞挖掘' }

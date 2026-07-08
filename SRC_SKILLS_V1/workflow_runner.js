@@ -995,36 +995,59 @@ if (mode.startsWith('phase5')) {
     const P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
 
     const p3_dirsearch = await agent(
-      `你是目录扫描专家，对 ${companyName} 执行基于字典的标准目录扫描。
+      `对 ${companyName} 执行 dirsearch 目录扫描（使用 dirsearch 内置字典 + 积累字典）。
 
-===== 目标列表 =====
+===== 目标列表（前20个） =====
 ${targets.slice(0, 20).map(t => `  ${t.url} — ${(t.tags||[]).join(',')}`).join('
 ')}
-====================
+============================
 
-**操作方法：**
+**操作方法（必须按顺序执行）：**
 
-1. **先Read字典文件** ${P3_DICT_PATH} 获取所有积累的路径模式
-2. **组合扫描路径** — 从字典中提取以下内容组合成URL列表:
-   - framework_patterns 下所有框架的路径（匹配已知框架的）
-   - common_endpoints 中积累的历史可用端点
-   - api_prefixes 中积累的API前缀 + path_segments 组合
-3. **对每个组合URL使用 curl 探测**（必须带浏览器UA绕过WAF）
-4. **通用兜底路径**（字典中没有的也扫，按优先级）:
-   - 后台管理: /admin/, /manager/, /console/, /system/, /dashboard/
-   - API文档: /swagger-ui.html, /v3/api-docs, /doc.html, /v2/api-docs
-   - 配置泄露: /.env, /robots.txt, /.git/config, /WEB-INF/web.xml, /backup/
-   - 组件端点: /actuator, /druid, /nacos, /scheduler, /quartz/
-   - 备份文件: 尝试 *.bak, *.zip, *.tar.gz, *.old, *.save
+**Step 1: 准备积累字典扩展词表**
+先Read ${P3_DICT_PATH} 获取积累的API模式。
+从该JSON中提取所有可测试的路径:
+- framework_patterns 下所有框架的路径
+- api_prefixes 的每个key + path_segments 的每个值组合（如 /api/v3/user, /api/v3/admin ...）
+- common_endpoints 列表
+写入临时文件: \`/tmp/dirsearch_custom.txt\`（每行一个路径，无前导/）
 
-**Step 3: 对状态码 200/401/403 的端点做快速验证**
-   用 curl -s 获取响应体前200字符，确认不是空页面或默认404页
+**Step 2: 对每个目标执行 dirsearch 命令**
+dirsearch 内置字典: /home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt（9482条内置路径）
 
-**输出要求：** 只记录状态码 200/401/403 的端点。
-对每个发现记录：endpoint, status_code, 响应摘要, 来源（框架路径/字典积累/通用路径/JS推断）
+对每个目标URL依次执行:
+\`\`\`bash
+# 合并字典运行
+dirsearch -u "<target_url>" \
+  -w /home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt \
+  --extra-dict /tmp/dirsearch_custom.txt \
+  -e php,asp,aspx,jsp,html,js,json,xml,txt,sql,conf,zip,tar.gz,bak,old,log \
+  -t 10 --timeout=5 \
+  -o /tmp/dirsearch_results.txt --format plain 2>&1 | tail -50
+\`\`\`
+如果 --extra-dict 参数不可用，则改为:
+\`\`\`bash
+cat /home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt /tmp/dirsearch_custom.txt | sort -u > /tmp/merged_dict.txt
+dirsearch -u "<target_url>" \
+  -w /tmp/merged_dict.txt \
+  -e php,asp,aspx,jsp,html,js,json,xml,txt,sql,conf,zip,tar.gz,bak,old,log \
+  -t 10 --timeout=5 \
+  -o /tmp/dirsearch_results.txt --format plain 2>&1 | tail -50
+\`\`\`
+
+**Step 3: 解析运行结果**
+读取 /tmp/dirsearch_results.txt，提取所有状态码为 200/301/401/403 的端点。
+
+**Step 4: 对发现的端点做快速验证（确认非空页面）**
+对每个200端点，用 curl -s -o /tmp/verify.html -w "%{http_code}" 获取响应体，
+检查文件大小 > 100字节才视为有效发现。
+
+**输出要求：**
+只记录确认有效的端点。每个发现附带: endpoint, status_code, source（dirsearch内置/积累字典/混合）
+同时在 new_endpoints 中输出本次新发现的可积累端点。
 
       ${UA_INSTR}
-      ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件（字典文件除外）。不要引用其他厂商数据。**`,
+      ⚠️ **边界规则：仅对目标列表URL执行。不要读取本地非字典文件。**`,
       { label: '📂 字典目录扫描 (dirsearch)', schema: {
         type: 'object',
         properties: {
@@ -1036,7 +1059,7 @@ ${targets.slice(0, 20).map(t => `  ${t.url} — ${(t.tags||[]).join(',')}`).join
                 target: { type: 'string' },
                 endpoint: { type: 'string' },
                 status_code: { type: 'number' },
-                source: { type: 'string', enum: ['框架路径', '字典积累', '通用路径', 'JS推断', '组件端点'] },
+                source: { type: 'string', enum: ['dirsearch内置', '积累字典', '混合', '通用路径'] },
                 response_preview: { type: 'string', description: '响应体前100字符' },
                 severity: { type: 'string', enum: ['高危', '中危', '低危', '信息'] },
               },

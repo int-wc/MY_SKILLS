@@ -1669,7 +1669,59 @@ if (mode.startsWith('phase5') || typeof p1_assets === 'undefined' || !p1_assets 
     ).join('\n')
 
     // 准备线索数据，传给Phase 5 agent供存储
-    const p5_findings_json = JSON.stringify(p3_findings_data, null, 2)
+    // ============================================================
+    // 🔧 程序化合并写入 — 确保 asset_test_status.json + asset_findings.json 为追加/合并模式
+    // 不依赖AI agent自觉性，硬性执行读-合并-写
+    // ============================================================
+    log('  🔧 程序化合并 asset 状态文件...')
+    const p5_merge = await agent(
+      `你是文件合并专家，严格按以下步骤操作 ${companyName} 的资产状态文件。
+
+**任务A: 合并 asset_test_status.json（追加模式，不可覆盖）**
+
+文件: ${trackerPath}
+
+操作步骤:
+1. 用Read工具读取 ${trackerPath}
+   - 如果文件不存在（Read报错），初始化为 {"assets": {}}
+   - 如果文件存在，解析JSON保留所有已有记录
+2. 将本次运行的新资产记录**追加/更新**到 assets 对象中
+   - 新记录（url不在已有数据中）→ 追加
+   - 已有记录（url已存在）→ **合并 phas_tested 数组**（去重），更新 last_tested
+   - **绝对不能删除**旧资产中不在本次清单的记录
+3. 用Write工具写回 ${trackerPath}
+
+本次需要追加/更新的资产数据（来自 dimTracker）:
+${JSON.stringify(dimTracker.toJSON(), null, 2)}
+
+对应的完整资产信息:
+${p5_dim_rows.map(a =>
+  `  ${a.url}: title="${a.title}", tags=[${(a.tags||[]).join(',')}], completed=[${a.completed.join(',')}], missing=[${a.missing.join(',')}]`
+).join('\n')}
+
+**任务B: 合并 asset_findings.json（追加模式，按 endpoint 去重）**
+
+文件: ${findingsPath}
+
+操作步骤:
+1. 用Read工具读取 ${findingsPath}
+   - 如果不存在，初始化为 {"findings": []}
+2. 将本次发现的线索**追加**到 findings 数组中
+   - 按 endpoint 去重：如果 endpoint 已存在，更新其 status/phase_discovered
+   - 如果 endpoint 不存在，追加新条目
+3. 用Write工具写回 ${findingsPath}
+
+本次需要追加的发现数据（${p3_findings_data.length} 条）:
+${JSON.stringify(p3_findings_data, null, 2).substring(0, 10000)}
+
+**硬性规则（必须遵守）：**
+- ⚠️ **不能覆盖已有文件**，只能读取→合并→写入
+- ⚠️ **不能删除**旧资产记录，只能追加和更新
+- ⚠️ findings 按 endpoint 去重，不是按 title
+- ⚠️ 保持JSON格式正确，不能截断
+- ✅ 写入后执行一次 ls -la 确认文件大小正常`,
+      { label: '🔧 程序化合并 asset 文件', phase: '资产标记' }
+    )
 
     const p5_mark = await agent(
       `你是SRC资产状态管理专家，对 ${companyName || ''} 的资产做测试状态标记并持久化存储。

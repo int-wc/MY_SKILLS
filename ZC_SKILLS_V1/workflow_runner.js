@@ -1535,7 +1535,52 @@ if (mode.startsWith('phase5') || !p1_assets || !p1_assets.priority_targets || p1
 
     const p5_findings_json = JSON.stringify(p3_findings_data, null, 2)
 
-    const p5_mark = await agent(
+    // ============================================================
+    // 🔧 程序化合并写入 — asset_test_status.json + asset_findings.json 追加/合并
+    // ============================================================
+    log('  🔧 程序化合并 asset 状态文件...')
+    const p5_merge = await agent(
+      `严格按以下步骤合并 ${resolvedProject} 的资产状态文件。
+🔒 文件操作用Read/Write工具完成。
+
+**任务A: 合并 asset_test_status.json（只追加合并，不覆盖）**
+
+文件: ${PROJECT_DIR}/asset_test_status.json
+
+操作:
+1. Read读取 ${PROJECT_DIR}/asset_test_status.json → 不存在则初始化为 {"assets":{}}
+2. 将本次新资产记录**追加/更新**到 assets 中
+   - 新url → 追加
+   - 已有url → 合并 phases_tested 去重，更新 last_tested
+   - **绝对不能删除**旧记录
+3. Write写回
+
+本次需追加的维度数据:
+${JSON.stringify(dimTracker.toJSON(), null, 2)}
+
+资产详情:
+${p5_dim_rows.map(a => `  ${a.url}: completed=[${a.completed.join(',')}] missing=[${a.missing.join(',')}]`).join('\n')}
+
+**任务B: 合并 asset_findings.json（按 endpoint 去重追加）**
+
+文件: ${PROJECT_DIR}/asset_findings.json
+
+操作:
+1. Read读取 → 不存在则初始化为 {"findings":[]}
+2. 追加本次发现（${p3_findings_data.length}条）到findings中
+   - endpoint已存在 → 更新 status
+   - endpoint不存在 → 追加
+3. Write写回
+
+本次发现:
+${JSON.stringify(p3_findings_data, null, 2).substring(0, 10000)}
+
+**硬性规则：** 不能覆盖已有文件，不能删除旧记录，按endpoint去重，
+写入后执行 ls -la 确认文件大小正常。`,
+      { label: '🔧 程序化合并 asset 文件', phase: '资产标记' }
+    )
+
+
       `你是360众测资产状态管理专家，对 ${resolvedProject} 的资产做测试状态标记并持久化存储。
 
 ===== 结构化测试维度数据 =====

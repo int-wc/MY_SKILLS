@@ -22,13 +22,23 @@ export const meta = {
 // ============================================================
 const SRC_BASE = '/home/my/butiansrc/Exclusive_SRC'
 
-// P2: 共享字典 — 从ZC复制积累的API模式
+// P2: 共享字典 — SRC↔ZC 互相复制积累的API模式
 try {
-  const zcDict = '/home/my/.claude/skills/ZC_SKILLS_V1/references/api_patterns.json'
-  const srcDict = '/home/my/.claude/skills/SRC_SKILLS_V1/references/api_patterns.json'
-  // 读取本地MY_SKILLS版本的字典（如果存在）
-  // 在workflow运行时，脚本会使用SKILL_SCRIPTS路径下的字典
-} catch(e) {}
+  const fs = require('fs')
+  const skillsRoot = '/home/my/.claude/skills'
+  const pairs = [
+    ['SRC_SKILLS_V1', 'ZC_SKILLS_V1'],
+    ['ZC_SKILLS_V1', 'SRC_SKILLS_V1'],
+  ]
+  for (const [from, to] of pairs) {
+    const src = `${skillsRoot}/${from}/references/api_patterns.json`
+    const dst = `${skillsRoot}/${to}/references/api_patterns.json`
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, dst)
+      log(`  📚 字典共享: ${from} → ${to}`)
+    }
+  }
+} catch(e) { /* 字典共享非关键，失败不影响主流程 */ }
 const SKILL_SCRIPTS = '/home/my/.claude/skills/SRC_SKILLS_V1/scripts'
 
 // ============================================================

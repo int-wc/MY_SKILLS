@@ -81,6 +81,17 @@ VPN 脚本: ${PROJECT_DIR}/OPENVPN/vpn-split.sh
 )
 
 // 目标进度追踪
+// P2: 共享字典 — SRC↔ZC 互相复制
+try {
+  const fs = require('fs')
+  const skillsRoot = '/home/my/.claude/skills'
+  for (const [from, to] of [['ZC_SKILLS_V1','SRC_SKILLS_V1'], ['SRC_SKILLS_V1','ZC_SKILLS_V1']]) {
+    const src = `${skillsRoot}/${from}/references/api_patterns.json`
+    const dst = `${skillsRoot}/${to}/references/api_patterns.json`
+    if (fs.existsSync(src)) { fs.copyFileSync(src, dst); log(`  📚 字典共享: ${from} → ${to}`) }
+  }
+} catch(e) {}
+
 const progress = {
   project: resolvedProject,
   phase1: '⬜', phase2: '⬜', phase3: '⬜', phase4: '⬜',

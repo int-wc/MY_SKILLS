@@ -573,7 +573,6 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "${target_dump}" 2>&1
         }
 
         // === Step C: Agent 创造性分析 ===
-        return await agent(        // === Step C: Agent 阅读本地文件 + 创造性分析 ===
         return await agent(
           `你是JS逆向和API发现专家，分析已下载到本地的JS文件: ${target}
 
@@ -669,7 +668,7 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "${target_dump}" 2>&1
 重点识别：JeecgBoot、RuoYi（若依）、JeeSite、Guns、TeaWeb、BladeX、低代码平台等。
 
 目标列表（前 20 个）:
-${targets.slice(0, 20).map(t => `  ${t}`).join('\n')}
+${targets.slice(0, 20).map(function(t) { return '  ' + t }).join(String.fromCharCode(10))}
 
 **Step 1: 指纹采集**
 对每个目标执行 curl -sI + curl -s 首页 + curl -sk /swagger-ui.html /doc.html
@@ -909,6 +908,7 @@ ${TARGET_IPS.map(t => `  - ${t}`).join('\n')}
   } else {
     log('  ℹ️ 无目标需加入 VPN 路由')
   }
+  }
 }
 
 // ============================================================
@@ -946,8 +946,7 @@ if (mode.startsWith('phase5')) {
 🔒 VPN: 所有 dirsearch 和 curl 命令必须加 --interface tun0
 
 ===== 目标列表（前20个） =====
-${targets.slice(0, 20).map(t => `  ${t.url} — ${(t.tags||[]).join(',')}`).join('
-')}
+${targets.slice(0, 20).map(function(t) { return '  ' + t.url + ' — ' + (t.tags||[]).join(',') }).join(String.fromCharCode(10))}
 ============================
 
 **操作方法（必须按顺序执行）：**
@@ -1010,7 +1009,7 @@ dirsearch -u "<target_url>" \
     }
 
     // dirsearch结果回注到unauth_test
-    let zc_dirsearch_ctx \n\n\t**Phase 2提取的结构化凭证（优先级高，优先于下方文本）**:\n\t${{typeof globalThis.__zc_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__zc_creds_json).slice(0, 10), null, 2) : '（无）'}}\n\n\t**JS缓存目录（可回查本地JS及还原源码）**:\n\t${{typeof globalThis.__zc_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__zc_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\\n') : '（无）'}}\n= ''
+    let zc_dirsearch_ctx = `\n\n\t**Phase 2提取的结构化凭证（优先级高，优先于下方文本）**:\n\t${typeof globalThis.__zc_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__zc_creds_json).slice(0, 10), null, 2) : '（无）'}\n\n\t**JS缓存目录（可回查本地JS及还原源码）**:\n\t${typeof globalThis.__zc_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__zc_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\n') : '（无）'}\n`
     if (typeof p3_dirsearch !== 'undefined' && p3_dirsearch?.findings && p3_dirsearch.findings.length > 0) {
       const deps = p3_dirsearch.findings.filter(f => [200,401,403].includes(f.status_code)).map(f => `  ${f.endpoint} [${f.status_code}]`)
       if (deps.length > 0) {
@@ -1025,10 +1024,10 @@ dirsearch -u "<target_url>" \
 🔒 VPN 强制要求: 所有 curl/HTTP 请求必须使用 --interface tun0 参数走 VPN 隧道（如: curl --interface tun0 -sk https://target）
 
 高优目标列表:
-${targets.map(t => `  ${t.priority} | ${t.url} | tags: ${(t.tags||[]).join(',')}`).join('\n')}
+${targets.map(function(t) { return '  ' + t.priority + ' | ' + t.url + ' | tags: ' + (t.tags||[]).join(',') }).join('\\n')}
 
 常规URL列表:
-${allUrls.map(u => `  ${u}`).join('\n')}
+${allUrls.map(function(u) { return '  ' + u }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点:
 ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}\n\n\t${zc_dirsearch_ctx}
@@ -1109,7 +1108,7 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分
 🔒 VPN 强制要求: 所有 curl/HTTP 请求必须使用 --interface tun0 参数走 VPN 隧道
 
 高优目标:
-${targets.map(t => `  ${t.url}`).join('\n')}
+${targets.map(function(t) { return '  ' + t.url }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点:
 ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
@@ -1217,7 +1216,7 @@ ${ossText}${cacheNote}
 2. 文件下载/导出 — 路径遍历(../)、XXE
 3. **命令执行 — Runtime.exec/shell_exec/system/ProcessBuilder 参数可控性**
    ⚠️ **必须追溯参数来源，按场景分类:**
-   **A. 业务设计（非漏洞）→ 标注 `is_business_feature: true` + `reasoning_code`:**
+   **A. 业务设计（非漏洞）→ 标注 \`is_business_feature: true\` + \`reasoning_code\`:**
       - ProcessBuilder 命令硬编码（如 ffmpeg/edge-tts/git），非用户输入
       - Class.forName 有包名白名单（如 startsWith("org.jeecg.")）+ 接口校验
       - 参数来自系统配置，非 HTTP 参数
@@ -1225,7 +1224,7 @@ ${ossText}${cacheNote}
       - @RequestParam/@RequestBody 直接拼接到命令
       - Class.forName 无白名单/白名单可绕过
       - 无 @RequiresPermissions/@PreAuthorize 保护
-   **每个发现必须附带:** `is_business_feature`, `reasoning_code`(代码片段), `user_controllable`
+   **每个发现必须附带:** \`is_business_feature\`, \`reasoning_code\`(代码片段), \`user_controllable\`
 
 4. **SQL注入 — MyBatis \${} 拼接(orderBy)、@Select/@Query 原生 SQL**
 5. 反序列化 — readObject/fromJson/Fastjson 输入可控、AutoType
@@ -1337,7 +1336,7 @@ ${ossText}${cacheNote}
         `对 ${resolvedProject} 的以下剩余资产做全量漏洞测试。
 
 剩余资产列表（${tier2_urls.length} 个）:
-${tier2_urls.map(u => `  ${u}`).join('\n')}
+${tier2_urls.map(function(u) { return '  ' + u }).join('\n')}
 
 执行全量测试:
 1. curl -sI 每个URL确认HTTP状态码
@@ -1706,7 +1705,7 @@ if (mode.startsWith('phase5') || !p1_assets || !p1_assets.priority_targets || p1
 ${JSON.stringify(dimTracker.toJSON(), null, 2)}
 
 资产详情:
-${p5_dim_rows.map(a => `  ${a.url}: completed=[${a.completed.join(',')}] missing=[${a.missing.join(',')}]`).join('\n')}
+${p5_dim_rows.map(function(a) { return '  ' + a.url + ': completed=[' + a.completed.join(',') + '] missing=[' + a.missing.join(',') + ']' }).join(String.fromCharCode(10))}
 
 **任务B: 合并 asset_findings.json（按 endpoint 去重追加）**
 
@@ -1727,7 +1726,7 @@ ${JSON.stringify(p3_findings_data, null, 2).substring(0, 10000)}
       { label: '🔧 程序化合并 asset 文件', phase: '资产标记' }
     )
 
-
+    const p5_mark = await agent(
       `你是360众测资产状态管理专家，对 ${resolvedProject} 的资产做测试状态标记并持久化存储。
 
 ===== 结构化测试维度数据 =====

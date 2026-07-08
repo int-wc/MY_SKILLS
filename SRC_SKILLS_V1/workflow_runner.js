@@ -288,7 +288,7 @@ if (mode.startsWith('phase5')) {
   log('')
   log('使用方式: 在 Workflow args 中指定 company 参数')
   log('  例: Workflow({scriptPath: "...", args: {company: "理想汽车", mode: "full"}})')
-  return { status: 'need_company', message: '请指定目标公司名' }
+  throw new Error('need_company: 请指定目标公司名')
   } else {
 
 markPhase(1, '🔄')
@@ -387,7 +387,7 @@ if (!p1_assets) {
   log('⚠️ 资产发现无返回，请检查目录是否存在或内容格式')
   markPhase(1, '❌')
   showProgress()
-  return { error: '资产发现失败', progress }
+  throw new Error('资产发现失败')
 }
 
 // ============================================================
@@ -497,7 +497,6 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
         // 失败自动重试1次
         for (let _retry = 0; _retry < 2; _retry++) {
           var mechResult = await agent(
-        const mechResult = await agent(
           `执行以下命令串行:
 # 1. 下载JS
 python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/js_dumps" --ua "${REAL_UA}"
@@ -577,7 +576,6 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "${target_dump}" 2>&1
 
         // === Step C: Agent 阅读本地文件 + 创造性分析 ===
         return await agent(        // === Step C: Agent 阅读本地文件 + 创造性分析 ===
-        return await agent(
           `你是JS逆向和API发现专家，分析已下载到本地的JS文件: ${target}
 
     已下载文件目录: ${dl_dump_dir}
@@ -684,7 +682,7 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "${target_dump}" 2>&1
 重点识别：JeecgBoot、RuoYi（若依）、JeeSite、Guns、TeaWeb、BladeX、Pear Admin、低代码平台/iPaas 等。
 
 目标列表（前 20 个）:
-${targets.slice(0, 20).map(t => `  ${t.url}`).join('\n')}
+${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.fromCharCode(10))}
 
 对每个目标执行以下步骤：
 
@@ -954,6 +952,7 @@ cat ${fuzz_out}`,
 
   markPhase(2, '✅')
   showProgress()
+  }
 }
 
 // ============================================================
@@ -1003,8 +1002,7 @@ if (mode.startsWith('phase5')) {
       `对 ${companyName} 执行 dirsearch 目录扫描（使用 dirsearch 内置字典 + 积累字典）。
 
 ===== 目标列表（前20个） =====
-${targets.slice(0, 20).map(t => `  ${t.url} — ${(t.tags||[]).join(',')}`).join('
-')}
+${targets.slice(0, 20).map(function(t) { return '  ' + t.url + ' — ' + (t.tags||[]).join(',') }).join(String.fromCharCode(10))}
 ============================
 
 **操作方法（必须按顺序执行）：**
@@ -1091,8 +1089,7 @@ dirsearch -u "<target_url>" \
       if (p3_dirsearch.new_endpoints && p3_dirsearch.new_endpoints.length > 0) {
         await agent(
           `读取 ${P3_DICT_PATH}，将以下新端点追加到 common_endpoints 数组中并写入（去重）:
-${p3_dirsearch.new_endpoints.map(e => `  - ${e}`).join('
-')}
+${p3_dirsearch.new_endpoints.map(function(e) { return '  - ' + e }).join(String.fromCharCode(10))}
 
 用Read工具读取 → 去重合并 → Write工具写回。`,
           { label: '📚 更新字典 common_endpoints', phase: '漏洞挖掘' }
@@ -1129,10 +1126,10 @@ ${p3_dirsearch.new_endpoints.map(e => `  - ${e}`).join('
 4. 扩展为路 — 在已有发现基础上逐步扩展攻击面，而非盲目扫描
 
 高优目标列表:
-${targets.map(t => `  ${t.priority} | ${t.url} | tags: ${(t.tags||[]).join(',')}`).join('\n')}
+${targets.map(function(t) { return '  ' + t.priority + ' | ' + t.url + ' | tags: ' + (t.tags||[]).join(',') }).join('\\n')}
 
 常规URL列表:
-${allUrls.map(u => `  ${u}`).join('\n')}
+${allUrls.map(function(u) { return '  ' + u }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点/API路径:
 ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
@@ -1258,7 +1255,7 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? 'JS文件已下载到本
 4. 扩展为路 — 从已发现的脆弱点逐步扩大
 
 高优目标:
-${targets.map(t => `  ${t.url}`).join('\n')}
+${targets.map(function(t) { return '  ' + t.url }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点/API路径:
 ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
@@ -1351,14 +1348,25 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__
     // Tier 2: 剩余资产全量测试（非快速探测，所有目标做完整维度测试）
     p3_quick = null
     if (tier2_urls.length > 0) {
+      // 预构建上下文信息字符串（避免解析器对嵌套引号的误判）
+      var _t2urls = ''
+      for (var _i2 = 0; _i2 < tier2_urls.length; _i2++) { _t2urls += '  ' + tier2_urls[_i2] + '\n' }
+      var _crd = '（无）'
+      if (typeof globalThis.__p2_creds_json !== 'undefined') {
+        try { _crd = JSON.stringify(JSON.parse(globalThis.__p2_creds_json).slice(0, 10), null, 2) } catch(e) { _crd = '（无）' }
+      }
+      var _jsd = '（无）'
+      if (typeof globalThis.__p2_js_dirs_json !== 'undefined') {
+        try { _jsd = JSON.parse(globalThis.__p2_js_dirs_json).map(function(d) { return d.dump_dir }).join('\n') } catch(e) { _jsd = '（无）' }
+      }
       p3_quick = await agent(
         `对 ${companyName} 的以下剩余资产做**全量漏洞测试**。
 
 剩余资产列表（${tier2_urls.length} 个）:
-${tier2_urls.map(u => `  ${u}`).join('\n\n	第2阶段提取的结构化凭证:
-	${typeof globalThis.__p2_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__p2_creds_json).slice(0, 10), null, 2) : '（无）'}
-	JS缓存目录:
-	${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__p2_js_dirs_json).map(d => d.dump_dir).join('\n') : '（无）'}\n')}
+${_t2urls}\t第2阶段提取的结构化凭证:
+\t\t${_crd}
+\t\tJS缓存目录:
+\t\t${_jsd}
 
 执行全量测试（每个目标深入测试）:
 1. curl -sI -H 'User-Agent: ...' 每个URL确认HTTP状态码（必须带浏览器UA）
@@ -1905,6 +1913,7 @@ ${p5_dim_report_short}
       Object.values(p5_mark.assets).forEach(a => { if (counts[a.status] !== undefined) counts[a.status]++ })
       log(`  📊 AI判定: 已完成 ${counts['已完全测试完毕']} | 未完成 ${counts['还未测试完毕']} | 无法测试 ${counts['无法进行测试']}`)
     }
+  }
   markPhase(5, '✅')
   showProgress()
 }
@@ -2224,7 +2233,7 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
         `执行以下命令处理F判定的报告（${fCount} 份）:
 
 1. 将以下报告移入 _invalid/ 目录:
-${fNames.map(n => `   mv "${SRC_BASE}/${companyName}/submittable_reports/${n}" "${SRC_BASE}/${companyName}/submittable_reports/_invalid/${n}"`).join('\n')}
+${fNames.map(function(n) { return '   mv "' + SRC_BASE + '/' + companyName + '/submittable_reports/' + n + '" "' + SRC_BASE + '/' + companyName + '/submittable_reports/_invalid/' + n + '"' }).join('\\n')}
 
 2. 运行整合脚本:
    python3 ${SKILL_SCRIPTS}/consolidate_findings.py ${SRC_BASE}/${companyName}/submittable_reports/
@@ -2305,13 +2314,5 @@ log(`║  ① ${progress.phase1}   ② ${progress.phase2}   ③ ${progress.phase
 log('╚══════════════════════════════════════════════════════════════╝')
 showProgress()
 
-return {
-  company: companyName,
-  mode,
-  progress: { ...progress },
-  summary: {
-    priority_targets: (p1_assets?.priority_targets || []).length,
-    findings: progress.findings_count,
-    reports: progress.reports_count,
-  },
-}
+// Final return
+return { company: companyName, mode: mode, done: true }

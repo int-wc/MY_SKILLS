@@ -475,34 +475,83 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
     const analyses = await pipeline(
       targets,
       async (target) => {
-        // === Step A: 脚本下载JS到本地 ===
-        const dl_result_raw = await agent(
-          `执行 python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/js_dumps" --ua "${REAL_UA}"
-    输出最后一行为JSON结果。提取 dump_dir、file_count、target_hash。`,
-          { label: `📥 下载JS: ${target}`, phase: '深度分析' }
+        // === Step A+B+Creds: 合并机械操作（1个agent，减少调用次数） ===
+        const mechResult = await agent(
+          `执行以下命令串行:
+# 1. 下载JS
+python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/js_dumps" --ua "${REAL_UA}"
+# 2. 枚举chunk补下
+python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "${target_dump}" "${target}" --ua "${REAL_UA}"
+# 3. 提取凭证
+python3 ${SKILL_SCRIPTS}/extract_creds.py "${target_dump}" 2>&1
+
+注意: target_dump 通过下载结果的 dump_dir 获取。
+先执行1，从JSON输出提取dump_dir，再执行2和3。
+
+输出格式要求：
+---DOWNLOAD_RESULT---
+{...下载结果JSON...}
+---CHUNK_RESULT---
+{...chunk结果JSON...}
+---CREDS_RESULT---
+{...凭证结果JSON...}`,
+          { label: `🤖 机械操作: ${target}`, phase: '深度分析' }
         )
 
-        // 解析下载结果
+        // 解析结果
         let dl_dump_dir = "${SRC_BASE}/${companyName}/js_dumps"
         let dl_file_count = 0
+        let target_hash = ""
         try {
-          const dl_lines = (dl_result_raw || '').split('\\n').filter(l => l.trim().startsWith('{'))
-          if (dl_lines.length > 0) {
-            const dl = JSON.parse(dl_lines[dl_lines.length-1])
+          const dlPart = (mechResult || '').split('---DOWNLOAD_RESULT---')[1] || ''
+          const dlMatch = dlPart.match(/{[^}]+}/)
+          if (dlMatch) {
+            const dl = JSON.parse(dlMatch[0])
             if (dl.dump_dir) dl_dump_dir = dl.dump_dir
             if (dl.file_count) dl_file_count = dl.file_count
+            if (dl.target_hash) target_hash = dl.target_hash
           }
         } catch(e) {}
-        if (dl_file_count > 0) log(`  📥 ${target}: 下载 ${dl_file_count} 个文件`)
+        if (dl_file_count > 0) log(`  📥 ${target}: 下载 ${dl_file_count} 个文件, hash=${target_hash}`)
+        if (dl_file_count === 0) log(`  ⚠️ ${target}: JS下载可能失败（0文件），检查网络或target是否可达`)
+        if (target_hash === "") log(`  ⚠️ ${target}: 未解析到target_hash，chunk枚举和凭证提取可能未执行`)
 
-        // === Step B: 脚本枚举chunk补下载 ===
-        await agent(
-          `执行 python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "${dl_dump_dir}" "${target}" --ua "${REAL_UA}"
-    输出最后一行为JSON结果。提取 new_count。`,
-          { label: '🧩 枚举chunk', phase: '深度分析' }
-        )
+        // 提取凭证到全局变量
+        try {
+          const credsPart = (mechResult || '').split('---CREDS_RESULT---')[1] || ''
+          const credsMatch = credsPart.match(/{[^}]+}/)
+          if (credsMatch) {
+            const credsData = JSON.parse(credsMatch[0])
+            const creds = credsData.credentials || []
+            if (creds.length > 0) {
+              if (!globalThis.__p2_creds_json) globalThis.__p2_creds_json = '[]'
+              const existing = JSON.parse(globalThis.__p2_creds_json)
+              existing.push(...creds)
+              globalThis.__p2_creds_json = JSON.stringify(existing)
+              log(`  🔐 ${target}: 提取 ${creds.length} 条凭证`)
+            }
+          }
+        } catch(e) {}
+
+        // 记录JS缓存目录信息
+        if (target_hash) {
+          if (!globalThis.__p2_js_dirs_json) globalThis.__p2_js_dirs_json = '[]'
+          const dirs = JSON.parse(globalThis.__p2_js_dirs_json)
+          // 检查reconstructed目录
+          const reconDir = dl_dump_dir + '/reconstructed'
+          const hasRecon = fs.existsSync(reconDir) ? fs.readdirSync(reconDir).length > 0 : false
+          dirs.push({
+            target_hash: target_hash,
+            dump_dir: dl_dump_dir,
+            js_count: dl_file_count,
+            has_reconstructed: hasRecon,
+            reconstructed_dir: hasRecon ? reconDir : null,
+          })
+          globalThis.__p2_js_dirs_json = JSON.stringify(dirs)
+        }
 
         // === Step C: Agent 阅读本地文件 + 创造性分析 ===
+        return await agent(        // === Step C: Agent 阅读本地文件 + 创造性分析 ===
         return await agent(
           `你是JS逆向和API发现专家，分析已下载到本地的JS文件: ${target}
 
@@ -590,27 +639,17 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
       }
     } catch(e) {}
 
-    // 凭证结构化注入p2_discoveries_text
-    if (p2_credentials.length > 0) {
-      const byType = {}
-      p2_credentials.forEach(c => {
-        if (!byType[c.type]) byType[c.type] = []
-        byType[c.type].push(c)
-      })
-      let credSummary = '\n【提取的结构化凭证 — 可直接在Phase 3中使用】\n'
-      credSummary += JSON.stringify(byType, null, 2).substring(0, 3000)
-      p2_discoveries_text += credSummary
-      globalThis.__p2_creds_json = JSON.stringify(p2_credentials)
-      log(`  🔐 共 ${p2_credentials.length} 条结构化凭证已注入Phase3上下文`)
+    //     // 凭证结构化已存入 globalThis.__p2_creds_json（供Phase 3直接引用）
+    // 不再重复注入 p2_discoveries_text 避免过载
+    if (globalThis.__p2_creds_json) {
+      const credCount = JSON.parse(globalThis.__p2_creds_json).length
+      if (credCount > 0) p2_discoveries_text += `\n【Phase 2提取了 ${credCount} 条结构化凭证，详见 globalThis.__p2_creds_json】\n`
     }
-
-    // JS缓存目录信息注入
-    if (p2_js_dirs.length > 0) {
-      const dirSummary = p2_js_dirs.map(d =>
-        `  ${d.dump_dir} (${d.js_count}个JS文件${d.has_reconstructed ? ', 含源码reconstructed/' : ''})`
-      ).join('\n')
-      p2_discoveries_text += '\n【JS缓存目录 — Phase 3可直接查阅本地文件】\n' + dirSummary + '\n'
-      globalThis.__p2_js_dirs_json = JSON.stringify(p2_js_dirs)
+// JS缓存目录已存入 globalThis.__p2_js_dirs_json（供Phase 3直接使用）
+    // 不再重复注入 p2_discoveries_text
+    if (globalThis.__p2_js_dirs_json) {
+      const dirCount = JSON.parse(globalThis.__p2_js_dirs_json).length
+      if (dirCount > 0) p2_discoveries_text += `\n【Phase 2有 ${dirCount} 个JS缓存目录，详见 globalThis.__p2_js_dirs_json】\n`
     }
 
     // 【开源系统识别】— 识别快速开发框架/低代码平台（JeecgBoot, RuoYi, JeeSite 等）

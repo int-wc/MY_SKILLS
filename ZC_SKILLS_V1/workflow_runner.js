@@ -502,34 +502,61 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
     const analyses = await pipeline(
       targets,
       async (target) => {
-        // === Step A: 脚本下载JS到本地 ===
-        const dl_result_raw = await agent(
-          `执行 python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${PROJECT_DIR}/js_dumps" --ua "${REAL_UA}" --interface tun0
-    输出最后一行为JSON结果。提取 dump_dir、file_count、target_hash。`,
-          { label: `📥 下载JS: ${target}`, phase: '深度分析' }
+        // === 合并机械操作:下载JS+枚举chunk+提取凭证 ===
+        const mechResult = await agent(
+          `执行以下命令串行:
+# 1. 下载JS(VPN)
+python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${PROJECT_DIR}/js_dumps" --ua "${REAL_UA}" --interface tun0
+# 2. 枚举chunk补下
+python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "${target_dump}" "${target}" --ua "${REAL_UA}" --interface tun0
+# 3. 提取凭证
+python3 ${SKILL_SCRIPTS}/extract_creds.py "${target_dump}" 2>&1
+
+输出格式: ---DOWNLOAD_RESULT---{...}---CHUNK_RESULT---{...}---CREDS_RESULT---{...}`,
+          { label: `🤖 机械操作: ${target}`, phase: '深度分析' }
         )
 
-        // 解析下载结果
         let dl_dump_dir = "${PROJECT_DIR}/js_dumps"
         let dl_file_count = 0
+        let target_hash = ""
         try {
-          const dl_lines = (dl_result_raw || '').split('\\n').filter(l => l.trim().startsWith('{'))
-          if (dl_lines.length > 0) {
-            const dl = JSON.parse(dl_lines[dl_lines.length-1])
+          const dlPart = (mechResult || '').split('---DOWNLOAD_RESULT---')[1] || ''
+          const dlMatch = dlPart.match(/{[^}]+}/)
+          if (dlMatch) {
+            const dl = JSON.parse(dlMatch[0])
             if (dl.dump_dir) dl_dump_dir = dl.dump_dir
             if (dl.file_count) dl_file_count = dl.file_count
+            if (dl.target_hash) target_hash = dl.target_hash
           }
         } catch(e) {}
         if (dl_file_count > 0) log(`  📥 ${target}: 下载 ${dl_file_count} 个文件`)
+        if (dl_file_count === 0) log(`  ⚠️ ${target}: JS下载可能失败（0文件），检查VPN或target是否可达`)
 
-        // === Step B: 脚本枚举chunk补下载 ===
-        await agent(
-          `执行 python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "${dl_dump_dir}" "${target}" --ua "${REAL_UA}" --interface tun0
-    输出最后一行为JSON结果。提取 new_count。`,
-          { label: '🧩 枚举chunk', phase: '深度分析' }
-        )
+        try {
+          const credsPart = (mechResult || '').split('---CREDS_RESULT---')[1] || ''
+          const credsMatch = credsPart.match(/{[^}]+}/)
+          if (credsMatch) {
+            const credsData = JSON.parse(credsMatch[0])
+            const creds = credsData.credentials || []
+            if (creds.length > 0) {
+              if (!globalThis.__zc_creds_json) globalThis.__zc_creds_json = '[]'
+              const existing = JSON.parse(globalThis.__zc_creds_json)
+              existing.push(...creds)
+              globalThis.__zc_creds_json = JSON.stringify(existing)
+              log(`  🔐 ${target}: 提取 ${creds.length} 条凭证`)
+            }
+          }
+        } catch(e) {}
 
-        // === Step C: Agent 阅读本地文件 + 创造性分析 ===
+        if (target_hash) {
+          if (!globalThis.__zc_js_dirs_json) globalThis.__zc_js_dirs_json = '[]'
+          const dirs = JSON.parse(globalThis.__zc_js_dirs_json)
+          dirs.push({ target_hash, dump_dir: dl_dump_dir, js_count: dl_file_count })
+          globalThis.__zc_js_dirs_json = JSON.stringify(dirs)
+        }
+
+        // === Step C: Agent 创造性分析 ===
+        return await agent(        // === Step C: Agent 阅读本地文件 + 创造性分析 ===
         return await agent(
           `你是JS逆向和API发现专家，分析已下载到本地的JS文件: ${target}
 
@@ -609,6 +636,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
 
     if (p2_credentials.length > 0) {
       globalThis.__zc_creds_json = JSON.stringify(p2_credentials)
+      // 凭证已存入结构化变量，不再注入p2_discoveries_text
       log(`  🔐 共 ${p2_credentials.length} 条结构化凭证已提取`)
     }
     if (p2_js_dirs.length > 0) {

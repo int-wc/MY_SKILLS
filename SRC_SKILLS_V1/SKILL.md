@@ -46,7 +46,8 @@ SRC_SKILLS_V1/
 │   ├── deep-mining-methodology.md # 深度挖掘方法论
 │   ├── hunter-reference.md     # Hunter语法与探测命令
 │   ├── phase-cmd-reference.md  # 各阶段bash命令/字典/CVE表
-│   └── report-templates.md     # 报告模板(标准+利用链)
+│   ├── report-templates.md     # 报告模板(标准+利用链)
+│   └── api_patterns.json       # 跨厂商API模式积累字典（自动增长）
 └── assets/
     ├── report-template.html    # 报告HTML样式模板
     └── 报告导航.html           # 报告导航面板
@@ -98,11 +99,13 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
 
 ## 阶段2：深度分析
 
-**四层JS分析**（不用固定API命名模式，以实际代码为准）：
-1. **定位API入口**：查找 baseURL/API_HOST/gatewayUrl 等配置
-2. **路径模式提取**：全量提取路径，按一级目录分组统计（非标准前缀如 `/gateway/` `/dwr/` 更常见）
-3. **Source Map还原**：`//# sourceMappingURL=` → 下载 `.js.map` → 还原源码
-4. **敏感信息提取**：AccessKey/SecretKey/JWT/数据库连接串/硬编码测试账号
+**JS源码本地审计**（下载到本地→再审计，接近F12完整度）：
+1. **下载JS到本地**：`curl -s` 获取HTML → 提取 `<script src>` → `curl -s -o` 逐个下载到 `js_dumps/<target>/`
+2. **Source Map 还原源码**：下载 `.js.map` → `python3` 解析 `sourcesContent` 字段 → 写出原始TS/Vue/React源码到 `reconstructed/` → 对未混淆的源码做API/路由/鉴权审计
+3. **敏感信息提取**：使用 `grep -ohP` 在本地JS上提取AccessKey/SecretKey/JWT/数据库连接串/内网IP/硬编码凭证
+4. **路径模式提取**：`grep -ohP` 提取所有 `"/xxx/yyy"` 路径，按一级目录分组统计
+5. **Webpack chunk 枚举**：从已下载JS提取 `chunk-`、`assets/`、`_nuxt/` 等引用 → 补下载lazy JS → 接近F12完整度
+6. **登录态补下载**：找到登录API后尝试获取Cookie → 下载需要认证的页面JS
 
 **鉴权方式识别**：先找鉴权方式再测试（Authorization: Bearer/Basic/X-TOKEN/Cookie/localStorage）
 
@@ -142,6 +145,17 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
    - 即使无法确定具体名称，**「疑似开源」本身就值得深入**——意味着有通用漏洞、默认配置的风险
 5. **输出**：已知框架 → `{框架名} {版本/特征} → 默认口令/已知漏洞/特有攻击面清单`；未知框架 → `疑似开源系统 → 线索清单 → 推荐深入方向`
 
+**dir_enum — 基于系统特征的智能路径枚举（新增）：**
+- 从JS分析提取的API前缀 + 从框架识别提取的框架路径 → 自动组合泛化fuzz
+- 使用 `api_patterns.json` 中的 `framework_patterns`、`path_segments`、`common_endpoints` 做智能路径组合
+- 对每个组合执行 curl 探测（200/401/403状态码的端点即发现）
+- 输出发现的端点 + 提取新API模式
+
+**API模式字典本积累（新增）：**
+- 每次运行结束后，将新发现的API前缀、路径段、可用端点自动追加到 `api_patterns.json`
+- 跨厂商积累：`api_prefixes`（递增count）、`path_segments`（去重）、`common_endpoints`（去重）
+- 下次运行时 dirsearch 自动读取积累的路径，越用越准
+
 详细命令 → `references/phase-cmd-reference.md#阶段2-js逆向命令`
 
 ---
@@ -153,6 +167,7 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
 
 | 类型 | 测试要点 |
 |------|---------|
+| **dirsearch 字典扫描** | 合并两本字典: dirsearch内置 `dicc.txt`(9482条) + 积累 `api_patterns.json`，多扩展名多线程广度爆破 |
 | 未授权/信息泄露 | 批量不带Cookie重放，对比响应差异 |
 | API文档/配置泄露 | swagger-ui / actuator / .env / .git |
 | 越权(IDOR) | 替换user_id/order_id/company_id |
@@ -251,12 +266,12 @@ Tier 2 快速探测确保每个资产至少完成 unauthtest，弥补"44 个资�
 
 | 维度 | 编码 | 判定条件 | 适用场景 |
 |------|------|---------|---------|
-| HTTP探活 | `http_probe` | curl/httpx 返回了 HTTP 响应 | 开放了 Web 端口 |
+| HTTP探活 | `http_probe` | curl 返回了 HTTP 响应 | 开放了 Web 端口 |
 | 未授权测试 | `unauth_test` | 无 Cookie/Token 探测了至少 5 个 API 路径 | 有 HTTP 响应 |
-| 目录枚举(手动) | `dir_enum` | curl 手动探测了常见/自定义前缀路径 | Web 应用 |
-| dirsearch全量扫描 | `dirsearch_scan` | dirsearch 或等效工具进行了全量扫描 | Web 应用（发现较少时触发） |
-| 弱口令测试 | `weak_pass` | 对登录口尝试了通用字典 | 识别出登录/后台表单 |
-| JS/API分析 | `js_analysis` | JS 逆向提取了 API 路径和鉴权方式 | 有 HTML + JS 的 SPA 应用 |
+| 智能路径枚举 | `dir_enum` | 基于框架特征+JS路径模式自动泛化fuzz | Web 应用（发现API前缀后智能拓展） |
+| dirsearch全量扫描 | `dirsearch_scan` | dirsearch 扫描（dicc.txt + api_patterns.json 合并） | Web 应用（广度爆破全覆盖） |
+| 弱口令测试 | `weak_pass` | 对登录口尝试了通用字典+框架默认口令 | 识别出登录/后台表单 |
+| JS/API分析 | `js_analysis` | JS 下载到本地后审计（含Source Map还原） | 有 HTML + JS 的 SPA 应用 |
 
 ### 自动判定规则
 
@@ -270,10 +285,21 @@ Tier 2 快速探测确保每个资产至少完成 unauthtest，弥补"44 个资�
 
 **关键设计：** `dir_enum` 维度依赖 agent 的泛化能力——系统只记录「是否做了目录枚举」，但 agent 判断时会评估使用了哪些路径和前缀。如果只扫了 `/admin/` 但没试 `/gateway/` `/dwr/` `/sys/` 等自定义前缀，agent 可降级为「还未测试完毕」。
 
+### 程序化合并写入（新增）
+
+Phase 5 在 AI 标记前先执行**程序化读-合并-写**，不依赖 AI 自觉性：
+
+1. **Read** 已有 `asset_test_status.json`（不存在则初始化为 `{"assets":{}}`）
+2. **Merge** 本次新资产记录 → 追加/更新（保留旧记录，不删除）
+3. **Read** 已有 `asset_findings.json`（不存在则初始化为 `{"findings":[]}`）
+4. **Merge** 本次新发现 → 按 endpoint 去重追加
+5. **Write** 写回两个文件
+
 ### 存储位置
 
-- **资产状态：** `{公司}/asset_test_status.json`
-- **线索存档：** `{公司}/asset_findings.json`
+- **资产状态：** `{company}/asset_test_status.json`
+- **线索存档：** `{company}/asset_findings.json`
+- **API模式字典：** `references/api_patterns.json`（跨厂商积累）
 
 ### 工作流行为
 

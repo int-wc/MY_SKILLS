@@ -48,7 +48,8 @@ ZC_SKILLS_V1/
 │   ├── deep-mining-methodology.md # 深度挖掘方法论
 │   ├── hunter-reference.md     # Hunter语法与探测命令
 │   ├── phase-cmd-reference.md  # 各阶段Bash命令/字典
-│   └── report-templates.md     # 报告模板参考
+│   ├── report-templates.md     # 报告模板参考
+│   └── api_patterns.json       # API模式积累字典（自动增长）
 ```
 
 ## 项目目录结构
@@ -142,11 +143,12 @@ echo "[✓] 众测: HTTP $ZC_CHECK | 外网: HTTP $BAIDU_CHECK"
 
 ## 阶段2：深度分析
 
-**四层 JS 分析**（同 SRC_SKILLS_V1）：
-1. 定位 API 入口：查找 baseURL/API_HOST/gatewayUrl 等配置
-2. 路径模式提取：全量提取路径，按一级目录分组
-3. Source Map 还原：`//# sourceMappingURL=` → 下载 `.js.map`
-4. 敏感信息提取：AccessKey/SecretKey/JWT/数据库连接串
+**JS源码本地审计**（下载到本地→再审计，VPN 全程 `--interface tun0`）：
+1. **下载JS到本地**：`curl --interface tun0 -s` 获取HTML → 提取 `<script src>` → `curl -s -o` 下载到 `js_dumps/<target>/`
+2. **Source Map 还原源码**：下载 `.js.map` → `python3` 解析 `sourcesContent` → 写出原始源码到 `reconstructed/` → 审计未混淆的API/路由/鉴权
+3. **敏感信息提取**：在本地JS上提取 AccessKey/SecretKey/JWT/数据库连接串/内网IP
+4. **路径模式提取**：提取所有 `"/xxx/yyy"` 路径分组统计
+5. **Webpack chunk 枚举**：`chunk-`/`assets/`/`_nuxt/` 引用 → 补下载lazy JS → 接近F12完整度
 
 **鉴权方式识别**：先找鉴权方式再测试（Authorization: Bearer/Basic/X-TOKEN/Cookie）
 
@@ -184,12 +186,22 @@ echo "[✓] 众测: HTTP $ZC_CHECK | 外网: HTTP $BAIDU_CHECK"
    - 即使无法确定具体名称，**「疑似开源」本身就值得深入**——意味着有通用漏洞和默认配置的风险
 5. **输出**：已知框架 → `{框架名} {版本} → 攻击面`；未知框架 → `疑似开源系统 → 线索清单 → 推荐方向`
 
+**dir_enum — 基于系统特征的智能路径枚举（新增）：**
+- 从JS分析的API前缀 + 框架路径 → 自动组合泛化fuzz（VPN `--interface tun0`）
+- 使用 `api_patterns.json` 的 `framework_patterns`、`path_segments` 组合探测
+- 输出200/401/403端点 + 提取新API模式
+
+**API模式字典本积累（新增）：**
+- 每次运行后自动将新发现的API前缀、路径段、端点追加到 `api_patterns.json`
+- 跨项目积累，越用越准
+
 ## 阶段3：漏洞挖掘
 
 以**反思为主、迁跃为辅、分析为底、扩展为路**的原则执行。
 
 | 类型 | 测试要点 |
 |------|---------|
+| **dirsearch 字典扫描** | 合并 dirsearch 内置 `dicc.txt`(9482条) + 积累 `api_patterns.json`，VPN `--interface tun0` 广度爆破 |
 | 未授权/信息泄露 | 批量不带Cookie重放，对比响应差异 |
 | API文档/配置泄露 | swagger-ui / actuator / .env / .git |
 | 越权(IDOR) | 替换user_id/order_id/company_id |
@@ -243,6 +255,11 @@ echo "[✓] 众测: HTTP $ZC_CHECK | 外网: HTTP $BAIDU_CHECK"
 - **「已完全测试完毕」** — 所有适用维度已完成
 - **「还未测试完毕」** — 部分维度未完成
 - **「无法进行测试」** — 端口关闭/非Web/非范围
+
+**程序化合并写入（新增）：** Phase 5 在 AI 标记前先执行读-合并-写：
+- `asset_test_status.json`：追加新资产/更新已有（保留旧记录）
+- `asset_findings.json`：按 endpoint 去重追加新发现
+- 不依赖 AI 自觉性，硬性保证每次是「追加合并」而非「覆盖」
 
 ---
 

@@ -514,6 +514,42 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
 
       注意: 遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)。**本地文件分析完成后不要删除缓存文件**，留作证据。
 
+      ===== 第三步：弥补 F12 差异 — 枚举 Webpack chunk + 登录态补下（关键） =====
+      为尽可能接近浏览器 F12 看到的完整 JS 集，执行以下补下载策略：
+
+      **3a. 从已下载的 JS 中提取所有模块/路径引用**
+      查找以下模式并提取路径，对每个提取到的路径尝试补下载：
+      - Webpack chunk: grep -ohP '(chunk-[a-f0-9]{8,64}|[a-f0-9]{20,64}\.chunk)' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
+      - 动态 import: grep -ohP 'import\s*\(\s*["'"'"']([./][^"'"'"']+\.js)["'"'"']\s*\)' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
+      - require.ensure: grep -ohP 'require\.ensure\(\s*["'"'"'][^"'"'"']+\.js["'"'"']' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
+      - __webpack_public_path__ + 路径拼接: grep -ohP '["'"'"'](js/|pages/|components/|views/|modules/)[a-zA-Z0-9/_-]+\.js["'"'"']' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
+      - Vite 分块: grep -ohP 'assets/[a-f0-9-]+\.js' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
+      - JSONP callback: grep -ohP 'jsonp[a-f0-9]{8,}' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
+      - 非标准路径前缀: grep -ohP '["'"'"'](static/|dist/|build/|output/|public/)[a-zA-Z0-9/_-]+\.js["'"'"']' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
+
+      **3b. 对提取到的所有路径尝试下载（按目录结构拼接）**
+      BASE_URL=$(echo "${target}" | sed 's|/\+$||')
+      # 遍历提取的路径，基础目录尝试 /js/, /assets/, /static/, /dist/, /chunk/, /_nuxt/ 等常见前缀
+      for path in $(grep -ohP '(chunk-[a-f0-9]{8,64}|[a-f0-9]{20,64}\.chunk|assets/[a-f0-9-]+\.js|static/js/[a-f0-9]+\.js|_nuxt/[a-f0-9]+\.js)' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u); do
+        curl -s -o "${JS_DUMP_DIR}/<target_hash>/lazy_$(basename $path)" "${BASE_URL}/${path}" -H 'User-Agent: ${REAL_UA}'
+        # 如果第一个路径404，尝试 /js/ 前缀
+        [ ! -s "${JS_DUMP_DIR}/<target_hash>/lazy_$(basename $path)" ] && curl -s -o "${JS_DUMP_DIR}/<target_hash>/lazy_$(basename $path)" "${BASE_URL}/js/${path}" -H 'User-Agent: ${REAL_UA}'
+      done
+
+      **3c. 登录态页面 JS 补下载（模拟已登录）**
+      如果目标有关联的登录页面并且能找到登录 API，尝试获取 Token/Cookie 后重新下载需要认证的页面 JS：
+      - 找到登录 API 后发送有效凭据获取 Cookie
+      - 用 Cookie 重新 curl 下载登录后才能访问的页面 JS
+      - 对比带 Cookie 与无 Cookie 下载的 JS 差异
+      - （**注意：仅做读取探测，不暴力破解**）
+
+      **3d. 检查 CommonJS/AMD 模块系统**
+      - grep -ohP 'define\(["'"'"'][^"'"'"']+["'"'"']' "${JS_DUMP_DIR}/<target_hash>"/*.js | sort -u（AMD/RequireJS 模块路径）
+      - 检查 System.import 动态加载（Angular）
+
+      **3e. 对补下载完成的 JS 做去重**
+      所有下载完成后重新执行 Step 2 的完整分析。
+
           ${UA_INSTR}
 
           **严格边界规则（必须遵守，不可违反）:**

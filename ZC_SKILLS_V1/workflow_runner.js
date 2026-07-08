@@ -500,7 +500,27 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
          找到API路径 → 功能命名可推断数据敏感度
 
       注意: 只做读取分析。遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)。
-      本地文件分析完成后不要删除缓存文件，留作证据。`,
+      本地文件分析完成后不要删除缓存文件，留作证据。
+
+      ===== 第三步：弥补 F12 差异 — 枚举 Webpack chunk + 登录态补下 =====
+      为尽可能接近浏览器 F12 看到的完整 JS 集，执行以下补下载策略：
+
+      **3a. 从已下载的 JS 中提取所有模块/路径引用**
+      grep -ohP '(chunk-[a-f0-9]{8,64}|[a-f0-9]{20,64}\.chunk)' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
+      grep -ohP '(__VUE_|__REACT_|__webpack_|define\(["'"'"'][^"'"'"]+["'"'"']|import\s*\(\s*["'"'"'][./][^"'"'"']+\.js)' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
+      grep -ohP '["'"'"'](js/|pages/|components/|views/|modules/|assets/|static/|dist/|_nuxt/)[a-zA-Z0-9/_-]+\.js["'"'"']' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u
+
+      **3b. 对提取到的所有路径尝试下载**
+      for path in $(grep -ohP '(chunk-[a-f0-9]{8,64}|assets/[a-f0-9-]+\.js|static/js/[a-f0-9]+\.js|_nuxt/[a-f0-9]+\.js)' "${JS_DUMP_DIR}/<target_hash>"/*.js 2>/dev/null | sort -u); do
+        curl --interface tun0 -s -o "${JS_DUMP_DIR}/<target_hash>/lazy_$(basename $path)" "${BASE_URL}/${path}"
+        [ ! -s "${JS_DUMP_DIR}/<target_hash>/lazy_$(basename $path)" ] && curl --interface tun0 -s -o "${JS_DUMP_DIR}/<target_hash>/lazy_$(basename $path)" "${BASE_URL}/js/${path}"
+      done
+
+      **3c. 登录态页面 JS 补下载**
+      如果可以找到登录 API，尝试获取 Token/Cookie 后重新下载需要认证的页面 JS。
+      （仅读取探测，不暴力破解）
+
+      **3d. 重新执行 Step 2 分析** — 对新补下载的所有 JS 做相同维度的审计分析。`,
           { label: `🔬 JS分析: ${target}`, phase: '深度分析' }
         )
       },

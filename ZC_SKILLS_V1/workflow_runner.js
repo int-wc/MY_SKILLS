@@ -550,6 +550,51 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
       targets.forEach(t => dimTracker.record(t, 'js_analysis', 'done'))
     }
 
+    // ============================================================
+    // Fix A+C: 提取鉴权凭证(结构化) + JS缓存目录捕获
+    // ============================================================
+    log('  🔐 提取JS中的鉴权凭证...')
+    const p2_js_dump_base = "${PROJECT_DIR}/js_dumps"
+    let p2_js_dirs = []
+    let p2_credentials = []
+
+    try {
+      const findDirsResult = await agent(
+        `python3 ${SKILL_SCRIPTS}/find_js_dumps.py "${p2_js_dump_base}"
+输出最后一行为JSON结果。提取 dumps 数组。`,
+        { label: '📂 查找JS缓存目录', phase: '深度分析' }
+      )
+      const dirLines = (findDirsResult || '').split('\\n').filter(l => l.trim().startsWith('{'))
+      if (dirLines.length > 0) {
+        const dirData = JSON.parse(dirLines[dirLines.length-1])
+        p2_js_dirs = dirData.dumps || []
+        for (const d of p2_js_dirs) {
+          const credResult = await agent(
+            `python3 ${SKILL_SCRIPTS}/extract_creds.py "${d.dump_dir}" --output "${d.dump_dir}/_credentials.json"
+输出最后一行为JSON结果。提取 credentials 数组。`,
+            { label: `🔐 提取: ${d.target_hash}`, phase: '深度分析' }
+          )
+          const credLines = (credResult || '').split('\\n').filter(l => l.trim().startsWith('{'))
+          if (credLines.length > 0) {
+            try {
+              const credData = JSON.parse(credLines[credLines.length-1])
+              const creds = credData.credentials || []
+              if (creds.length > 0) p2_credentials.push(...creds)
+            } catch(e) {}
+          }
+        }
+      }
+    } catch(e) {}
+
+    if (p2_credentials.length > 0) {
+      globalThis.__zc_creds_json = JSON.stringify(p2_credentials)
+      log(`  🔐 共 ${p2_credentials.length} 条结构化凭证已提取`)
+    }
+    if (p2_js_dirs.length > 0) {
+      globalThis.__zc_js_dirs_json = JSON.stringify(p2_js_dirs)
+      p2_discoveries_text += '\n【JS缓存目录】\n' + p2_js_dirs.map(d => d.dump_dir).join('\n') + '\n'
+    }
+
     // 【开源系统识别】— 识别快速开发框架/低代码平台（JeecgBoot, RuoYi, JeeSite 等）
     log('  🔍 执行开源系统识别（快速开发框架/低代码平台）...')
     const p2_oss = await agent(
@@ -877,7 +922,7 @@ dirsearch -u "<target_url>" \
     }
 
     // dirsearch结果回注到unauth_test
-    let zc_dirsearch_ctx = ''
+    let zc_dirsearch_ctx \n\n\t**Phase 2提取的结构化凭证（可直接使用）**:\n\t${{typeof globalThis.__zc_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__zc_creds_json).slice(0, 10), null, 2) : '（无）'}}\n\n\t**JS缓存目录（可回查本地JS及还原源码）**:\n\t${{typeof globalThis.__zc_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__zc_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\\n') : '（无）'}}\n= ''
     if (typeof p3_dirsearch !== 'undefined' && p3_dirsearch?.findings && p3_dirsearch.findings.length > 0) {
       const deps = p3_dirsearch.findings.filter(f => [200,401,403].includes(f.status_code)).map(f => `  ${f.endpoint} [${f.status_code}]`)
       if (deps.length > 0) {
@@ -899,6 +944,12 @@ ${allUrls.map(u => `  ${u}`).join('\n')}
 
 第2阶段JS逆向发现的隐藏端点:
 ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}\n\n\t${zc_dirsearch_ctx}
+\n	**Phase 2提取的结构化凭证（可直接使用）**:
+	${typeof globalThis.__zc_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__zc_creds_json).slice(0, 10), null, 2) : '（无）'}
+
+	**JS缓存目录（可回查本地JS及还原源码）**:
+	${typeof globalThis.__zc_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__zc_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\n') : '（无）'}
+
 
 **【核心策略 — 根据 API 命名推断功能，针对性利用】**
 1. 分析 API 命名 → 推断功能 → 对应攻击:
@@ -1038,7 +1089,11 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分
     if (p3_has_oss) {
       const ossText = p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框架识别结果】'), p2_discoveries_text.length).substring(0, 4000)
       const cacheNote = Object.keys(p3_framework_cache.audited).length > 0
-        ? `\n\n注意：下表中的框架已审计过，请跳过不要重复审计:\n${Object.entries(p3_framework_cache.audited).map(([k,v]) => `  - ${k} (${v.last_audited}, ${v.findings_count}条发现)`).join('\n')}`
+        ? `
+
+	**凭证**:
+	${typeof globalThis.__zc_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__zc_creds_json).slice(0, 8), null, 2) : '（无）'}
+	**JS目录**: ${typeof globalThis.__zc_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__zc_js_dirs_json).map(d => d.dump_dir).join(', ') : '（无）'}\n\n注意：下表中的框架已审计过，请跳过不要重复审计:\n${Object.entries(p3_framework_cache.audited).map(([k,v]) => `  - ${k} (${v.last_audited}, ${v.findings_count}条发现)`).join('\n')}`
         : ''
       p3_codeaudit = await agent(
         `你是快速开发框架审计专家，对 ${resolvedProject} 的已识别框架执行本地部署实现和源码审计。

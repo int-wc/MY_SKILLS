@@ -526,6 +526,72 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
       targets.forEach(t => dimTracker.record(t, 'js_analysis', 'done'))
     }
 
+    // ============================================================
+    // Fix A+C: 提取鉴权凭证(结构化) + JS缓存目录捕获 → 供Phase3使用
+    // ============================================================
+    log('  🔐 提取JS中的鉴权凭证...')
+    const p2_js_dump_base = "${SRC_BASE}/${companyName}/js_dumps"
+    let p2_js_dirs = []
+    let p2_credentials = []
+
+    // 查找所有缓存子目录
+    try {
+      const findDirs = await agent(
+        `python3 ${SKILL_SCRIPTS}/find_js_dumps.py "${p2_js_dump_base}"
+输出最后一行为JSON结果。提取 dumps 数组。`,
+        { label: '📂 查找JS缓存目录', phase: '深度分析' }
+      )
+      const dirLines = (findDirs || '').split('\\n').filter(l => l.trim().startsWith('{'))
+      if (dirLines.length > 0) {
+        const dirData = JSON.parse(dirLines[dirLines.length-1])
+        p2_js_dirs = dirData.dumps || []
+        log(`  📂 找到 ${p2_js_dirs.length} 个JS缓存目录`)
+
+        // 对每个目录执行凭证提取
+        for (const d of p2_js_dirs) {
+          const credResult = await agent(
+            `python3 ${SKILL_SCRIPTS}/extract_creds.py "${d.dump_dir}" --output "${d.dump_dir}/_credentials.json"
+输出最后一行为JSON结果。提取 credentials 数组。`,
+            { label: `🔐 提取: ${d.target_hash}`, phase: '深度分析' }
+          )
+          const credLines = (credResult || '').split('\\n').filter(l => l.trim().startsWith('{'))
+          if (credLines.length > 0) {
+            try {
+              const credData = JSON.parse(credLines[credLines.length-1])
+              const creds = credData.credentials || []
+              if (creds.length > 0) {
+                p2_credentials.push(...creds)
+                log(`  🔐 ${d.target_hash}: 发现 ${creds.length} 条凭证`)
+              }
+            } catch(e) {}
+          }
+        }
+      }
+    } catch(e) {}
+
+    // 凭证结构化注入p2_discoveries_text
+    if (p2_credentials.length > 0) {
+      const byType = {}
+      p2_credentials.forEach(c => {
+        if (!byType[c.type]) byType[c.type] = []
+        byType[c.type].push(c)
+      })
+      let credSummary = '\n【提取的结构化凭证 — 可直接在Phase 3中使用】\n'
+      credSummary += JSON.stringify(byType, null, 2).substring(0, 3000)
+      p2_discoveries_text += credSummary
+      globalThis.__p2_creds_json = JSON.stringify(p2_credentials)
+      log(`  🔐 共 ${p2_credentials.length} 条结构化凭证已注入Phase3上下文`)
+    }
+
+    // JS缓存目录信息注入
+    if (p2_js_dirs.length > 0) {
+      const dirSummary = p2_js_dirs.map(d =>
+        `  ${d.dump_dir} (${d.js_count}个JS文件${d.has_reconstructed ? ', 含源码reconstructed/' : ''})`
+      ).join('\n')
+      p2_discoveries_text += '\n【JS缓存目录 — Phase 3可直接查阅本地文件】\n' + dirSummary + '\n'
+      globalThis.__p2_js_dirs_json = JSON.stringify(p2_js_dirs)
+    }
+
     // 【开源系统识别】— 识别快速开发框架/低代码平台（JeecgBoot, RuoYi, JeeSite 等）
     log('  🔍 执行开源系统识别（快速开发框架/低代码平台）...')
     const p2_oss = await agent(
@@ -957,6 +1023,14 @@ ${allUrls.map(u => `  ${u}`).join('\n')}
 第2阶段JS逆向发现的隐藏端点/API路径:
 ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
 
+**【Phase 2 提取的结构化凭证 — 可直接复用到测试中】**
+${typeof globalThis.__p2_creds_json !== 'undefined' ? '以下凭证可直接用于越权/认证测试:\n' + JSON.stringify(JSON.parse(globalThis.__p2_creds_json).slice(0, 15), null, 2).substring(0, 2000) : '（无结构化凭证提取）'}
+
+
+**【Phase 2 JS缓存目录 — 可回查阅本地JS/还原源码】**
+${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? 'JS文件已下载到本地，可直接Read查阅:\n' + JSON.parse(globalThis.__p2_js_dirs_json).map(d => '  ' + d.dump_dir + ' (' + d.js_count + '个JS文件' + (d.has_reconstructed ? ', 含还原源码 reconstructed/' : '') + ')').join('\n') : '（无本地缓存）'}
+
+
 测试矩阵（按优先级执行）:
 
 **【核心策略 — 根据 API 命名推断功能，针对性利用】**
@@ -1068,6 +1142,12 @@ ${targets.map(t => `  ${t.url}`).join('\n')}
 第2阶段JS逆向发现的隐藏端点/API路径:
 ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
 
+第2阶段提取的结构化凭证:
+${typeof globalThis.__p2_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__p2_creds_json).slice(0, 10), null, 2) : '（无）'}
+
+JS缓存目录（可回查本地JS/还原源码）:
+${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__p2_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\n') : '（无）'}
+
 1. 越权测试:
    - 对含数字ID的路径，尝试替换ID值
    - 观察响应差异（是否返回不同用户数据）
@@ -1140,7 +1220,10 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分
         `对 ${companyName} 的以下剩余资产做**全量漏洞测试**。
 
 剩余资产列表（${tier2_urls.length} 个）:
-${tier2_urls.map(u => `  ${u}`).join('\n')}
+${tier2_urls.map(u => `  ${u}`).join('\n\n	第2阶段提取的结构化凭证:
+	${typeof globalThis.__p2_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__p2_creds_json).slice(0, 10), null, 2) : '（无）'}
+	JS缓存目录:
+	${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__p2_js_dirs_json).map(d => d.dump_dir).join('\n') : '（无）'}\n')}
 
 执行全量测试（每个目标深入测试）:
 1. curl -sI -H 'User-Agent: ...' 每个URL确认HTTP状态码（必须带浏览器UA）

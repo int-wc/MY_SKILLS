@@ -52,6 +52,26 @@ if (typeof args === 'string') {
 // 自动探测项目目录 — 以当前工作目录为准
 const CWD = '/home/my/360zc/1516_中远海运'
 
+// 未指定项目名时从URL自动提取
+let _isAutoCompany = false
+if (!projectName && singleUrl) {
+  _isAutoCompany = true
+  try {
+    const u = new URL(singleUrl)
+    projectName = u.hostname
+  } catch (_) {
+    projectName = singleUrl.replace(/^https?:\/\//, '').replace(/[:\/?#].*$/, '')
+  }
+  // IP/localhost作为项目名会导致目录创建异常、报告文件名含IP等
+  // 统一替换为 _CLI_TARGET_ 作为路径标识
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(projectName) || projectName === 'localhost') {
+    projectName = '_CLI_TARGET_'
+    log(`ℹ️ URL域名解析为IP/本地地址，统一使用 "_CLI_TARGET_" 作为目录标识`)
+  } else {
+    log(`ℹ️ 未指定项目名，自动使用URL域名作为项目标识`)
+  }
+}
+
 // 如果未指定project，尝试从CWD推断
 const resolvedProject = projectName || '1516_中远海运'
 const PROJECT_DIR = `${ZC_BASE}/${resolvedProject}`
@@ -180,23 +200,28 @@ if (!mode.startsWith('phase5')) {
   )
 }
 
-// E: TTL 过期检查
+// E: TTL 过期检查 — 降级过期资产（基于字符串日期比较，避免new Date()被Workflow禁用）
 if (p0_tracker?.exists && p0_tracker?.assets) {
-  const _today = '2026-07-09'  // TTL基准日期（Workflow运行时禁用new Date()，手动设定）
+  const _todayStr = '2026-07-09'
+  const _todayParts = _todayStr.split('-').map(Number)
+  const _todayDays = _todayParts[0]*365 + _todayParts[1]*30 + _todayParts[2]
   for (const [url, info] of Object.entries(p0_tracker.assets)) {
     const ttl = info.ttl_days || 30
     const lastTested = info.last_tested
     if (lastTested && (info.status === '已完全测试完毕' || info.status === '无法进行测试')) {
       try {
-        const last = new Date(lastTested)
-        const daysSinceTest = (_today - last) / (1000 * 60 * 60 * 24)
-        if (daysSinceTest > ttl) {
-          info.status = '还未测试完毕'
-          info.reason = `TTL过期(${ttl}天，距上次测试${Math.round(daysSinceTest)}天)，自动降级`
-          delete info.ttl_days
-          log(`  ⏰ TTL过期: ${url} (${Math.round(daysSinceTest)}天前，已降级)`)
+        const lp = lastTested.split('-').map(Number)
+        if (lp.length === 3 && !isNaN(lp[0])) {
+          const lastDays = lp[0]*365 + lp[1]*30 + lp[2]
+          const daysSinceTest = _todayDays - lastDays
+          if (daysSinceTest > ttl) {
+            info.status = '还未测试完毕'
+            info.reason = `TTL过期(${ttl}天，距上次测试${daysSinceTest}天)，自动降级`
+            delete info.ttl_days
+            log(`  ⏰ TTL过期: ${url} (${daysSinceTest}天前，已降级)`)
+          }
         }
-      } catch(e) {}
+      } catch(e) { /* TTL计算失败不影响主流程 */ }
     }
   }
 }
@@ -510,7 +535,9 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
     log('  ⚠️ 无高优先级目标可分析')
     markPhase(2, '⏭️')
   } else {
-    const analyses = await pipeline(
+    let analyses = []
+    try {
+      analyses = await pipeline(
       targets,
       async (target) => {
         // === 合并机械操作:下载JS+枚举chunk+提取凭证（含自动重试） ===
@@ -605,6 +632,9 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
         return result
       }
     )
+    } catch(e) {
+      log(`  ⚠️ Pipeline部分失败: ${e.message}`)
+    }
 
     log(`  完成 ${analyses.filter(Boolean).length} 个目标的分析`)
     if (analyses && analyses.length > 0) {
@@ -825,14 +855,20 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t }).join(String.fromChar
       const fuzz_out_zc = "/tmp/zc_smart_fuzz_" + resolvedProject.replace(/[^a-zA-Z0-9]/g,'_') + "_" + ft.replace(/[^a-zA-Z0-9]/g,'_') + ".json"
       const fuzz_cmd_zc = `python3 ${SKILL_SCRIPTS}/smart_fuzz.py "${ft}" --dict ${P2_DICT_PATH_ZC} --output ${fuzz_out_zc} --ua "${REAL_UA}" --interface tun0`
       
-      const fuzz_raw_zc = await agent(
+      let fuzz_raw_zc
+      try {
+        fuzz_raw_zc = await agent(
         `执行fuzz(VPN):
 ${fuzz_cmd_zc}
 echo "---RESULT_JSON---"
 cat ${fuzz_out_zc}`,
         { label: `🤖 fuzz: ${ft}`, phase: '深度分析' }
       )
-      
+      } catch(e) {
+        log(`  ⚠️ fuzz ${ft} 失败: ${e.message}`)
+        continue
+      }
+
       try {
         const jsonPart = (fuzz_raw_zc || '').split('---RESULT_JSON---').pop()
         const fuzzData = JSON.parse(jsonPart.trim())

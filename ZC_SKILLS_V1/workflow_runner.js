@@ -476,9 +476,40 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
       2. **路径模式提取**:
          全量提取 "/xxx/yyy" 路径，按一级目录分组统计
          关注非标准前缀: /gateway/, /dwr/, /sys/, /manage/, /crm/, /erp/
-      3. **Source Map还原**:
-         检查本地下载的 .js.map 文件，用 python3 解析
-         Webpack chunk分析: chunks/ js/ 命名暴露功能模块
+      3. **Source Map还原 + 原始源码审计（关键）**:
+         .js.map 中的 sourcesContent 字段包含编译前的原始 TypeScript/Vue/React 源码。
+
+         执行以下还原流程（对每个已下载的 .js.map 文件）:
+
+         a) 用 python3 解析 .js.map，还原原始源码到本地:
+            python3 << 'PYEOF'
+            import json, os, re
+            map_file = "${JS_DUMP_DIR}/<target_hash>/<js_filename>.js.map"
+            out_dir = "${JS_DUMP_DIR}/<target_hash>/reconstructed/"
+            os.makedirs(out_dir, exist_ok=True)
+            with open(map_file, 'r', encoding='utf-8') as f:
+                sm = json.load(f)
+            sources = sm.get('sources', [])
+            contents = sm.get('sourcesContent', [])
+            if contents:
+                for i, (src_path, src_content) in enumerate(zip(sources, contents)):
+                    if src_content is None: continue
+                    safe_name = re.sub(r'[^a-zA-Z0-9/_-]', '_', src_path).lstrip('/') or f'source_{i:04d}.js'
+                    file_out = os.path.join(out_dir, safe_name)
+                    os.makedirs(os.path.dirname(file_out), exist_ok=True)
+                    with open(file_out, 'w', encoding='utf-8') as sf:
+                        sf.write(src_content)
+                print(f"✅ 还原 {len([c for c in contents if c])}/{len(sources)} 个原始源码 → {out_dir}")
+            else:
+                print("ℹ️ sourcesContent 不存在，仅列出 sources")
+                for s in sources: print(f"  源文件: {s}")
+            PYEOF
+
+         b) 对还原出的原始源码执行审计:
+            grep -rn 'axios\.(get|post|put|delete)\(\s*["'"'"'][^"'"'"']+' "${JS_DUMP_DIR}/<target_hash>/reconstructed/"/*.js 2>/dev/null
+            grep -rn 'path:\s*["'"'"']' "${JS_DUMP_DIR}/<target_hash>/reconstructed/"/*.js 2>/dev/null
+            grep -rn 'process\.env\|import\.meta\|VITE_\|REACT_APP_' "${JS_DUMP_DIR}/<target_hash>/reconstructed/"/*.js 2>/dev/null
+            grep -rn 'interceptor\|Authorization\|withCredentials' "${JS_DUMP_DIR}/<target_hash>/reconstructed/"/*.js 2>/dev/null
       4. **敏感信息提取**（在本地文件上执行）:
          - AccessKey: AKID模式、AKIA模式、LTAI(阿里云)
          - OSS存储桶密钥: OBS_ACCESS_KEY / OSS_ACCESS_KEY / AWS_ACCESS_KEY

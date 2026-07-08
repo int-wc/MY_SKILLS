@@ -481,10 +481,60 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
          grep -ohP '(?<=")/[a-zA-Z][a-zA-Z0-9/_-]*(?=")' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js | sort | uniq -c | sort -rn
          关注非标准前缀: /gateway/, /dwr/, /sys/, /manage/, /crm/, /erp/
 
-      3. **Source Map还原**:
-         检查本地下载的 .js.map 文件，用 python3 解析:
-         python3 -c "import json; d=json.load(open('file.js.map')); print(json.dumps(d.get('sources',[]),indent=2))"
-         Webpack chunk分析: chunks/ js/ 命名暴露功能模块
+      3. **Source Map还原 + 原始源码审计（关键）**:
+         .js.map 文件中的 sourcesContent 字段包含编译前的原始 TypeScript/Vue/React 源码，
+         还原后可看到完整业务逻辑、真实API路径、未混淆的变量名。
+
+         执行以下还原流程（对每个已下载的 .js.map 文件）:
+
+         a) 用 python3 解析 .js.map，将 sourcesContent 写出到本地文件:
+            python3 << 'PYEOF'
+            import json, os, re
+            map_file = "${JS_DUMP_DIR}/<target_hash>/<js_filename>.js.map"
+            out_dir = "${JS_DUMP_DIR}/<target_hash>/reconstructed/"
+            os.makedirs(out_dir, exist_ok=True)
+
+            with open(map_file, 'r', encoding='utf-8') as f:
+                sm = json.load(f)
+
+            # 写出还原的原始源码
+            sources = sm.get('sources', [])
+            contents = sm.get('sourcesContent', [])
+            if contents:
+                for i, (src_path, src_content) in enumerate(zip(sources, contents)):
+                    if src_content is None:
+                        continue
+                    # 将 source 路径转为合法文件名
+                    safe_name = re.sub(r'[^a-zA-Z0-9/_-]', '_', src_path).lstrip('/')
+                    if not safe_name:
+                        safe_name = f'source_{i:04d}.js'
+                    file_out = os.path.join(out_dir, safe_name)
+                    os.makedirs(os.path.dirname(file_out), exist_ok=True)
+                    with open(file_out, 'w', encoding='utf-8') as sf:
+                        sf.write(src_content)
+                print(f"✅ 还原 {len([c for c in contents if c])}/{len(sources)} 个原始源码文件 → {out_dir}")
+            else:
+                print("ℹ️ sourcesContent 不存在，仅提取 sources 路径列表")
+
+            # 打印路径列表供后续参考
+            for s in sources:
+                print(f"  源文件: {s}")
+            PYEOF
+
+         b) 对还原出的原始源码执行审计（与 Step 2 相同维度）:
+            # 未混淆的 API 路径（原始源码中路径更清晰）
+            grep -ohP '(axios\.(get|post|put|delete)\(\s*["'"'"'][^"'"'"']+|fetch\(\s*["'"'"'][^"'"'"']+)' "${JS_DUMP_DIR}/<target_hash>/reconstructed/"/*.js 2>/dev/null
+            # TypeScript 接口定义（.ts 文件中的真实数据结构）
+            grep -rn 'interface\|type\|export class' "${JS_DUMP_DIR}/<target_hash>/reconstructed/" --include="*.ts" --include="*.tsx" 2>/dev/null
+            # 路由定义（Vue Router / React Router 未混淆路由表）
+            grep -rn 'path:\s*["'"'"']' "${JS_DUMP_DIR}/<target_hash>/reconstructed/"/*.js 2>/dev/null
+            # 环境变量 / 配置常量
+            grep -rn 'process\.env\|import\.meta\|VITE_\|REACT_APP_\|NEXT_PUBLIC_' "${JS_DUMP_DIR}/<target_hash>/reconstructed/"/*.js 2>/dev/null
+            # 鉴权中间件/拦截器
+            grep -rn 'interceptor\|response.use\|request.use\|Authorization\|withCredentials' "${JS_DUMP_DIR}/<target_hash>/reconstructed/"/*.js 2>/dev/null
+
+         c) Webpack chunk 分析: 从 .js.map 的 sources 字段提取模块路径结构，
+            推断项目是 Vue/React/Angular 项目，定位完整目录树和功能模块划分
 
       4. **敏感信息提取**（在本地文件上执行）:
          - AccessKey: grep -ohP '(AKID[\\w+=]+|AKIA[\\w+=]{16}|LTAI[\\w+=]+)' "${SRC_BASE}/${companyName}/js_dumps/<target_hash>"/*.js

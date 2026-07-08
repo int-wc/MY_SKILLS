@@ -502,8 +502,10 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
     const analyses = await pipeline(
       targets,
       async (target) => {
-        // === 合并机械操作:下载JS+枚举chunk+提取凭证 ===
-        const mechResult = await agent(
+        // === 合并机械操作:下载JS+枚举chunk+提取凭证（含自动重试） ===
+        let mechResult = ''
+        for (let _retry = 0; _retry < 2; _retry++) {
+          mechResult = await agent(
           `执行以下命令串行:
 # 1. 下载JS(VPN)
 python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${PROJECT_DIR}/js_dumps" --ua "${REAL_UA}" --interface tun0
@@ -547,6 +549,10 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "${target_dump}" 2>&1
             }
           }
         } catch(e) {}
+
+        if (dl_file_count > 0) break
+          if (_retry === 0) log(`  🔄 ${target}: 下载结果为0文件，等待2秒后重试...`)
+        }  // end retry loop
 
         if (target_hash) {
           if (!globalThis.__zc_js_dirs_json) globalThis.__zc_js_dirs_json = '[]'

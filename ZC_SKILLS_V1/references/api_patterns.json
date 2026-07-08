@@ -1,0 +1,22 @@
+{
+  "updated": "2026-07-09",
+  "api_prefixes": {},
+  "path_segments": [
+    "user", "admin", "login", "config", "upload", "download",
+    "api", "manage", "system", "auth", "token", "file",
+    "export", "import", "backup", "log", "report", "data"
+  ],
+  "framework_patterns": {
+    "JeecgBoot": ["/jeecg-boot/sys/", "/jeecg-boot/online/", "/jeecg-boot/sys/dict/list", "/jeecg-boot/oss/"],
+    "RuoYi": ["/prod-api/", "/common/captcha", "/system/user/list", "/common/upload"],
+    "JeeSite": ["/js/a/login", "/sys/", "/js/"],
+    "Guns": ["/guns-api/", "/system/"],
+    "BladeX": ["/blade-", "/blade-auth/", "/blade-log/"],
+    "SpringBoot": ["/actuator", "/actuator/heapdump", "/swagger-ui.html", "/v2/api-docs", "/v3/api-docs", "/doc.html"],
+    "Nacos": ["/nacos/", "/v1/ns/"],
+    "Druid": ["/druid/", "/druid/index.html"],
+    "ThinkPHP": ["/index.php/", "/public/"],
+    "通用": ["/.env", "/robots.txt", "/.git/", "/WEB-INF/web.xml"]
+  },
+  "common_endpoints": []
+}

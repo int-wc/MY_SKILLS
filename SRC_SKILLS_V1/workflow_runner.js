@@ -820,6 +820,131 @@ ${targets.slice(0, 20).map(t => `  ${t.url}`).join('\n')}
       log('  识别完成: 未发现已知框架或疑似开源系统')
     }
     // == 开源系统识别结束 ==
+
+    // ============================================================
+    // 2.5 dir_enum — 基于系统特征的智能路径枚举（智能fuzz）
+    // 原理：根据已识别的框架 + JS发现的API路径格式，自动泛化fuzz
+    // ============================================================
+    log('  🔍 执行智能路径枚举（基于系统特征自动泛化fuzz）...')
+    const P2_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
+    const p2_targets_for_fuzz = targets.slice(0, 15)
+
+    const p2_fuzz = await agent(
+      `你是目录枚举专家，对 ${companyName} 的目标执行基于系统特征的智能fuzz。
+
+===== 已识别的框架 =====
+${(p2_discoveries_text || '').includes('【快速开发框架识别结果】') ? p2_discoveries_text.substring(p2_discoveries_text.indexOf('【快速开发框架识别结果】'), p2_discoveries_text.length).substring(0, 3000) : '（无框架识别结果）'}
+========================
+
+===== 已发现的API路径 =====
+${(p2_discoveries_text || '').length > 0 ? p2_discoveries_text.substring(0, 2000) : '（无JS分析数据）'}
+===========================
+
+目标列表（前 15 个）:
+${targets.slice(0, 15).map(t => `  ${t}`).join('
+')}
+
+**核心方法：基于系统特征自动泛化fuzz**
+
+对每个目标依次执行：
+
+**Step 1: 从JS和框架识别结果提取路径模式**
+- 从前面的 JS 分析中提取 baseURL / API_HOST / 自定义前缀（如 /jeecg-boot/、/prod-api/、/gateway/、/dwr/）
+- 从框架识别中提取框架特有目录结构
+
+**Step 2: 对找到的每个API前缀 + 通用路径段做笛卡尔积组合fuzz**
+- 先Read本地字典文件 ${P2_DICT_PATH}（用Read工具），提取 path_segments 和 framework_patterns
+- 对每个API前缀，组合以下路径段进行探测:
+  upload, download, export, import, user, admin, login, config, file,
+  backup, log, report, data, api, auth, token, session, manage, system,
+  order, payment, account, search, query, list, page, delete, remove,
+  test, dev, debug, swagger, doc, health, monitor, dashboard, console
+- 对已识别的框架，加上框架特有路径（从字典的 framework_patterns 中取）
+
+**Step 3: 从已下载的JS中智能推断路径结构**
+- 对已下载到 ${SRC_BASE}/${companyName}/js_dumps 下的JS文件，提取所有字符串字面量中的 "/xxx/yyy" 路径
+- 对这些路径按一级前缀去重，对去重后的每个前缀做泛化: /prefix/ + {上传,下载,用户列表,配置} → 映射为 /prefix/{upload, download, user, config}
+- 对每个组合用 curl -s -o /dev/null -w "%{http_code}" 测试状态码
+
+**Step 4: 输出发现的端点**
+只记录状态码 200/401/403 的端点，每次附带完整URL。
+
+**⚠️ 边界规则：** 只对目标列表中的URL进行路径探测。使用浏览器UA绕过WAF。
+
+      ${UA_INSTR}`,
+      { label: '🔍 智能路径枚举 (dir_enum)', schema: {
+        type: 'object',
+        properties: {
+          findings: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                target: { type: 'string' },
+                endpoint: { type: 'string' },
+                status_code: { type: 'number' },
+                source: { type: 'string', description: '来自: 框架特征/JS推断/字典组合/通用路径' },
+                description: { type: 'string' },
+                severity: { type: 'string', enum: ['高危', '中危', '低危', '信息'] },
+              },
+              required: ['target', 'endpoint', 'status_code', 'source'],
+            },
+          },
+          extracted_patterns: {
+            type: 'object',
+            description: '本次新发现的API前缀/路径模式，用于更新字典本',
+            properties: {
+              new_prefixes: { type: 'array', items: { type: 'string' }, description: '新发现的API前缀列表，如 ["/api/v3/", "/custom/"]' },
+              new_segments: { type: 'array', items: { type: 'string' }, description: '新发现的路径段，如 ["v3", "graphql"]' },
+              framework_hits: { type: 'array', items: { type: 'string' }, description: '实际命中的框架路径' },
+            },
+          },
+        },
+        required: ['findings'],
+      }, phase: '深度分析' }
+    )
+
+    if (p2_fuzz && p2_fuzz.findings && p2_fuzz.findings.length > 0) {
+      log(`  智能fuzz发现 ${p2_fuzz.findings.length} 个端点:`)
+      p2_fuzz.findings.forEach(f => {
+        const icon = f.status_code === 200 ? '✅' : f.status_code === 401 ? '🔒' : f.status_code === 403 ? '🚫' : '❓'
+        log(`    ${icon} [${f.status_code}] ${f.endpoint} (${f.source})`)
+      })
+      // 记录维度
+      targets.forEach(t => dimTracker.record(t, 'dir_enum', 'done'))
+    } else {
+      log('  智能fuzz: 未发现新端点')
+    }
+
+    // ============================================================
+    // 2.6 更新API模式字典本（经验积累）
+    // ============================================================
+    log('  📚 更新API模式字典本...')
+    const p2_dict_update = await agent(
+      `你是API模式管理专家，负责将本次发现的路径模式更新到共享字典本中。
+
+字典文件: ${P2_DICT_PATH}
+
+===== 本次新发现的API模式 =====
+${JSON.stringify(p2_fuzz?.extracted_patterns || {}, null, 2)}
+
+===== JS分析发现的API路径摘要 =====
+${(p2_discoveries_text || '').substring(0, 2000)}
+================================
+
+你的任务：
+1. 用Read工具读取 ${P2_DICT_PATH}
+2. 将本次发现的 new_prefixes 合并到 api_prefixes 中（增加count）
+3. 将 new_segments 合并到 path_segments 中（去重）
+4. 将 framework_hits 完善到 framework_patterns 中
+5. 将任何新的200/401/403端点追加到 common_endpoints 中
+6. 更新 updated 日期为今日（2026-07-09）
+7. 用Write工具写入 ${P2_DICT_PATH}
+
+注意：只做模式记录，不删除已有条目。经验需要积累。`,
+      { label: '📚 更新API模式字典', phase: '深度分析' }
+    )
+
   }
 
   markPhase(2, '✅')
@@ -862,6 +987,95 @@ if (mode.startsWith('phase5')) {
     log('  ⚠️ 无可用测试目标')
     markPhase(3, '⏭️')
   } else {
+    // ============================================================
+    // 3.0 dirsearch — 基于字典的标准目录扫描
+    // 原理：读取积累字典+通用字典，对目标做广度优先的路径爆破
+    // ============================================================
+    log('  📂 执行字典目录扫描 (dirsearch)...')
+    const P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
+
+    const p3_dirsearch = await agent(
+      `你是目录扫描专家，对 ${companyName} 执行基于字典的标准目录扫描。
+
+===== 目标列表 =====
+${targets.slice(0, 20).map(t => `  ${t.url} — ${(t.tags||[]).join(',')}`).join('
+')}
+====================
+
+**操作方法：**
+
+1. **先Read字典文件** ${P3_DICT_PATH} 获取所有积累的路径模式
+2. **组合扫描路径** — 从字典中提取以下内容组合成URL列表:
+   - framework_patterns 下所有框架的路径（匹配已知框架的）
+   - common_endpoints 中积累的历史可用端点
+   - api_prefixes 中积累的API前缀 + path_segments 组合
+3. **对每个组合URL使用 curl 探测**（必须带浏览器UA绕过WAF）
+4. **通用兜底路径**（字典中没有的也扫，按优先级）:
+   - 后台管理: /admin/, /manager/, /console/, /system/, /dashboard/
+   - API文档: /swagger-ui.html, /v3/api-docs, /doc.html, /v2/api-docs
+   - 配置泄露: /.env, /robots.txt, /.git/config, /WEB-INF/web.xml, /backup/
+   - 组件端点: /actuator, /druid, /nacos, /scheduler, /quartz/
+   - 备份文件: 尝试 *.bak, *.zip, *.tar.gz, *.old, *.save
+
+**Step 3: 对状态码 200/401/403 的端点做快速验证**
+   用 curl -s 获取响应体前200字符，确认不是空页面或默认404页
+
+**输出要求：** 只记录状态码 200/401/403 的端点。
+对每个发现记录：endpoint, status_code, 响应摘要, 来源（框架路径/字典积累/通用路径/JS推断）
+
+      ${UA_INSTR}
+      ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件（字典文件除外）。不要引用其他厂商数据。**`,
+      { label: '📂 字典目录扫描 (dirsearch)', schema: {
+        type: 'object',
+        properties: {
+          findings: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                target: { type: 'string' },
+                endpoint: { type: 'string' },
+                status_code: { type: 'number' },
+                source: { type: 'string', enum: ['框架路径', '字典积累', '通用路径', 'JS推断', '组件端点'] },
+                response_preview: { type: 'string', description: '响应体前100字符' },
+                severity: { type: 'string', enum: ['高危', '中危', '低危', '信息'] },
+              },
+              required: ['target', 'endpoint', 'status_code', 'source'],
+            },
+          },
+          new_endpoints: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '本次新发现的可用端点，用于更新字典本',
+          },
+        },
+        required: ['findings'],
+      }, phase: '漏洞挖掘' }
+    )
+
+    if (p3_dirsearch && p3_dirsearch.findings && p3_dirsearch.findings.length > 0) {
+      log(`  目录扫描发现 ${p3_dirsearch.findings.length} 个端点:`)
+      p3_dirsearch.findings.forEach(f => {
+        const icon = f.status_code === 200 ? '✅' : f.status_code === 401 ? '🔒' : f.status_code === 403 ? '🚫' : '❓'
+        log(`    ${icon} [${f.status_code}] ${f.endpoint} (${f.source})`)
+      })
+      // 更新字典本：新发现的端点追加到 common_endpoints
+      if (p3_dirsearch.new_endpoints && p3_dirsearch.new_endpoints.length > 0) {
+        await agent(
+          `读取 ${P3_DICT_PATH}，将以下新端点追加到 common_endpoints 数组中并写入（去重）:
+${p3_dirsearch.new_endpoints.map(e => `  - ${e}`).join('
+')}
+
+用Read工具读取 → 去重合并 → Write工具写回。`,
+          { label: '📚 更新字典 common_endpoints', phase: '漏洞挖掘' }
+        )
+      }
+      // 记录维度
+      ;(targets || []).forEach(t => dimTracker.record(t.url, 'dirsearch_scan', 'done'))
+    } else {
+      log('  目录扫描: 未发现新端点')
+    }
+
     // 3.1 未授权/信息泄露测试（遵循: 反思为主→迁跃为辅→分析为底→扩展为路）
     p3_unauth = await agent(
       `你是SRC漏洞挖掘专家，对 ${companyName} 执行未授权访问和信息泄露测试。
@@ -1379,51 +1593,6 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
         })
       }
     }
-  }
-
-  // 2. 如果有效发现仍然较少，尝试目录扫描兜底
-  if (progress.findings_count < 3) {
-    p4_dirscan = await agent(
-      `${UA_STR}
-
-对 ${companyName} 执行目录扫描兜底（因当前发现较少）。\n\n目标URL:\n${(p1_assets.priority_targets || []).slice(0, 10).map(t => t.url).join('\n')}\n\n使用 dirsearch 扫描常见路径:\n- 后台管理: /admin/, /manager/, /console/, /system/\n- 备份文件: /backup/, *.bak, *.zip, *.tar.gz\n- 文件上传: /uploads/, /files/\n- 配置泄露: /.git/, /.svn/, /.env, /WEB-INF/web.xml\n- 组件端点: /actuator/, /druid/, /nacos/\n\n如果 dirsearch 不可用，用 curl -H 'User-Agent: Mozilla/5.0 ...' 手动探测以上路径（必须带浏览器UA绕过WAF）。\n对新发现的端点做未授权测试。\n\n输出所有发现。`,
-      { label: '📂 目录扫描兜底', schema: {
-        type: 'object',
-        properties: {
-          findings: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                title: { type: 'string' },
-                endpoint: { type: 'string' },
-                severity: { type: 'string' },
-                status_code: { type: 'number' },
-                description: { type: 'string' },
-              },
-            },
-          },
-        },
-      }, phase: '验证取证' }
-    )
-    const extra = p4_dirscan?.findings || []
-    progress.findings_count += extra.length
-    if (extra.length > 0) {
-      log(`  目录扫描补充发现 ${extra.length} 个`)
-      extra.forEach(f => log(`    [${f.severity}] ${f.endpoint} (${f.status_code})`))
-      // 将目录扫描发现纳入线索追踪
-      p3_findings_data.push(...extra.map(f => ({
-        title: f.title, type: '目录枚举', severity: f.severity,
-        target: (p1_assets.priority_targets || [])[0]?.url || '',
-        endpoint: f.endpoint, confidence: 'exploratory',
-        curl_command: '', phase_discovered: 'phase4_dirscan', status: 'confirmed'
-      })))
-    }
-    // 记录目录枚举维度（手动探测 → dir_enum，dirsearch → dirsearch_scan）
-    ;(p1_assets.priority_targets || []).slice(0, 10).forEach(t => {
-      dimTracker.record(t.url, 'dir_enum', 'done')
-      if (extra.length > 0) dimTracker.record(t.url, 'dirsearch_scan', 'done')
-    })
   }
 
   markPhase(4, '✅')

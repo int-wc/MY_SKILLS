@@ -182,7 +182,7 @@ if (!mode.startsWith('phase5')) {
 
 // E: TTL 过期检查
 if (p0_tracker?.exists && p0_tracker?.assets) {
-  const _today = new Date()
+  const _today = '2026-07-09'  // TTL基准日期（Workflow运行时禁用new Date()，手动设定）
   for (const [url, info] of Object.entries(p0_tracker.assets)) {
     const ttl = info.ttl_days || 30
     const lastTested = info.last_tested
@@ -523,7 +523,7 @@ python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${PROJECT_DIR}/js_dumps" --
 # 2. 枚举chunk补下
 python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "<从下载结果提取的dump_dir>" "${target}" --ua "${REAL_UA}" --interface tun0
 # 3. 提取凭证
-python3 ${SKILL_SCRIPTS}/extract_creds.py "${target_dump}" 2>&1
+python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
 
 输出格式: ---DOWNLOAD_RESULT---{...}---CHUNK_RESULT---{...}---CREDS_RESULT---{...}`,
           { label: `🤖 机械操作: ${target}`, phase: '深度分析' }
@@ -1312,7 +1312,7 @@ ${ossText}${cacheNote}
             })
             frameworkSet.forEach(fw => {
               p3_framework_cache.audited[fw] = {
-                last_audited: new Date().toISOString().split('T')[0],
+                last_audited: '2026-07-09',
                 findings_count: p3_codeaudit.audit_findings.filter(f => f.framework_name === fw).length
               }
             })

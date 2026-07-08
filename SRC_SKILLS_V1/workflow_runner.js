@@ -155,7 +155,7 @@ if (companyName && !mode.startsWith('phase5')) {
 
 // E: TTL 过期检查 — 降级过期资产
 if (p0_tracker?.exists && p0_tracker?.assets) {
-  const _today = new Date()
+  const _today = '2026-07-09'  // TTL基准日期（Workflow运行时禁用new Date()，手动设定）
   for (const [url, info] of Object.entries(p0_tracker.assets)) {
     const ttl = info.ttl_days || 30
     const lastTested = info.last_tested
@@ -503,7 +503,7 @@ python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/
 # 2. 枚举chunk补下
 python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "<从下载结果提取的dump_dir>" "${target}" --ua "${REAL_UA}"
 # 3. 提取凭证
-python3 ${SKILL_SCRIPTS}/extract_creds.py "${target_dump}" 2>&1
+python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
 
 注意: <DUMP_DIR> 通过下载结果的 dump_dir 获取。
 先执行1，从JSON输出提取dump_dir，再执行2和3。

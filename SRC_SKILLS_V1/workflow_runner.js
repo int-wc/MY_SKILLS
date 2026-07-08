@@ -1073,7 +1073,14 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? 'JS文件已下载到本
 
 测试矩阵（按优先级执行）:
 
-**【核心策略 — 根据 API 命名推断功能，针对性利用】**
+**【核心策略 — 🎯 Agent 发散思维 + 靶标定制】**
+
+**首先思考：这个系统做什么的？数据流？鉴权怎么实现的？哪个模块最可能有漏洞？**
+基于 Phase 2 的 JS 分析 + 框架识别 + 发现的 API 路径，用第一性原理推断：
+- 物流平台 → 关注订单/运单/用户API的越权和遍历
+- 管理后台 → 关注权限提升/未授权/配置泄露
+- API网关 → 关注SSRF/路径穿越/鉴权绕过
+- **先理解系统再动手，不要机械照搬路径列表**
 
 不要只测固定路径列表。对于从 JS 发现的 API 路径，先分析命名再选择测试手法：
 
@@ -1192,7 +1199,7 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__
    - 对含数字ID的路径，尝试替换ID值
    - 观察响应差异（是否返回不同用户数据）
 
-2. 弱口令枚举:
+2. 弱口令枚举（🎯 关键：发散思维 + 靶标定制，不要机械照搬列表）:
    - **Phase 2 识别的框架默认口令（结构化提取，优先级最高）**:
      ${typeof globalThis.__p2_fw_info !== 'undefined' ? (() => {
        const fw = JSON.parse(globalThis.__p2_fw_info)
@@ -1200,12 +1207,19 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__
          `   · ${f.framework_name} ${f.version ? 'v'+f.version : ''} [${f.confidence}]: ${f.default_credentials.join(', ')}`
        ).join('\n') || '   （无框架默认口令识别）'
      })() : '   （Phase 2 未运行框架识别或未提取到口令）'}
-   - **通用字典暴力枚举**（按优先级排列）:
+   - **🎯 Agent 发散构造 — 根据目标系统特征生成针对性弱口令（关键思维能力，不要跳过）**:
+     · 从公司名 "${companyName}" 拼音/英文名/缩写衍生: zhang san → zhangsan/zhangsan123, Zs@2024, zhang.san/pass
+     · 从目标域名/系统名推断: 如目标含 lixiang → 试 lixiang/admin, admin/lixiang, lixiang/123456, admin/LiXiang@2024
+     · 从JS中发现的硬编码/注释/测试账号发散: 如果JS中发现 test/test123 → 发散出 test1/test1, test2/Test@2024
+     · 从JS中发现的邮箱/用户名发散: 如果发现 wangwu@company.com → 试 wangwu/company123, wangwu/Wang@2024
+     · 常见的姓氏+名字拼音组合: 尝试性+名首字母、名+姓、全拼等组合作为口令
+     · 从页面内容发散: 页面标题、版权年份、公司slogan → 作为口令上下文
+     · 任何登录端点的错误信息推断: "用户名不存在" vs "密码错误" → 先枚举用户再爆破
+   - **通用字典暴力枚举**（兜底）:
      · 组合1: admin/admin, admin/123456, admin/Admin@123, test/test
      · 组合2: admin/Admin@123456, admin/password, admin/12345678, root/root
-     · 组合3: 从公司名 "${companyName}" 拼音/英文名衍生（如 company/123456, company@2024）
-     · 组合4: 框架默认口令（JeecgBoot: jeecg/jeecg123, RuoYi: admin/admin123, Shiro: admin/123456）
-     · 组合5: 从 JS 配置/注释中发现硬编码凭证
+     · 组合3: 框架默认口令（JeecgBoot: jeecg/jeecg123, RuoYi: admin/admin123, Shiro: admin/123456）
+     · 组合4: 从 JS 配置/注释中发现硬编码凭证
    - 测试 JSON API 登录（Content-Type: application/json）
 
 3. 信息泄露检查:

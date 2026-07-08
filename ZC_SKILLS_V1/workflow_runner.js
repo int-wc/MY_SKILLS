@@ -984,7 +984,7 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分
 	${typeof globalThis.__zc_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__zc_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\n') : '（无）'}
 
 
-**【核心策略 — 根据 API 命名推断功能，针对性利用】**
+**【核心策略 — 🎯 Agent 发散思维 + 靶标定制】**
 1. 分析 API 命名 → 推断功能 → 对应攻击:
    upload/file/import        → **文件上传绕过**
    download/export/backup    → **路径遍历/任意文件读取**
@@ -1063,7 +1063,7 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分
    - 对含数字ID的路径，尝试替换ID值
    - 观察响应差异
 
-2. 弱口令枚举:
+2. 弱口令枚举（🎯 Agent 发散构造，不要机械列表）:
    - **Phase 2 识别的框架默认口令（结构化提取，优先级最高）**:
      ${typeof globalThis.__zc_fw_info !== 'undefined' ? (() => {
        const fw = JSON.parse(globalThis.__zc_fw_info)

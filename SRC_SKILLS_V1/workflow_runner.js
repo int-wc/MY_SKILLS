@@ -2117,7 +2117,7 @@ ${existingReports}` : ''}
     // 预读报告模板（避免N个并行writer各自独立Read，浪费token）
     let p5_template_content = ''
     try {
-      p5_template_content = require('fs').readFileSync(${SKILL_SCRIPTS}/../references/report-templates.md, 'utf8')
+      p5_template_content = require('fs').readFileSync('${SKILL_SCRIPTS}/../references/report-templates.md', 'utf8')
       log(`  📖 预读报告模板 (${p5_template_content.length} 字符)`)
     } catch(e) {
       log(`  ⚠️ 预读报告模板失败: ${e.message}，writer将自行Read`)

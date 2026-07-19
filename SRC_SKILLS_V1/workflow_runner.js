@@ -520,7 +520,7 @@ phase('深度分析')
 // 声明全局变量承载 Phase 2 JS分析结果，供 Phase 3 使用
 let p2_discoveries_text = ''
 // Phase 3/4 的发现结果也在外层声明，供后续阶段使用
-let p3_unauth, p3_other, p3_quick, p4_dirscan, p4_verify
+let p3_unauth, p3_other, p3_quick, p3_dirsearch, p3_codeaudit, p4_dirscan, p4_verify
 // 聚合发现数据，供 Phase 5 写入线索文件
 let p3_findings_data = []
 
@@ -1071,7 +1071,7 @@ if (mode.startsWith('phase5')) {
     log('  📂 执行字典目录扫描 (dirsearch)...')
     const P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
 
-    const p3_dirsearch = await agent(
+    p3_dirsearch = await agent(
       `对 ${companyName} 执行 dirsearch 目录扫描（使用 dirsearch 内置字典 + 积累字典）。
 
 ===== 目标列表（前20个） =====
@@ -1537,6 +1537,8 @@ if (progress.findings_count === 0) {
     ...(typeof p3_unauth !== 'undefined' && p3_unauth?.findings ? p3_unauth.findings : []),
     ...(typeof p3_other !== 'undefined' && p3_other?.findings ? p3_other.findings : []),
     ...(typeof p3_quick !== 'undefined' && p3_quick?.findings ? p3_quick.findings : []),
+    ...(typeof p3_dirsearch !== 'undefined' && p3_dirsearch?.findings ? p3_dirsearch.findings : []),
+    ...(typeof p3_codeaudit !== 'undefined' && p3_codeaudit?.audit_findings ? p3_codeaudit.audit_findings : []),
   ]
   const p4_findings_json = JSON.stringify(p4_all_findings, null, 2)
 
@@ -2021,14 +2023,18 @@ if (progress.findings_count === 0) {
   )
   log(`  已有 ${(existingReports || '').split('\n').filter(Boolean).length} 个报告`)
 
-  // 汇总所有阶段的结构化发现
-  const allFindingsData = [
+  // 报告只优先使用 Phase 4 复测后的有效发现，避免把 Phase 3 原始误报写入报告。
+  const p6VerifiedFindings = (p4_verify?.confirmed_findings || []).filter(f =>
+    f.confidence === 'confirmed' || f.confidence === 'suspected' || !f.confidence
+  )
+  const p6FallbackFindings = [
     ...(typeof p3_unauth !== 'undefined' && p3_unauth?.findings ? p3_unauth.findings : []),
     ...(typeof p3_other !== 'undefined' && p3_other?.findings ? p3_other.findings : []),
     ...(typeof p3_quick !== 'undefined' && p3_quick?.findings ? p3_quick.findings : []),
     ...(typeof p3_dirsearch !== 'undefined' && p3_dirsearch?.findings ? p3_dirsearch.findings : []),
     ...(typeof p3_codeaudit !== 'undefined' && p3_codeaudit?.audit_findings ? p3_codeaudit.audit_findings : []),
   ]
+  const allFindingsData = p6VerifiedFindings.length > 0 ? p6VerifiedFindings : p6FallbackFindings
   const findingsJSON = JSON.stringify(allFindingsData, null, 2)
 
   // 用结构化schema让agent返回【报告规划】（仅分片规划，不生成内容）

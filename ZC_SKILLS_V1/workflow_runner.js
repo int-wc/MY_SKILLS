@@ -314,7 +314,7 @@ if (p0_tracker?.exists && p0_tracker?.assets) {
 // ============================================================
 let p1_assets
 let p2_discoveries_text = ''
-let p3_unauth, p3_other, p3_quick, p4_dirscan, p4_verify
+let p3_unauth, p3_other, p3_quick, p3_dirsearch, p3_codeaudit, p4_dirscan, p4_verify
 let p3_findings_data = []
 
 // ============================================================
@@ -927,9 +927,9 @@ cat ${fuzz_out_zc}`,
   // P0-2: 持久化 accumulated 状态到临时文件（避免agent崩溃丢失）
   try {
     const stateToSave = {
-      creds: globalThis.__p2_creds_json || '[]',
-      js_dirs: globalThis.__p2_js_dirs_json || '[]',
-      fw_info: globalThis.__p2_fw_info || '[]',
+      creds: globalThis.__zc_creds_json || '[]',
+      js_dirs: globalThis.__zc_js_dirs_json || '[]',
+      fw_info: globalThis.__zc_fw_info || '[]',
     }
     require('fs').writeFileSync('/tmp/workflow_phase2_state.json', JSON.stringify(stateToSave))
   } catch(e) {}
@@ -1011,7 +1011,7 @@ if (mode.startsWith('phase5')) {
     log('  📂 执行字典目录扫描 (dirsearch)...')
     const P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
 
-        const p3_dirsearch = await agent(
+        p3_dirsearch = await agent(
       `对 ${resolvedProject} 执行 dirsearch 目录扫描（使用 dirsearch 内置字典 + 积累字典）。
 🔒 VPN: 所有 dirsearch 和 curl 命令必须加 --interface tun0
 
@@ -1237,7 +1237,7 @@ ${p2_discoveries_text != null && p2_discoveries_text !== '' ? p2_discoveries_tex
     )
 
     // 3.3 本地部署实现 + 源码审计（对 Phase 2 识别的开源系统进行深度审计）
-    let p3_codeaudit = null
+    p3_codeaudit = null
     const p3_has_oss = p2_discoveries_text && p2_discoveries_text.includes('【快速开发框架识别结果】')
 
     // 读取框架审计缓存，避免重复审计同一框架
@@ -1491,6 +1491,8 @@ if (progress.findings_count === 0) {
     ...(p3_unauth?.findings || []),
     ...(p3_other?.findings || []),
     ...(p3_quick?.findings || []),
+    ...(p3_dirsearch?.findings || []),
+    ...(p3_codeaudit?.audit_findings || []),
   ]
   const p4_findings_json = JSON.stringify(p4_all_findings, null, 2)
 
@@ -1903,14 +1905,18 @@ if (progress.findings_count === 0) {
   )
   log(`  已有 ${(existingReports || '').split('\n').filter(Boolean).length} 个报告`)
 
-  // 汇总发现
-  const allFindingsData = [
+  // 报告只优先使用 Phase 4 复测后的有效发现，避免把 Phase 3 原始误报写入报告。
+  const p6VerifiedFindings = (p4_verify?.confirmed_findings || []).filter(f =>
+    f.confidence === 'confirmed' || f.confidence === 'suspected' || !f.confidence
+  )
+  const p6FallbackFindings = [
     ...(p3_unauth?.findings || []),
     ...(p3_other?.findings || []),
     ...(p3_quick?.findings || []),
     ...(typeof p3_dirsearch !== 'undefined' && p3_dirsearch?.findings ? p3_dirsearch.findings : []),
     ...(typeof p3_codeaudit !== 'undefined' && p3_codeaudit?.audit_findings ? p3_codeaudit.audit_findings : []),
   ]
+  const allFindingsData = p6VerifiedFindings.length > 0 ? p6VerifiedFindings : p6FallbackFindings
   const findingsJSON = JSON.stringify(allFindingsData, null, 2)
 
   // 规划报告分片

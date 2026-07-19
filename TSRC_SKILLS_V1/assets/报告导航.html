@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>补天SRC - 漏洞报告导航</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif; background: #f0f2f5; color: #333; }
+.header { background: linear-gradient(135deg, #1a237e 0%, #283593 50%, #3949ab 100%); color: #fff; padding: 30px 40px; }
+.header h1 { font-size: 28px; font-weight: 700; }
+.header p { font-size: 14px; opacity: 0.85; margin-top: 8px; }
+.header .stats { display: flex; gap: 30px; margin-top: 15px; flex-wrap: wrap; }
+.header .stats .stat { text-align: center; }
+.header .stats .stat .num { font-size: 24px; font-weight: 700; }
+.header .stats .stat .label { font-size: 12px; opacity: 0.8; }
+.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+.filter-bar { background: #fff; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+.filter-bar input { flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+.filter-bar select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: #fff; }
+.filter-bar .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; }
+.filter-bar .btn:hover { opacity: 0.85; }
+.btn-expand { background: #e3f2fd; color: #1565c0; }
+.btn-collapse { background: #f3e5f5; color: #7b1fa2; }
+.btn-toggle { background: #e8f5e9; color: #2e7d32; }
+.btn-toggle.active { background: #ffebee; color: #c62828; }
+.company-card { background: #fff; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
+.company-card.hidden { display: none; }
+.company-header { padding: 16px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; transition: background 0.2s; }
+.company-header:hover { background: #f5f5f5; }
+.company-header .name { font-size: 16px; font-weight: 600; }
+.company-header .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 8px; }
+.badge-total { background: #e3f2fd; color: #1565c0; }
+.badge-removed { background: #ffebee; color: #c62828; }
+.badge-filtered { background: #fff3e0; color: #e65100; }
+.company-header .severity-summary { display: flex; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+.sev-critical { color: #b71c1c; }
+.sev-high { color: #d32f2f; }
+.sev-medium { color: #f57c00; }
+.sev-low { color: #fbc02d; }
+.company-body { padding: 0 20px 20px; display: none; }
+.company-body.open { display: block; }
+.vulntype-info { background: #f5f5f5; padding: 12px 16px; border-radius: 6px; margin: 12px 0; font-size: 13px; line-height: 1.6; }
+.report-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+.report-table th { text-align: left; padding: 8px 12px; background: #fafafa; border-bottom: 2px solid #eee; font-weight: 600; font-size: 13px; color: #666; }
+.report-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; }
+.report-table tr:hover { background: #fafafa; }
+.report-table .sev-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.sev-tag.critical { background: #ffebee; color: #b71c1c; }
+.sev-tag.high { background: #ffebee; color: #d32f2f; }
+.sev-tag.medium { background: #fff3e0; color: #e65100; }
+.sev-tag.low { background: #fff8e1; color: #f57f17; }
+.sev-tag.other { background: #f3e5f5; color: #7b1fa2; }
+.report-table .links a { color: #1976d2; text-decoration: none; margin-right: 8px; font-size: 13px; }
+.report-table .links a:hover { text-decoration: underline; color: #0d47a1; }
+.report-table .links .html-link { color: #388e3c; }
+.footer { text-align: center; padding: 30px; color: #999; font-size: 13px; }
+.filter-hint { font-size: 13px; color: #e65100; background: #fff3e0; padding: 6px 12px; border-radius: 4px; display: none; }
+.filter-hint.show { display: inline-block; }
+.empty-msg { text-align: center; padding: 40px; color: #999; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🔐 补天SRC - 漏洞报告导航</h1>
+  <p>12家公司 · 142份有效报告 · 8份已移除 · 2026-05-31 全面验证</p>
+  <div class="stats" id="stats"></div>
+</div>
+<div class="container">
+<div class="filter-bar">
+  <input type="text" id="search" placeholder="搜索公司/报告名称..." oninput="filterReports()">
+  <select id="severityFilter" onchange="filterReports()">
+    <option value="">全部等级</option>
+    <option value="严重">严重</option>
+    <option value="高危">高危</option>
+    <option value="中危">中危</option>
+    <option value="低危">低危</option>
+  </select>
+  <button class="btn btn-toggle" id="hideRemovedBtn" onclick="toggleRemoved()">● 显示已移除</button>
+  <button class="btn btn-expand" onclick="expandAll()">展开全部</button>
+  <button class="btn btn-collapse" onclick="collapseAll()">收起全部</button>
+  <a href="./漏洞模板.html" target="_blank" class="btn" style="background: #1a237e; color: #fff; text-decoration: none; display: inline-block; padding: 8px 16px; border-radius: 4px; font-size: 14px; font-weight: 500;">📋 漏洞模板</a>
+  <span class="filter-hint" id="filterHint"></span>
+</div>
+<div id="companyList"></div>
+<div class="footer">
+  报告生成时间: 2026-05-31 | 基于 curl -v 完整HTTP请求/响应验证 |
+  判定标准: 200 OK + 实际数据 = 有效 | 401/403/SPA catch-all = 无效
+</div>
+</div>
+<script>
+const companies = [];
+
+const vulnTypes = {
+  "安徽省刀锋网络科技有限公司": "高危(RCE/SQL注入/越权/敏感信息泄露/逻辑漏洞) 中危(信息泄露/CSRF/存储XSS/弱口令) 低危(少量信息泄露)",
+  "北京地平线信息科技": "严重(核心权限/10W+信息泄露/支付) 高危(系统权限/1W+信息/逻辑/存储XSS/弱口令/越权) 中危(存储XSS/越权/弱口令/SSRF/信息泄露) 低危(SQL注入/逻辑缺陷) 忽略(反射XSS/Self-XSS)",
+  "北京金山云网络技术有限公司": "严重(RCE/严重信息泄露3字段/核心逻辑) 高危(逻辑/代码执行/SQL注入/SSRF/越权) 中危(CSRF/存储XSS/弱口令/信息泄露) 低危(反射XSS/短信轰炸/URL跳转)",
+  "杭州恒业网络": "高危(RCE/WebShell/严重信息泄露/SQL注入/越权) 中危(信息泄露/CSRF/存储XSS/弱口令) 低危(轻微信息泄露/短信轰炸/URL跳转) 不接收(所有XSS)",
+  "货讯通科技": "高危(RCE/WebShell/信息泄露/SQL注入/逻辑/越权) 中危(信息泄露/CSRF/存储XSS/弱口令) 低危(轻微信息泄露/反射XSS/短信轰炸/URL跳转)",
+  "乐信": "超危(大量信息泄露/批量盗账户/SQL注入) 高危(金钱逻辑/支付/越权/存储XSS) 中低危(存储XSS/越权/信息泄露) 忽略(无敏感CSRF/SSRF/内网IP)",
+  "理想汽车": "严重(核心权限/10W+信息泄露/支付) 高危(逻辑/存储XSS/弱口令/10W+信息/越权) 中危(500-10W/存储XSS/文件包含/SSRF) 低危(少量信息泄露) 忽略(短信轰炸/Self-XSS/大模型)",
+  "上海亘岩网络科技有限公司": "高危(RCE/WebShell/信息泄露/SQL注入/越权) 中危(信息泄露/CSRF/存储XSS/逻辑缺陷) 低危(轻微信息泄露/反射XSS/短信轰炸/URL跳转)",
+  "台州市数据局": "高危(RCE/SQL注入/逻辑/越权) 中危(信息泄露/CSRF/存储XSS/弱口令) 低危(轻微信息泄露/反射XSS/短信轰炸)",
+  "浙江省教育厅": "高危(RCE/SQL注入/逻辑/越权) 中危(信息泄露/CSRF/存储XSS/弱口令) 低危(轻微信息泄露/反射XSS/短信轰炸/URL跳转)",
+  "浙江省三门县人民政府办公室": "高危(RCE/SQL注入/逻辑/越权) 中危(信息泄露/CSRF/存储XSS/弱口令) 低危(轻微信息泄露/反射XSS/短信轰炸)",
+  "追觅": "严重(大量高价值信息:员工2000+/用户50万+) 高危(5万+/弱口令/RCE/SSRF/越权) 中危(信息泄露/CSRF/存储XSS/SQL注入) 忽略(Swagger/Actuator/APIKey/内网IP/短信轰炸)"
+};
+
+function getSeverity(filename) {
+  if (/严重|超危/.test(filename)) return 'critical';
+  if (/高危/.test(filename)) return 'high';
+  if (/中危/.test(filename)) return 'medium';
+  if (/低危/.test(filename)) return 'low';
+  return 'other';
+}
+function getSeverityLabel(sev) { return { critical:'严重', high:'高危', medium:'中危', low:'低危', other:'其他' }[sev] || sev; }
+function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+const severityOrder = { critical: 0, high: 1, medium: 2, low: 3, other: 4 };
+const sevColors = { critical:'#b71c1c', high:'#d32f2f', medium:'#f57c00', low:'#fbc02d' };
+
+function loadData() {
+  const base = '.';
+  const companyList = [
+    { name: "追觅", dir: "追觅", valid: 20, removed: 0 },
+    { name: "安徽省刀锋网络科技有限公司", dir: "安徽省刀锋网络科技有限公司", valid: 18, removed: 1 },
+    { name: "货讯通科技", dir: "货讯通科技", valid: 18, removed: 2 },
+    { name: "北京金山云网络技术有限公司", dir: "北京金山云网络技术有限公司", valid: 16, removed: 0 },
+    { name: "上海亘岩网络科技有限公司", dir: "上海亘岩网络科技有限公司", valid: 13, removed: 1 },
+    { name: "乐信", dir: "乐信", valid: 12, removed: 1 },
+    { name: "北京地平线信息科技", dir: "北京地平线信息科技", valid: 10, removed: 1 },
+    { name: "台州市数据局", dir: "台州市数据局", valid: 12, removed: 1 },
+    { name: "杭州恒业网络", dir: "杭州恒业网络", valid: 7, removed: 0 },
+    { name: "浙江省教育厅", dir: "浙江省教育厅", valid: 7, removed: 1 },
+    { name: "浙江省三门县人民政府办公室", dir: "浙江省三门县人民政府办公室", valid: 6, removed: 0 },
+    { name: "理想汽车", dir: "理想汽车", valid: 5, removed: 0 }
+  ];
+
+  const reportNames = {
+    "追觅": [
+      "严重_批量获取巨量高价值信息_KafdropKafka集群严重数据泄露",
+      "高危_越权访问_GoCron定时任务系统RCE利用路径分析",
+      "高危_越权访问_GoCron定时任务系统公网暴露",
+      "高危_越权访问_KafdropKafka管理界面未授权访问",
+      "高危_重要信息泄露_SAPManagementConsole公网暴露",
+      "高危_重要信息泄露_SAPSOAP接口未授权信息泄露升级分析",
+      "中危_普通信息泄露_FLUX_DATAHUB数据平台暴露",
+      "中危_普通信息泄露_FLUX_DATAHUB深度探测",
+      "中危_普通信息泄露_GoCron系统RCE利用尝试",
+      "中危_普通信息泄露_Kafdrop与GoCron源码审计报告",
+      "中危_普通信息泄露_OnlyOffice文档系统暴露",
+      "中危_普通信息泄露_OpenfireCVE_Nginx绕过尝试",
+      "中危_普通信息泄露_OpenfireXMPP即时通讯服务暴露",
+      "中危_普通信息泄露_OpenfireXMPP服务与CVE分析",
+      "中危_普通信息泄露_TMS物流管理系统公网暴露",
+      "中危_普通信息泄露_发布管控平台公网暴露",
+      "低危_无意义异常信息泄漏_IoT后端系统公网暴露汇总",
+      "低危_无意义异常信息泄漏_OnlyOffice深度探测",
+      "低危_新资产发现_Hunter测绘新增内部系统及子域名暴露",
+      "高危_重要信息泄露_SAP_NetWeaver应用服务器多端口公网暴露"
+    ],
+    "安徽省刀锋网络科技有限公司": [
+      "高危_敏感信息泄露_入职登记平台API未授权访问",
+      "高危_重要信息泄露_支付测试环境完全开放访问",
+      "高危_重要信息泄露_EasyConnectVPN多端点暴露",
+      "高危_重要信息泄露_EasyConnectVPN多区域员工入口分析",
+      "高危_越权访问_内部管理系统公网暴露",
+      "高危_越权访问_NetmakerVPN面板未授权访问",
+      "高危_越权访问_RuoYiVue内部系统深度利用分析",
+      "高危_RCE_ThinkPHP调试模式与潜在RCE",
+      "中危_普通信息泄露_新域名资产发现",
+      "中危_普通信息泄露_IED仪表板与内网应用暴露",
+      "中危_普通信息泄露_OpenAPI网关Swagger泄露",
+      "中危_普通信息泄露_OpenAPISwagger完全暴露",
+      "中危_普通信息泄露_RTC信令服务器暴露",
+      "低危_轻微信息泄露_商家工作台JS泄露游戏平台API",
+      "低危_轻微信息泄露_API网关信息泄露",
+      "刀锋网络_dofun.cn新资产发现与H5活动平台暴露",
+      "刀锋网络_zhwclient_vip客户端API网关未授权访问与路由泄露",
+      "整体安全态势总结报告"
+    ],
+    "货讯通科技": [
+      "高危_越权访问_薪酬系统API端点非授权访问",
+      "高危_越权访问_OOCLDigital系统SpringBootActuator暴露",
+      "高危_重要信息泄露_KeycloakOIDC认证服务器配置泄露",
+      "高危_重要信息泄露_MOC多环境域名与Keycloak配置硬编码泄露",
+      "高危_重要信息泄露_PortLinksAI完整功能与Istio暴露",
+      "高危_RCE_MOC管理后台MyFacesViewState反序列化风险",
+      "高危_RCE_MyFacesViewState深度DES破解分析",
+      "中危_普通信息泄露_资产全景与漏洞汇总",
+      "中危_普通信息泄露_CSOPC运营中心API端点泄露",
+      "中危_普通信息泄露_薪酬系统开发环境暴露",
+      "中危_普通信息泄露_PortLinksAI管理后台与路由泄露",
+      "中危_普通信息泄露_Reliability航线系统内部API泄露",
+      "中危_普通信息泄露_WMSDMS_TMS_UAT测试环境暴露",
+      "低危_轻微信息泄露_Bifrost内部API权限管理端点泄露",
+      "低危_轻微信息泄露_DigitalFlowUATEIR系统暴露",
+      "低危_轻微信息泄露_OCC隐藏API与密码重置无频率限制",
+      "低危_轻微信息泄露_TMSPreprod环境暴露",
+      "货讯通科技_多区域F5BIGIP负载均衡器暴露与新资产测绘"
+    ],
+    "北京金山云网络技术有限公司": [
+      "高危_严重级别的敏感信息泄露_金山云_Nexus仓库深度利用与制品分析",
+      "高危_严重级别的敏感信息泄露_金山云_Nexus仓库未授权访问",
+      "高危_直接获取重要业务系统权限_金山云_Kclaw_OpenAPI接口全量泄露与SSO凭据泄露",
+      "高危_直接获取重要业务系统权限_金山云_OMS_PHP7过时API暴露",
+      "中危_普通信息泄露_金山云_Kibana日志系统暴露",
+      "中危_普通信息泄露_金山云_OIDC认证配置暴露",
+      "中危_普通设计缺陷_金山云内部系统暴露汇总",
+      "中危_普通设计缺陷_金山云_KAIC_VSCode云IDE暴露",
+      "中危_普通设计缺陷_金山云_RabbitMQ管理界面暴露",
+      "低危_轻微信息泄露_金山云_AI系统健康检查API暴露",
+      "低危_轻微信息泄露_金山云_Grafana_8_3_1版本信息泄露",
+      "低危_轻微信息泄露_金山云_Grafana监控系统暴露",
+      "低危_轻微信息泄露_金山云_KCE容器引擎注册表版本泄露",
+      "低危_轻微信息泄露_金山云_Kingdata_API健康检查暴露",
+      "低危_轻微信息泄露_金山云_Tomcat版本信息泄露",
+      "中危_普通信息泄露_金山云_Kclaw_OpenAPI接口全量泄露与SSO凭据泄露"
+    ],
+    "上海亘岩网络科技有限公司": [
+      "高危_严重级别的敏感信息泄露_1_EasyConnect_VPN公网暴露与暴力破解风险",
+      "高危_严重级别的敏感信息泄露_10_EasyConnect_VPN版本泄露与RSA密钥泄露",
+      "中危_普通信息泄露_4_Open_Platform未授权API访问",
+      "中危_普通信息泄露_5_Ops管理平台内部API泄露",
+      "中危_普通信息泄露_6_Spring_Boot_Actuator检测",
+      "中危_普通信息泄露_11_CloudAPI子域名JSON_API暴露",
+      "中危_普通信息泄露_12_EasyConnect_VPN_HTTP端口暴露与SSO配置泄露",
+      "中危_普通设计缺陷_3_容器管理平台暴露",
+      "中危_普通设计缺陷_7_多个内部服务公网暴露",
+      "低危_轻微信息泄露_8_Passport_Account_Recovery_API_Nginx信息泄露",
+      "低危_轻微信息泄露_9_Open_Platform_API文档查询信息泄露",
+      "高危_UKey平台公网暴露",
+      "低危_新资产发现_亘岩网络新增资产测绘"
+    ],
+    "乐信": [
+      "低危_无意义异常信息泄漏_API网关框架信息泄露",
+      "乐信云犀银行系统多个新资产公网暴露与敏感信息泄露",
+      "乐信云犀银行系统DivideAPI网关配置泄露",
+      "乐信ShenYu网关路由配置后端服务暴露与应用列表信息泄露",
+      "中低危_比较严重信息泄漏_测试环境暴露及安全配置缺陷",
+      "中低危_比较严重信息泄漏_客服系统高德地图API密钥泄露",
+      "中低危_比较严重信息泄漏_米霍克决策引擎系统JS敏感信息泄露",
+      "中低危_比较严重信息泄漏_磐石系统内部网络信息泄露",
+      "中低危_比较严重信息泄漏_云犀银行系统DivideAPI网关配置泄露",
+      "中低危_比较严重信息泄漏_OA系统敏感信息泄露",
+      "中低危_比较严重信息泄漏_OA系统SpringBoot错误信息泄露",
+      "中低危_越权访问_鼎盛系多系统API网关公网暴露"
+    ],
+    "北京地平线信息科技": [
+      "高危_直接导致重要信息泄漏_c_gitlab_horizon_ai开放注册与垃圾项目泛滥",
+      "高危_直接获取一般应用系统权限_saturnv_ota未授权API访问与内部系统信息泄露",
+      "中危_代码泄露有较敏感信息_caroperation_m_horizon_ai_API接口泄露与内部系统信息暴露",
+      "中危_代码泄露有较敏感信息_pwd_horizon_cc源码路径泄露与开发配置未清理",
+      "中危_普通设计缺陷和越权_sso_iam_horizon_auto_OIDC安全配置缺陷",
+      "低危_普通逻辑设计缺陷_dcportal_horizon_cc数据门户系统多端口暴露",
+      "低危_普通逻辑设计缺陷_exchangeproxy飞连网关异常响应模式",
+      "低危_确认为漏洞但有较大难度_scene_horizon_ai详细错误信息泄露",
+      "低危_新资产发现_地平线多个新子域名Nginx默认页暴露",
+      "中危_未授权访问_mercurymind_security_horizon_auto安全管理系统未授权API访问"
+    ],
+    "台州市数据局": [
+      "高危_严重级别的敏感信息泄露_漏洞报告_干事画像后端API信息泄露",
+      "高危_严重级别的敏感信息泄露_漏洞报告_数据开放平台Athena未授权访问",
+      "高危_严重级别的敏感信息泄露_漏洞报告_MinIO控制台AthenaActuator等多个新资产暴露",
+      "中危_普通信息泄露_安全测试总报告",
+      "中危_普通信息泄露_漏洞报告_企业综合服务Nginx默认配置",
+      "中危_普通信息泄露_漏洞报告_前端源码信息泄露",
+      "中危_普通信息泄露_漏洞报告_智慧养老管理系统认证泄露",
+      "低危_日志打印及配置泄露_漏洞报告_数据开放平台API结构暴露",
+      "低危_日志打印及配置泄露_漏洞报告_多个政务系统Nginx默认页与服务器版本信息泄露",
+      "其他_漏洞报告_企业综合服务Nginx默认配置",
+      "中危_普通逻辑缺陷_漏洞报告_智慧湿地管理系统IP白名单绕过与框架信息泄露",
+      "中危_普通信息泄露_漏洞报告_亩均论英雄大数据平台API接口全量暴露"
+    ],
+    "杭州恒业网络": [
+      "高危_严重级别的敏感信息泄露_杭州恒业网络_e_qgyyzs_net_ASP_NET_MVC详细错误页面",
+      "中危_普通信息泄露_杭州恒业网络_全子域名资产测绘与SQL注入深度分析",
+      "中危_普通信息泄露_杭州恒业网络_ylqx_qgyyzs_net_ClassicASP信息泄露与未授权消息发送",
+      "低危_轻微信息泄露_杭州恒业网络_123xml子域名ASP_NET默认模板暴露",
+      "低危_轻微信息泄露_杭州恒业网络_ASP_NET后台暴露与验证码缺陷",
+      "低危_轻微信息泄露_杭州恒业网络_多系统管理后台暴露与ViewState错误泄露",
+      "低危_轻微信息泄露_杭州恒业网络_SQL注入WAF绕过深度利用"
+    ],
+    "浙江省教育厅": [
+      "高危_越权访问_平安留学平台RuoYi未授权API访问",
+      "中危_普通信息泄露_平安留学平台内部网络信息泄露",
+      "中危_普通信息泄露_之江汇平台内部后端信息泄露",
+      "低危_轻微信息泄露_教师发展中心子域名信息泄露",
+      "低危_轻微信息泄露_校园安全平台Swagger组件暴露",
+      "低危_普通信息泄露_Exchange_Druid_Actuator接口暴露",
+      "低危_新资产发现_之江汇子域名资产测绘"
+    ],
+    "浙江省三门县人民政府办公室": [
+      "高危_越权访问_台州叫号系统Shiro与RuoYi敏感端点暴露",
+      "中危_普通信息泄露_才助共富应用API配置与开发平台暴露",
+      "低危_轻微信息泄露_政务系统公网暴露与配置泄露",
+      "低危_轻微信息泄露_浙里办应用管理与公路系统信息泄露",
+      "中危_普通信息泄露_三门县_NocoBase低代码平台与Actuator暴露",
+      "低危_新资产发现_三门县_Shiro端点确认与服务器版本信息泄露"
+    ],
+    "理想汽车": [
+      "高危_能够批量获取大量用户敏感信息_理想汽车_API网关内网IP批量泄露与CORS配置错误",
+      "高危_能够批量获取大量用户敏感信息_理想汽车_API网关内网IP泄露与CORS深度利用",
+      "高危_能够批量获取大量用户敏感信息_理想汽车_BCS_OpenAPI网关CORS任意域配置错误与新增内网IP泄露",
+      "低危_确认为漏洞但有较大难度_理想汽车_CAS认证开放重定向",
+      "低危_少量信息泄露_理想汽车_LiID认证系统API端点泄露"
+    ]
+  };
+
+  const removedReports = {
+    "安徽省刀锋网络科技有限公司": ["中危_普通信息泄露_V2Board节点面板暴露"],
+    "北京地平线信息科技": ["中危-一定程度的信息泄露_call-center-test-spring-boot-actuator-swagger-druid暴露"],
+    "货讯通科技": ["中危_普通信息泄露_ESG系统SpringBootActuator暴露", "中危_普通信息泄露_ShuttleBusQAActuator未授权访问"],
+    "乐信": ["中低危_比较严重信息泄漏_鼎盛CRM系统Actuator未授权访问"],
+    "上海亘岩网络科技有限公司": ["中危-普通的信息泄露_2-Verify-Express-Path-Disclosure"],
+    "台州市数据局": ["中危-普通的信息泄露_漏洞报告_网上信访系统SpringBootActuator未授权访问"],
+    "浙江省教育厅": ["中危_普通信息泄露_社团平台SpringBootActuator未授权访问"]
+  };
+
+  const severityCounts = { critical: 0, high: 0, medium: 0, low: 0, other: 0 };
+
+  companyList.forEach(c => {
+    const reports = (reportNames[c.name] || []).map(name => {
+      const sev = getSeverity(name);
+      severityCounts[sev]++;
+      return { name, severity: sev, sevLabel: getSeverityLabel(sev), md: `${base}/${c.dir}/submittable_reports/${name}.md`, html: `${base}/${c.dir}/submittable_reports/reports_html/${name}.html` };
+    });
+    const removed = (removedReports[c.name] || []).map(name => ({
+      name, severity: getSeverity(name), sevLabel: getSeverityLabel(getSeverity(name)), reason: "验证失败: SPA catch-all/服务已下线/WAF拦截"
+    }));
+    companies.push({ name: c.name, dir: c.dir, valid: c.valid, removed: c.removed, reports, removedReports: removed, vulnType: vulnTypes[c.name] || "" });
+  });
+
+  document.getElementById('stats').innerHTML =
+    `<div class="stat"><div class="num">${companies.length}</div><div class="label">公司</div></div>` +
+    `<div class="stat"><div class="num">${companies.reduce((a,c) => a + c.valid, 0)}</div><div class="label">有效报告</div></div>` +
+    `<div class="stat"><div class="num">${companies.reduce((a,c) => a + c.removed, 0)}</div><div class="label">已移除</div></div>` +
+    Object.entries({critical:'严重',high:'高危',medium:'中危',low:'低危'}).map(([k,v]) =>
+      `<div class="stat"><div class="num" style="color:${sevColors[k]}">${severityCounts[k]||0}</div><div class="label">${v}</div></div>`
+    ).join('');
+  renderCompanies();
+}
+
+function renderCompanies() {
+  const container = document.getElementById('companyList');
+  const searchVal = document.getElementById('search').value.toLowerCase();
+  const sevFilter = document.getElementById('severityFilter').value;
+  const hideRemoved = document.getElementById('hideRemovedBtn').classList.contains('active');
+  const sevKeyMap = { '严重':'critical', '高危':'high', '中危':'medium', '低危':'low' };
+
+  let totalVisible = 0;
+
+  container.innerHTML = companies.map(c => {
+    const targetSev = sevKeyMap[sevFilter] || null;
+
+    // Filter valid reports
+    let filteredReports = c.reports;
+    if (targetSev) filteredReports = filteredReports.filter(r => r.severity === targetSev);
+    if (searchVal) filteredReports = filteredReports.filter(r => r.name.toLowerCase().includes(searchVal));
+
+    // Filter removed reports
+    let filteredRemoved = c.removedReports;
+    if (targetSev) filteredRemoved = filteredRemoved.filter(r => r.severity === targetSev);
+    if (searchVal) filteredRemoved = filteredRemoved.filter(r => r.name.toLowerCase().includes(searchVal));
+    if (hideRemoved) filteredRemoved = [];
+
+    const hasAny = filteredReports.length > 0 || filteredRemoved.length > 0;
+
+    // Compute per-severity counts for valid reports
+    const sevCounts = {};
+    filteredReports.forEach(r => { sevCounts[r.severity] = (sevCounts[r.severity] || 0) + 1; });
+
+    if (!hasAny) return '';
+    totalVisible++;
+
+    return `
+<div class="company-card">
+  <div class="company-header" onclick="this.nextElementSibling.classList.toggle('open')">
+    <div>
+      <span class="name">${escapeHtml(c.name)}</span>
+      <span class="badge badge-total">${filteredReports.length} 报告</span>
+      ${targetSev ? `<span class="badge badge-filtered">${sevFilter}</span>` : ''}
+      ${!hideRemoved && c.removed > 0 ? `<span class="badge badge-removed">${c.removed} 已移除</span>` : ''}
+      <div class="severity-summary" style="margin-top:6px">
+        ${Object.entries({critical:'严重',high:'高危',medium:'中危',low:'低危'}).map(([k,v]) =>
+          sevCounts[k] ? `<span class="sev-${k}">${v}:${sevCounts[k]}</span>` : ''
+        ).filter(Boolean).join(' · ') || '<span style="color:#999">该等级无报告</span>'}
+      </div>
+    </div>
+    <span style="color:#999;font-size:20px">▸</span>
+  </div>
+  <div class="company-body">
+    ${c.vulnType ? `<div class="vulntype-info"><strong>漏洞类型要求：</strong>${c.vulnType}</div>` : ''}
+    ${filteredReports.length > 0 ? `
+    <table class="report-table">
+      <tr><th style="width:60px">等级</th><th>报告名称</th><th style="width:160px">链接</th></tr>
+      ${filteredReports.map(r => `
+      <tr>
+        <td><span class="sev-tag ${r.severity}">${r.sevLabel}</span></td>
+        <td>${escapeHtml(r.name)}</td>
+        <td class="links">
+          <a href="${r.md}" target="_blank">📄 MD</a>
+          <a href="${r.html}" target="_blank" class="html-link">🌐 HTML</a>
+        </td>
+      </tr>`).join('')}
+    </table>` : '<div style="padding:12px 0;color:#999;">该筛选条件下无有效报告</div>'}
+    ${filteredRemoved.length > 0 ? `
+    <div style="margin-top:12px;padding:10px 14px;background:#fff0f0;border-radius:6px;border:1px solid #ffcdd2">
+      <strong style="color:#c62828;">已移除报告 (${filteredRemoved.length})</strong>
+      ${filteredRemoved.map(r => `<div style="margin-top:6px;font-size:13px;color:#666;">❌ ${escapeHtml(r.name)} — ${r.reason}</div>`).join('')}
+    </div>` : ''}
+  </div>
+</div>`;
+  }).join('');
+
+  // Show/hide filter hint
+  const hint = document.getElementById('filterHint');
+  if (sevFilter) {
+    hint.textContent = `当前筛选: ${sevFilter} (${totalVisible}家公司有该等级报告)`;
+    hint.classList.add('show');
+  } else {
+    hint.classList.remove('show');
+  }
+}
+
+function filterReports() { renderCompanies(); }
+function expandAll() { document.querySelectorAll('.company-body').forEach(e => e.classList.add('open')); }
+function collapseAll() { document.querySelectorAll('.company-body').forEach(e => e.classList.remove('open')); }
+function toggleRemoved() {
+  document.getElementById('hideRemovedBtn').classList.toggle('active');
+  const btn = document.getElementById('hideRemovedBtn');
+  if (btn.classList.contains('active')) {
+    btn.textContent = '● 隐藏已移除';
+  } else {
+    btn.textContent = '○ 显示已移除';
+  }
+  filterReports();
+}
+
+window.onload = loadData;
+</script>
+</body>
+</html>

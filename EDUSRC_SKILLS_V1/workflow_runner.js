@@ -1,18 +1,19 @@
-// SRC_SKILLS_V1 - 八阶段全流程 Workflow 编排
-// 使用: Workflow({scriptPath: '...', args: {company: '货讯通科技', mode: 'full'}})
+// EDUSRC_SKILLS_V1 - 八阶段全流程 Workflow 编排
+// 教育漏洞报告平台(EDUSRC)专属 — 依据补天SRC_SKILLS_V1模型改造
+// 使用: Workflow({scriptPath: '...', args: {company: '北京大学', mode: 'full'}})
 // mode: 'full' | 'phase3' (跳过资产发现和深度分析，直接挖洞) | 'phase5' (直接出报告) | 'url' (指定单个URL)
 
 export const meta = {
-  name: 'src-full-scan',
-  description: '补天SRC全流程：资产发现→深度分析→漏洞挖掘→验证→资产标记→报告→自审→提交',
+  name: 'edusrc-full-scan',
+  description: 'EDUSRC全流程：教育资产发现→深度分析→漏洞挖掘→验证→资产标记→报告→自审→提交',
   phases: [
-    { title: '资产发现', detail: '读取厂商信息 + 解析Hunter资产 + 目标分类标记' },
-    { title: '深度分析', detail: 'JS逆向 + API枚举 + 组件审计 + 开源系统识别' },
-    { title: '漏洞挖掘', detail: '按优先级测试所有攻击面 + 框架识别线索指向测试' },
+    { title: '资产发现', detail: '读取院校信息 + 解析Hunter教育资产 + 目标分类标记' },
+    { title: '深度分析', detail: 'JS逆向 + API枚举 + 教育系统组件审计' },
+    { title: '漏洞挖掘', detail: '按优先级测试所有攻击面 + 教育系统常见漏洞测试' },
     { title: '验证取证', detail: '复现确认 + 证据收集' },
     { title: '资产标记', detail: '标记已测资产状态并存储，避免重复测试' },
     { title: '报告编写', detail: 'MD+HTML双格式输出' },
-    { title: '自审', detail: '格式检查 + 重复检测' },
+    { title: '自审', detail: '格式检查 + 等级复核 + EDUSRC F/R/T判定' },
     { title: '提交准备', detail: '最终清单 + 提交排序' },
   ],
 }
@@ -20,15 +21,15 @@ export const meta = {
 // ============================================================
 // 解析参数
 // ============================================================
-const SRC_BASE = '/home/my/butiansrc/Exclusive_SRC'
+const SRC_BASE = '/home/my/edusrc'
 
-// P2: 共享字典 — SRC↔ZC 互相合并积累的API模式（合并而非覆盖，减少竞态丢失）
+// P2: 共享字典 — EDUSRC↔SRC 互相合并积累的API模式（合并而非覆盖，减少竞态丢失）
 try {
   const fs = require('fs')
   const skillsRoot = '/home/my/.claude/skills'
   const pairs = [
-    ['SRC_SKILLS_V1', 'ZC_SKILLS_V1'],
-    ['ZC_SKILLS_V1', 'SRC_SKILLS_V1'],
+    ['EDUSRC_SKILLS_V1', 'SRC_SKILLS_V1'],
+    ['SRC_SKILLS_V1', 'EDUSRC_SKILLS_V1'],
   ]
   for (const [from, to] of pairs) {
     const src = `${skillsRoot}/${from}/references/api_patterns.json`
@@ -39,11 +40,8 @@ try {
         try {
           const srcData = JSON.parse(fs.readFileSync(src, 'utf8'))
           const dstData = JSON.parse(fs.readFileSync(dst, 'utf8'))
-          // 合并 common_endpoints
           const mergedEndpoints = [...new Set([...(srcData.common_endpoints || []), ...(dstData.common_endpoints || [])])]
-          // 合并 path_segments
           const mergedSegments = [...new Set([...(srcData.path_segments || []), ...(dstData.path_segments || [])])]
-          // 合并 api_prefixes（保留较大 count）
           const mergedPrefixes = { ...(dstData.api_prefixes || {}) }
           for (const [k, v] of Object.entries(srcData.api_prefixes || {})) {
             mergedPrefixes[k] = (mergedPrefixes[k] || 0) + (v.count || v)
@@ -54,7 +52,6 @@ try {
           fs.writeFileSync(dst, JSON.stringify(dstData, null, 2))
           log(`  📚 字典合并: ${from} ↔ ${to} (${mergedEndpoints.length} endpoints, ${mergedSegments.length} segments)`)
         } catch(e) {
-          // 合并失败回退到覆盖
           fs.copyFileSync(src, dst)
           log(`  📚 字典覆盖(合并失败): ${from} → ${to}`)
         }
@@ -65,7 +62,7 @@ try {
     }
   }
 } catch(e) { /* 字典共享非关键，失败不影响主流程 */ }
-const SKILL_SCRIPTS = '/home/my/.claude/skills/SRC_SKILLS_V1/scripts'
+const SKILL_SCRIPTS = '/home/my/.claude/skills/EDUSRC_SKILLS_V1/scripts'
 
 // ============================================================
 // 真实 User-Agent 配置 — 所有 curl 请求使用浏览器UA
@@ -331,85 +328,87 @@ if (mode.startsWith('phase5')) {
   const listing = await agent(
     `列出 ${SRC_BASE}/ 目录下的所有公司目录（排除 .html/.json/.js 文件和隐藏目录），
     输出格式为每行一个 "N. 公司名"，最后统计总数。`,
-    { label: '📋 列出可用厂商', phase: '资产发现' }
+    { label: '📋 列出可用院校', phase: '资产发现' }
   )
-  log('可用目标厂商:')
+  log('可用目标院校:')
   log(listing || '（无法列出）')
   log('')
   log('使用方式: 在 Workflow args 中指定 company 参数')
-  log('  例: Workflow({scriptPath: "...", args: {company: "理想汽车", mode: "full"}})')
-  throw new Error('need_company: 请指定目标公司名')
+  log('  例: Workflow({scriptPath: "...", args: {company: "北京大学", mode: "full"}})')
+  throw new Error('need_company: 请指定目标院校名')
   } else {
 
 markPhase(1, '🔄')
 log(`[1/8] 资产发现 — ${companyName}`)
 
 p1_assets = await agent(
-  `你是SRC漏洞挖掘专家，负责 "资产发现与目标识别" 阶段。
-  目标厂商: ${companyName}
+  `你是EDUSRC漏洞挖掘专家，负责 "资产发现与目标识别" 阶段。
+  目标院校: ${companyName}
 
   请依次执行:
 
-  1. 读取厂商信息
-     - 目录: ${SRC_BASE}/${companyName}/
-     - 查找并读取 *_Information.html（提取SRC范围、赏金规则、域名列表、禁止事项）
-     - 查找并读取 VulnType.html（提取接受的漏洞类型和忽略清单）
+  1. **EDUSRC收录范围确认**
+     - 确认 ${companyName} 是否属于EDUSRC收录范围：
+       · 教育部、人力资源和社会保障部、中国科学院
+       · 各省/自治区教育厅、直辖市教委、各级教育局
+       · 各省/自治区人社厅、直辖市人社局、各级人社局
+       · 各级学校（大学/学院/中学/小学/职业学校/技校）
+       · 教育相关软件/平台
+     - 如不确定归属，检查备案单位、主办方等信息
+     - 不属于以上范围 → 输出 company_name 但标记 edu_scope="out_of_scope"
 
-  2. 解析Hunter资产数据
-     - 目录: ${SRC_BASE}/${companyName}/hunter_info/
+  2. **读取已有资产数据**
+     - 目录: ${SRC_BASE}/${companyName}/
+     - 查找 assets/ 目录下的CSV文件（fofa/hunter 资产数据）
+     - 查找 findings/ 下的已有测试记录
+     - 读取 _references/ 下的URL列表（如存在）
+
+  3. **解析Hunter资产数据（如果有）**
+     - 目录: ${SRC_BASE}/${companyName}/assets/
      - 读取所有CSV文件，CSV格式: IP,端口,域名,IP标签,url,网站标题,高危协议,协议,通讯协议,网站状态码,操作系统,备案单位,备案号,备案异常,国家,省份,市区,Web资产,运营商,注册机构,应用/组件,资产标签,探查时间
      - 按以下维度给资产打标签:
-       · [范围内] — 域名在 Information.html 收录范围内
-       · [新发现] — Hunter发现但不在已知列表的子域名
+       · [edu.cn] — 域名为 *.edu.cn
+       · [教育类] — 备案单位为教育相关单位（大学/学院/教育局等）
+       · [教务系统] — 标题含"教务/选课/成绩/教学/课程/课表"
+       · [管理后台] — 标题含"登录/管理/后台/admin/dashboard/运维/控制台/统一认证/CAS/IAAA"
+       · [学工系统] — 标题含"学工/学生/招生/就业/档案/资助"
+       · [图书馆] — 标题含"图书馆/文献/数据库/期刊/学位论文"
+       · [科研系统] — 标题含"科研/项目/成果/论文/专利"
+       · [统一认证] — 标题含"统一认证/统一身份/IAAA/CAS/SSO/登录
        · [非常见端口] — 非80/443
-       · [管理后台] — 标题含"登录/管理/后台/admin/dashboard/运维/控制台"
        · [组件指纹] — 应用/组件列识别到具体版本
-       · [境外资产] — 备案异常/境外IP/无备案号
+       · [境外资产] — 备案异常/境外IP/无备案号/非CN
      - 同一域名多端口做URL聚合去重
 
-  3. **严格域名合法性过滤（必须执行，不可跳过）**
-     ⚠️ 只保留**主域后缀在 Information.html 定义的 SRC 范围内**的资产。参考示例：
-       合法主域: *.lixiang.com / *.chehejia.com / *.lixiangoa.com
-       非法示例（必须全部剔除）:
-       - 第三方镜像/代理: *.xxx.domain.name, *.xxx.internet.com, *.xxx.com.com, *.xxx.itotolink.com, *.xxx.783.com, *.xxx.ht.com
-       - CDN/云代理: *.xxx.baidu-itm.com, *.xxx.hz.ali.com, *.xxx.www.router.cmiot.cn, *.xxx.www.xshotel.com
-       - 仿冒/抢注域名: ah-lixiang.com, gz-lixiang.com.cn, lixiang.com.cn, cn-lixiang.com, lixiang.com.uz, *.khcc.site, *.ixem.ru
-       - 扫描陷阱/蜜罐: www_lixiang_com.*（下划线格式域名）, lixiang_com_cn.*
-       - 其它公司域名: *.wucai.com, *.chehejia.com.cn, *.gxjmxy.com, *.gfxy.com, *.anti-spam.org.cn
-     - 过滤方法: 取 url 的域名，提取最后两级主域（如 lixiang.com, baidu-itm.com），不在 Information.html 声明的 SRC 主域内的全部剔除
-     - 结合备案单位（"备案单位"列）交叉验证：备案单位为其他公司的资产剔除
-     - 有疑问的资产标记到 reason 字段中说明判断依据
-
   4. **优先级排序输出**
-     - 最高: [管理后台][境外资产]
-     - 高: [范围内][新发现]
-     - 中: [非常见端口][组件指纹]
+     - **最高**: [管理后台] [统一认证] [教务系统] — 核心系统优先测试
+     - **高**: [学工系统] [图书馆] [科研系统] — 常规业务系统
+     - **中**: [非常见端口] [组件指纹] — 扩展攻击面
+     - **低**: 仅有域名无标题/无Web服务的资产
 
-5. **URL聚合去重**：同域名多端口→保留HTTP+HTTPS各一；同IP多域名→独立保留
+  5. **URL聚合去重**：同域名多端口→保留HTTP+HTTPS各一；同IP多域名→独立保留
 
   JSON输出格式:
   {
-    "company_name": "公司名",
-    "src_scope_summary": "SRC范围简述",
-    "accepted_vuln_types": "接受的漏洞类型",
-    "prohibited_items": "禁止事项",
+    "company_name": "院校名",
+    "src_scope_summary": "EDUSRC范围确认简述",
+    "edu_scope": "in_scope|out_of_scope",
     "category_breakdown": {
-      "management": N, "new_discovery": N, "uncommon_port": N,
-      "overseas": N, "component_fingerprint": N, "in_scope": N
+      "education_domain": N, "management": N, "teaching": N, "library": N,
+      "research": N, "login_auth": N, "uncommon_port": N, "overseas": N
     },
     "priority_targets": [
-      {"url": "https://xxx", "ip": "x.x.x.x", "port": 443, "title": "xxx",
-       "tags": ["[管理后台]"], "priority": "最高", "reason": "标题含"管理""}
+      {"url": "https://xxx.edu.cn", "ip": "x.x.x.x", "port": 443, "title": "xxx",
+       "tags": ["[管理后台]", "[edu.cn]"], "priority": "最高", "reason": "标题含"管理""}
     ],
     "all_urls": ["url1", "url2", ...]
   }`,
-  { label: `📡 ${companyName} 资产分析`, schema: {
+  { label: `📡 ${companyName} 教育资产分析`, schema: {
     type: 'object',
     properties: {
       company_name: { type: 'string' },
       src_scope_summary: { type: 'string' },
-      accepted_vuln_types: { type: 'string' },
-      prohibited_items: { type: 'string' },
+      edu_scope: { type: 'string', enum: ['in_scope', 'out_of_scope'] },
       category_breakdown: { type: 'object' },
       priority_targets: {
         type: 'array',
@@ -429,7 +428,7 @@ p1_assets = await agent(
       },
       all_urls: { type: 'array', items: { type: 'string' } },
     },
-    required: ['company_name', 'priority_targets'],
+    required: ['company_name', 'priority_targets', 'edu_scope'],
   }, phase: '资产发现' }
 )
 
@@ -441,30 +440,30 @@ if (!p1_assets) {
 }
 
 // ============================================================
-// 🔧 程序化域名合法性过滤（第二层防线）
-// 剔除 agent 可能遗漏的非厂商资产
+// 🔧 程序化学域名合法性过滤（第二层防线）
+// 剔除非教育类/非相关资产
 // ============================================================
-const ILLEGAL_TLDS = [
-  'domain.name', 'baidu-itm.com', 'internet.com', 'com.com', 'itotolink.com',
-  'dfgoshine.com', 'tianshikeji.cn', 'china-elenice.com', 'xjdd.net',
-  'caiwangxing.net', 'twyls.cn', 'a300wr.net', 'ali.com', 'yjhst.com.cn',
-  '52fad.com', 'rqorrvtz.cn', 'jiaojiang.cn', 'xshotel.com',
-  'router.cmiot.cn', 'ht.com', '783.com', 'chehejia.com.cn',
-  'com.uz', 'khcc.site', 'cast508.com', 'anti-spam.org.cn', 'gxjmxy.com',
-  'cn-lixiang.com', 'gfxy.com', 'toptrans.com', 'weidesen.net',
-  'yuelong56.com', 'wucai.com', 'ah-lixiang.com', 'gz-lixiang.com.cn',
-  'lixiang.com.cn', 'ixem.ru',
+const EDUCATION_SCAN_TRAP_DOMAINS = [
+  'com.com', 'xyz', 'top', 'club', 'work', 'icu', 'cyou',
+  'cf', 'ga', 'gq', 'ml', 'tk',  // 免费域名
 ]
 
 function isDomainLegit(url) {
   try {
     const domain = url.split('://')[1].split(':')[0].toLowerCase()
-    // 扫描陷阱: 包含下划线（如 www_lixiang_com.xxx）
+    // 扫描陷阱: 包含下划线（如 www_pku_edu_cn.xxx.xyz）
     if (domain.includes('_')) return false
-    // 检查主域后缀是否在黑名单中
-    for (const bad of ILLEGAL_TLDS) {
-      if (domain.endsWith(bad) || domain === bad) return false
+    // 检查是否为免费/扫描陷阱域名
+    for (const bad of EDUCATION_SCAN_TRAP_DOMAINS) {
+      if (domain.endsWith('.' + bad) || domain === bad) return false
     }
+    // 如果是 edu.cn 直接通过
+    if (domain.endsWith('.edu.cn')) return true
+    // 如果是政府/事业单位域名后缀
+    if (domain.endsWith('.gov.cn') || domain.endsWith('.org.cn') || domain.endsWith('.ac.cn')) return true
+    // 含有 edu（如 xxx.edu.com/xxxedu.com）— 可能是仿冒教育类站点，标记但不剔除
+    if (domain.includes('edu')) return true
+    // 对于非 edu.cn 但常见教育相关域名的情况：lenient — 返回true并让上层判断
     return true
   } catch (_) { return false }
 }
@@ -473,13 +472,13 @@ if (p1_assets?.priority_targets) {
   const before = p1_assets.priority_targets.length
   p1_assets.priority_targets = p1_assets.priority_targets.filter(t => isDomainLegit(t.url))
   const filtered = before - p1_assets.priority_targets.length
-  if (filtered > 0) log(`  🛡️ 程序化域名过滤: 已剔除 ${filtered} 个非厂商资产（第三方代理/仿冒/扫描陷阱）`)
+  if (filtered > 0) log(`  🛡️ 域名过滤: 已剔除 ${filtered} 个扫描陷阱/免费域名资产`)
 }
 if (p1_assets?.all_urls) {
   const before2 = p1_assets.all_urls.length
   p1_assets.all_urls = p1_assets.all_urls.filter(u => isDomainLegit(u))
   const filtered2 = before2 - p1_assets.all_urls.length
-  if (filtered2 > 0) log(`  🛡️ 程序化域名过滤: 已剔除 ${filtered2} 个非厂商URL`)
+  if (filtered2 > 0) log(`  🛡️ 域名过滤: 已剔除 ${filtered2} 个扫描陷阱/免费域名URL`)
 }
 // ============================================================
 
@@ -508,8 +507,8 @@ showProgress()
 const top3 = (p1_assets.priority_targets || []).slice(0, 3)
 log(`  高优目标: ${p1_assets.priority_targets?.length || 0} 个`)
 top3.forEach(t => log(`    ${t.priority} ${t.url} — ${t.reason || ''}`))
-log(`  厂商范围: ${p1_assets.src_scope_summary || '未知'}`)
-if (p1_assets.prohibited_items) log(`  禁止事项: ${p1_assets.prohibited_items}`)
+log(`  院校范围: ${p1_assets.src_scope_summary || '待确认'}`)
+if (p1_assets.edu_scope === 'out_of_scope') log(`  ⚠️ 注意: 该目标在EDUSRC中可能不在收录范围内`)
   }
 
 // ============================================================
@@ -1188,7 +1187,7 @@ ${p3_dirsearch.new_endpoints.map(function(e) { return '  - ' + e }).join(String.
 
     // 3.1 未授权/信息泄露测试（遵循: 反思为主→迁跃为辅→分析为底→扩展为路）
     p3_unauth = await agent(
-      `你是SRC漏洞挖掘专家，对 ${companyName} 执行未授权访问和信息泄露测试。
+      `你是EDUSRC漏洞挖掘专家，对 ${companyName} 执行未授权访问和信息泄露测试。
 
 **【核心方法论 — 请先ReadFile加载 references/deep-mining-methodology.md】**
 先Read ${SKILL_SCRIPTS}/../references/deep-mining-methodology.md，然后按以下原则执行：
@@ -1221,9 +1220,14 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? 'JS文件已下载到本
 
 **首先思考：这个系统做什么的？数据流？鉴权怎么实现的？哪个模块最可能有漏洞？**
 基于 Phase 2 的 JS 分析 + 框架识别 + 发现的 API 路径，用第一性原理推断：
-- 物流平台 → 关注订单/运单/用户API的越权和遍历
-- 管理后台 → 关注权限提升/未授权/配置泄露
-- API网关 → 关注SSRF/路径穿越/鉴权绕过
+- **统一认证系统(IAAA/CAS/SSO)** → 关注认证绕过/OAuth2配置泄露/令牌伪造/Session固定
+- **教务管理系统** → 关注成绩越权查看/课表遍历/学生信息泄露/选课逻辑缺陷
+- **管理后台** → 关注权限提升/未授权/配置泄露/默认弱口令
+- **API网关(门户网站)** → 关注SSRF/路径穿越/鉴权绕过/配置泄露
+- **学工/招生系统** → 关注学生档案泄露/审批绕过/批量遍历
+- **图书馆/科研系统** → 关注读者信息泄露/文献下载绕过/未授权API
+- **财务/缴费系统** → 关注支付逻辑缺陷/订单遍历/退费漏洞
+- **网络教学平台** → 关注用户信息泄露/课程越权/文件上传
 - **先理解系统再动手，不要机械照搬路径列表**
 
 不要只测固定路径列表。对于从 JS 发现的 API 路径，先分析命名再选择测试手法：
@@ -1318,7 +1322,7 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? 'JS文件已下载到本
 
     // 3.2 越权/弱口令/其他测试（遵循: 反思为主→迁跃为辅→分析为底→扩展为路）
     p3_other = await agent(
-      `你是SRC漏洞挖掘专家，对 ${companyName} 执行越权/弱口令等测试。
+      `你是EDUSRC漏洞挖掘专家，对 ${companyName} 执行越权/弱口令等测试。
 
 **【核心方法论 — 请先ReadFile加载 references/deep-mining-methodology.md】**
 先Read ${SKILL_SCRIPTS}/../references/deep-mining-methodology.md 了解完整方法论，按以下原则执行：
@@ -1352,12 +1356,19 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__
        ).join('\n') || '   （无框架默认口令识别）'
      })() : '   （Phase 2 未运行框架识别或未提取到口令）'}
    - **🎯 Agent 发散构造 — 根据目标系统特征生成针对性弱口令（关键思维能力，不要跳过）**:
-     · 从公司名 "${companyName}" 拼音/英文名/缩写衍生: zhang san → zhangsan/zhangsan123, Zs@2024, zhang.san/pass
-     · 从目标域名/系统名推断: 如目标含 lixiang → 试 lixiang/admin, admin/lixiang, lixiang/123456, admin/LiXiang@2024
+     · 从公司名 "${companyName}" 拼音/英文名/缩写衍生（教育行业: 试学校拼音/缩写）
+     · 从目标域名/系统名推断: 如目标含 pku → 试 pku/admin, admin/pku, pku/123456
+     · **🎓 教育系统默认密码（关键 — 教育行业特化）**:
+        · 学号/工号作为密码: 1234567890/1234567890
+        · 身份证后6位/后8位: 123456, 12345678
+        · 8位生日: 20050101（新生常见）
+        · 学号后6位: 67890
+        · 证件号前/后几位
+        · 默认组合: admin/学号, 学号/学号, 考生号/身份证后6位
      · 从JS中发现的硬编码/注释/测试账号发散: 如果JS中发现 test/test123 → 发散出 test1/test1, test2/Test@2024
      · 从JS中发现的邮箱/用户名发散: 如果发现 wangwu@company.com → 试 wangwu/company123, wangwu/Wang@2024
      · 常见的姓氏+名字拼音组合: 尝试性+名首字母、名+姓、全拼等组合作为口令
-     · 从页面内容发散: 页面标题、版权年份、公司slogan → 作为口令上下文
+     · 从页面内容发散: 页面标题、版权年份、学校全称/缩写 → 作为口令上下文
      · 任何登录端点的错误信息推断: "用户名不存在" vs "密码错误" → 先枚举用户再爆破
    - **通用字典暴力枚举**（兜底）:
      · 组合1: admin/admin, admin/123456, admin/Admin@123, test/test
@@ -1542,7 +1553,7 @@ if (progress.findings_count === 0) {
 
   if (p4_all_findings.length > 0) {
     p4_verify = await agent(
-      `你是SRC漏洞验证专家，对 ${companyName} 的发现做**严格 curl 验证**。
+      `你是EDUSRC漏洞验证专家，对 ${companyName} 的发现做**严格 curl 验证**。
 
 ====== Phase 3 传入的发现列表 ======
 ${p4_findings_json.substring(0, 6000)}
@@ -1952,7 +1963,7 @@ if (mode.startsWith('phase5') || typeof p1_assets === 'undefined' || !p1_assets 
     ).join('\n')
 
     const p5_mark = await agent(
-      `你是SRC资产状态管理专家，对 ${companyName || ''} 的资产做测试状态判定。
+      `你是EDUSRC资产状态管理专家，对 ${companyName || ''} 的资产做测试状态判定。
 
 结构化维度数据:
 ${p5_dim_report_short}
@@ -2034,7 +2045,7 @@ if (progress.findings_count === 0) {
   // 用结构化schema让agent返回【报告规划】（仅分片规划，不生成内容）
   // content由后续write agent根据finding_indices各自生成，避免token爆炸
   const p5_plan = await agent(
-    `你是SRC报告编写专家，为 ${companyName} 的漏洞编写标准报告。
+    `你是EDUSRC报告编写专家，为 ${companyName} 的漏洞编写标准报告。
 
 你的任务：规划需要生成的报告清单，仅规划分片方案（不生成报告正文）。
 
@@ -2049,10 +2060,11 @@ if (progress.findings_count === 0) {
    - JS中同一个硬编码凭证导致多个功能越权 → 1份报告
 
 **③ 系统上下文重估危害** — 结合目标系统类型和数据敏感度重新评估：
-   物流/电商系统: 订单数据泄露=高危（即使单条）
+   教务/学工系统: 学生信息泄露=高危（即使单条）
+   统一认证系统: 认证绕过=严重
    管理后台: 任意接口未授权=高危
-   API网关: SSRF可升级为内网扫描=严重
-   金融系统: 用户信息泄露=严重
+   科研/论文系统: 论文/项目数据泄露=中危-高危
+   缴费/财务系统: 支付逻辑缺陷=高危
 
 **④ 利用链判定规则：**
    - 存在利用链可能 → 文件名为「利用链」标识，综合等级评估
@@ -2061,11 +2073,12 @@ if (progress.findings_count === 0) {
 ⚠️ 重要规则：
 1. 只对【确认有效】的漏洞写报告，不要虚构
 2. 同类漏洞合并为一个综合报告
-3. 文件名以中文开头：{严重等级}_{漏洞类型}_{公司简称}_{简述}.md
-   例：高危_信息泄露_货讯通_DWR接口.md
+3. 文件名以中文开头：{严重等级}_{漏洞类型}_{院校简称}_{简述}.md
+   例：高危_信息泄露_北京大学_工作量计量系统多高危漏洞汇总.md
 4. 默认过滤规则（可被 user_request 覆盖）：
    - **低危漏洞默认不生成报告**（除非用户明确要求包含低危）
    - **CORS同源配置缺陷默认不生成报告**（CORS Access-Control-Allow-Origin: * 或任意源反射，除非用户明确要求）
+   - **无意义的源码泄露/内网IP泄露默认不生成报告**（EDUSRC忽略I-14）
 
 ====== 以下是从漏洞挖掘阶段传入的实际发现（结构化数据）======
 ${findingsJSON}
@@ -2131,13 +2144,13 @@ ${existingReports}` : ''}
         const tryWrite = async (attempt = 1) => {
           const label = `📄 ${rpt.file_name}`
           const result = await agent(
-            `【关键 - 必须实际调用Write工具】你正在为SRC漏洞报告系统写入一份漏洞报告。
+            `【关键 - 必须实际调用Write工具】你正在为EDUSRC（教育漏洞报告平台）写入一份漏洞报告。
 
 报告信息:
 - 文件名: ${rpt.file_name}
 - 标题: ${rpt.title}
 - 严重等级: ${rpt.severity}
-- 厂商: ${companyName}
+- 院校: ${companyName}
 - 目录: ${SRC_BASE}/${companyName}/submittable_reports/
 
 ====== 该报告包含的结构化发现（仅该报告所属的${myFindings.length}个发现）======
@@ -2146,7 +2159,7 @@ ${myFindingsJSON}
 
 你的任务：
 1. 🎯 **发散思考** — 在写作过程中如果发现当前报告与其他报告/发现存在利用链可能，主动调整报告结构（合并或标记为利用链）
-2. 根据上述发现的原始数据，生成完整的Markdown格式报告
+2. 根据上述发现的原始数据，生成完整的EDUSRC标准Markdown格式报告
 2. 调用Write工具写入文件 file_path: "${filePath}"
 3. 执行 ls -la "${filePath}" 和 wc -l "${filePath}" 确认写入成功
 4. 读取文件内容确认完整性
@@ -2154,14 +2167,11 @@ ${myFindingsJSON}
 报告格式要求：
 - 模板结构参考:
 ${p5_template_content ? '```\n' + p5_template_content.substring(0, 1500) + '\n```' : '（模板预读失败，请自行Read）'}
+- EDUSRC报告需包含：漏洞信息表（等级/类型/影响范围/发现时间）、EDUSRC收录范围确认、漏洞描述、复现步骤+HTTP请求/响应包+curl命令、影响评估、修复建议
 - 如果该报告是**利用链类型**（多个漏洞串联），使用攻击链路图格式：\`漏洞A -> 漏洞B -> 漏洞C -> 最终危害\`，每个步骤附带单独的请求/响应包
-- 包含漏洞信息表（名称、等级、类型、范围、发现时间）
-- 包含漏洞描述
-- 包含漏洞复现步骤 + 完整的HTTP请求/响应包 + curl命令
-- 每个发现单独一个漏洞描述段落
-- 包含修复建议
-- 敏感数据脱敏
+- 敏感数据脱敏（身份证号/学号/手机号做部分掩盖）
 - 如果已有报告中已包含相同内容，不要重复写入
+- 低危漏洞默认不生成报告
 
 注意：不要只描述将要做什么，必须实际调用Write工具。这是写入磁盘的真实操作。这是第 ${attempt} 次尝试。`,
             { label, phase: '报告编写' }
@@ -2215,39 +2225,36 @@ if (progress.reports_count === 0) {
   markPhase(7, '🔄')
   log('[7/8] 报告自审')
 
-  // 读取判定规则和厂商VulnType
+  // 读取EDUSRC判定规则
   const p6_rules = await agent(
-    `读取以下两个文件的内容（用Read工具）:
+    `读取以下文件的内容（用Read工具）:
 
 1.  ${SKILL_SCRIPTS}/../references/judgment-rules.md
-   — 包含 F(不符)/R(保留)/T(属实) 三级判定规则
+   — 包含 EDUSRC F(不符)/R(保留)/T(属实) 三级判定规则
+   — 包含 EDUSRC Rank 0-10 评分标准
    — 包含严重等级判定参考表
    — 包含 401/403 处理规则
-
-2.  ${SRC_BASE}/${companyName}/VulnType.html
-   — 如果不存在则读取 ${SRC_BASE}/${companyName}/*_Information.html
-   — 如果都不存在，读取 references/vulntype-matrix.md 中该厂商的条目
-   — 提取接受的漏洞类型和忽略清单
+   — 包含 EDUSRC 忽略清单（I-01 至 I-15）
 
 输出读取结果摘要。`,
-    { label: '📖 读取判定规则 + VulnType', phase: '自审' }
+    { label: '📖 读取EDUSRC判定规则', phase: '自审' }
   )
 
   const p6_audit = await agent(
-    `你是SRC报告审计专家，对 ${companyName} 的报告做**最终判定**。
+    `你是EDUSRC报告审计专家，对 ${companyName} 的报告做**最终判定**。
 
 ===== 判定规则（已截断至2500字，完整版在文件中）=====
 ${(p6_rules || '(读取失败)').substring(0, 2500)}
 ======================================================
 
 报告目录: ${SRC_BASE}/${companyName}/submittable_reports/
-先用 ReadFile 读取完整的 judgment-rules.md 和 VulnType.html
+先用 ReadFile 读取完整的 judgment-rules.md
 运行审计脚本检查格式: python3 ${SKILL_SCRIPTS}/audit_reports.py 2>&1 | tail -30
 
 你的任务 — 对每份报告逐项判定：
 
 ### 1. 文件格式检查
-- 命名规范: {等级}_{类型}_{公司}_{简述}.md
+- 命名规范: {等级}_{类型}_{院校}_{简述}.md
 - 包含完整HTTP请求/响应包
 - 包含curl可复现命令
 - 敏感数据已脱敏
@@ -2257,11 +2264,10 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
 - 报告标注的严重等级是否与发现的实际危害匹配？
 - 是否过高/过低？
 
-### 3. 厂商接受度判定
-对照厂商 VulnType:
-- 漏洞类型是否在厂商接受范围内？
-- 是否在忽略清单中？
-- 如短信轰炸/Self-XSS/Swagger不可利用/HTTP头配置等
+### 3. EDUSRC收录范围判定
+对照EDUSRC范围（教育部/人社部/中科院/各级学校/教育软件）:
+- 漏洞资产是否在EDUSRC收录范围内？是否符合教育行业属性？
+- 是否在忽略清单中（Self-XSS/无敏感CSRF/无意义泄露/DoS等）？
 
 ### 4. 重复检测（重要 — 提交前必须检查）
 比较所有报告之间的端点重叠情况:
@@ -2272,7 +2278,7 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
 ### 5. 最终判定 (F/R/T)
 - **F (不符)** — 资产不符/无复现细节/漏洞不成立/明确不收 → 移入 _invalid/
 - **R (保留)** — 非敏感泄露/利用门槛高/暴露未深入 → 需进一步观察
-- **T (属实)** — 可提交补天
+- **T (属实)** — 可提交EDUSRC
 
 输出JSON格式，每份报告一个判定结果。`,
     { label: '🔍 最终判定 (F/R/T)', schema: {
@@ -2290,7 +2296,7 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
                 description: 'T=可提交, R=保留, F=不符, skip_duplicate=重复'
               },
               severity_accurate: { type: 'boolean', description: '严重等级判定是否准确' },
-              type_accepted: { type: 'boolean', description: '漏洞类型是否在厂商接受范围内' },
+              type_accepted: { type: 'boolean', description: '漏洞类型是否在EDUSRC收录范围内' },
               issues: { type: 'array', items: { type: 'string' }, description: '需要改进的问题列表' },
               suggestion: { type: 'string', description: '综合建议' },
             },
@@ -2347,7 +2353,7 @@ const p7_final = await agent(
 
 1. 文件名规范检查:
    ls "${SRC_BASE}/${companyName}/submittable_reports/"*.md
-   确认文件名格式: {等级}_{类型}_{公司}_{简述}.md
+   确认文件名格式: {等级}_{类型}_{院校}_{简述}.md
 
 2. 完整HTTP请求/响应包确认:
    对每份报告，用Read工具读取md文件，确认包含:
@@ -2362,15 +2368,15 @@ const p7_final = await agent(
    ls "${SRC_BASE}/${companyName}/submittable_reports/reports_html/"*.html
    确认每份.md都有对应的.html
 
-5. 厂商合规检查:
-   Read ${SRC_BASE}/${companyName}/VulnType.html 或 ${SRC_BASE}/${companyName}/*_Information.html
-   确认漏洞类型在厂商接受范围内 + 不在忽略清单中
+5. EDUSRC合规检查:
+   确认漏洞资产属于EDUSRC收录范围（教育部/人社部/中科院/各级学校/教育软件）
+   确认漏洞类型不在EDUSRC忽略清单中（Self-XSS/无敏感CSRF/无意义泄露/DoS等）
+   如目标非教育行业，标记为 out_of_scope
 
 6. 敏感数据脱敏确认:
    对每份报告Read内容，检查是否包含未脱敏的:
-   - 手机号/身份证号
-   - 真实的Cookie/Token
-   - 内网IP/域名（非必要的）
+   - 手机号/身份证号/学号/考生号
+   - 真实的Cookie/Token/凭证
 
 **输出要求：**
 - 列出每份报告及其6项检查结果（✅/❌）
@@ -2389,7 +2395,7 @@ log('')
 log('╔══════════════════════════════════════════════════════════════╗')
 log('║              🎉  七阶段全流程执行完成                        ║')
 log('╠══════════════════════════════════════════════════════════════╣')
-log(`║  厂商     │ ${(progress.company || '').padEnd(36)} ║`)
+log(`║  院校     │ ${(progress.company || '').padEnd(36)} ║`)
 log(`║  模式     │ ${String(mode).padEnd(36)} ║`)
 log(`║  发现数   │ ${String(progress.findings_count).padEnd(36)} ║`)
 log(`║  报告数   │ ${String(progress.reports_count).padEnd(36)} ║`)

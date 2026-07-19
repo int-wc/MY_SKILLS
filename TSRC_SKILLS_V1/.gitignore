@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+reports/
+reports_html/
+_invalid/
+captured/
+js_dumps/
+reconstructed/
+asset_test_status.json
+asset_findings.json
+ip_domain_map.csv
+alive_results.txt
+full_urls.txt
+deduped_targets.txt

@@ -1,49 +1,47 @@
-// SRC_SKILLS_V1 - 八阶段全流程 Workflow 编排
-// 使用: Workflow({scriptPath: '...', args: {company: '货讯通科技', mode: 'full'}})
+// TSRC_SKILLS_V1 - 八阶段全流程 Workflow 编排
+// 使用: Workflow({scriptPath: '...', args: {mode: 'full'}})
 // mode: 'full' | 'phase3' (跳过资产发现和深度分析，直接挖洞) | 'phase5' (直接出报告) | 'url' (指定单个URL)
 
 export const meta = {
-  name: 'src-full-scan',
-  description: '补天SRC全流程：资产发现→深度分析→漏洞挖掘→验证→资产标记→报告→自审→提交',
+  name: 'tsrc-full-scan',
+  description: 'TSRC全流程：资产发现→深度分析→漏洞挖掘→验证→资产标记→报告→自审→提交',
   phases: [
-    { title: '资产发现', detail: '读取厂商信息 + 解析Hunter资产 + 目标分类标记' },
+    { title: '资产发现', detail: '读取腾讯资产清单 + 解析FOFA/Hunter资产 + 目标分类标记' },
     { title: '深度分析', detail: 'JS逆向 + API枚举 + 组件审计 + 开源系统识别' },
-    { title: '漏洞挖掘', detail: '按优先级测试所有攻击面 + 框架识别线索指向测试' },
+    { title: '漏洞挖掘', detail: '按TSRC V4.2标准测试所有攻击面' },
     { title: '验证取证', detail: '复现确认 + 证据收集' },
     { title: '资产标记', detail: '标记已测资产状态并存储，避免重复测试' },
-    { title: '报告编写', detail: 'MD+HTML双格式输出' },
-    { title: '自审', detail: '格式检查 + 重复检测' },
-    { title: '提交准备', detail: '最终清单 + 提交排序' },
+    { title: '报告编写', detail: 'MD+HTML双格式输出，符合TSRC高质量报告标准' },
+    { title: '自审', detail: '格式检查 + 参照TSRC V4.2标准 + 重复检测' },
+    { title: '提交准备', detail: '最终清单 + 提交至 security.tencent.com' },
   ],
 }
 
 // ============================================================
 // 解析参数
 // ============================================================
-const SRC_BASE = '/home/my/butiansrc/Exclusive_SRC'
+const TSRC_BASE = '/home/my/SRC/TSRC'
+const SRC_BASE = TSRC_BASE
 
-// P2: 共享字典 — SRC↔ZC 互相合并积累的API模式（合并而非覆盖，减少竞态丢失）
+// P2: 共享字典 — TSRC↔ZC 互相合并积累的API模式（合并而非覆盖，减少竞态丢失）
+let fs = null
+try { fs = require('fs') } catch(e) {}
 try {
-  const fs = require('fs')
   const skillsRoot = '/home/my/.claude/skills'
   const pairs = [
-    ['SRC_SKILLS_V1', 'ZC_SKILLS_V1'],
-    ['ZC_SKILLS_V1', 'SRC_SKILLS_V1'],
+    ['TSRC_SKILLS_V1', 'ZC_SKILLS_V1'],
+    ['ZC_SKILLS_V1', 'TSRC_SKILLS_V1'],
   ]
   for (const [from, to] of pairs) {
     const src = `${skillsRoot}/${from}/references/api_patterns.json`
     const dst = `${skillsRoot}/${to}/references/api_patterns.json`
     if (fs.existsSync(src)) {
       if (fs.existsSync(dst)) {
-        // 合并模式：读取双方，合并数组再写回
         try {
           const srcData = JSON.parse(fs.readFileSync(src, 'utf8'))
           const dstData = JSON.parse(fs.readFileSync(dst, 'utf8'))
-          // 合并 common_endpoints
           const mergedEndpoints = [...new Set([...(srcData.common_endpoints || []), ...(dstData.common_endpoints || [])])]
-          // 合并 path_segments
           const mergedSegments = [...new Set([...(srcData.path_segments || []), ...(dstData.path_segments || [])])]
-          // 合并 api_prefixes（保留较大 count）
           const mergedPrefixes = { ...(dstData.api_prefixes || {}) }
           for (const [k, v] of Object.entries(srcData.api_prefixes || {})) {
             mergedPrefixes[k] = (mergedPrefixes[k] || 0) + (v.count || v)
@@ -54,7 +52,6 @@ try {
           fs.writeFileSync(dst, JSON.stringify(dstData, null, 2))
           log(`  📚 字典合并: ${from} ↔ ${to} (${mergedEndpoints.length} endpoints, ${mergedSegments.length} segments)`)
         } catch(e) {
-          // 合并失败回退到覆盖
           fs.copyFileSync(src, dst)
           log(`  📚 字典覆盖(合并失败): ${from} → ${to}`)
         }
@@ -65,7 +62,7 @@ try {
     }
   }
 } catch(e) { /* 字典共享非关键，失败不影响主流程 */ }
-const SKILL_SCRIPTS = '/home/my/.claude/skills/SRC_SKILLS_V1/scripts'
+const SKILL_SCRIPTS = '/home/my/.claude/skills/TSRC_SKILLS_V1/scripts'
 
 // ============================================================
 // 真实 User-Agent 配置 — 所有 curl 请求使用浏览器UA
@@ -130,6 +127,12 @@ if (!companyName && singleUrl) {
   }
 }
 
+// TSRC: 未指定公司名时默认腾讯
+if (!companyName) {
+  companyName = '腾讯'
+  log('ℹ️ 未指定目标，默认使用 "腾讯" 作为TSRC目标标识')
+}
+
 // 目标进度追踪
 const progress = {
   company: companyName || '未指定',
@@ -163,44 +166,27 @@ function markPhase(n, status) {
 
 // ============================================================
 // 资产测试状态加载（避免重复测试）
+// 日期优先级: args.today > args.date > 脚本默认
 // ============================================================
+const TODAY = args?.today || args?.date || '2026-07-20'
 const trackerPath = `${SRC_BASE}/${companyName || 'unknown'}/asset_test_status.json`
 const findingsPath = `${SRC_BASE}/${companyName || 'unknown'}/asset_findings.json`
-let p0_tracker = null
+let p0_tracker = { exists: false, assets: {} }
 
 if (companyName && !mode.startsWith('phase5')) {
-  p0_tracker = await agent(
-    `读取资产测试状态文件。
-路径: ${trackerPath}
-用Read工具读取该文件。
-如果文件不存在（Read返回错误），返回空对象。
-文件格式为JSON: {"assets": {"url": {"status": "已完全测试完毕|还未测试完毕|无法进行测试", ...}}}`,
-    { schema: {
-      type: 'object',
-      properties: {
-        exists: { type: 'boolean' },
-        assets: {
-          type: 'object',
-          additionalProperties: {
-            type: 'object',
-            properties: {
-              status: { type: 'string' },
-              phases_tested: { type: 'array', items: { type: 'string' } },
-              last_tested: { type: 'string' },
-              notes: { type: 'string' },
-            },
-          },
-        },
-      },
-      required: ['exists'],
-    }, label: '📋 加载资产测试状态' }
-  )
+  try {
+    const raw = JSON.parse(fs.readFileSync(trackerPath, 'utf8'))
+    p0_tracker = { exists: true, assets: raw.assets || raw }
+    log(`  📋 直接读取资产状态文件: ${Object.keys(p0_tracker.assets).length} 个资产`)
+  } catch(e) {
+    log(`  ⚠️ 读取资产状态文件失败: ${e.message}，视为空`)
+    p0_tracker = { exists: false, assets: {} }
+  }
 }
 
 // E: TTL 过期检查 — 降级过期资产（基于字符串日期比较，避免new Date()被Workflow禁用）
-// 日期优先级: args.today > args.date > 默认值
-const _todayStr = args?.today || args?.date || '2026-07-20'
 if (p0_tracker?.exists && p0_tracker?.assets) {
+  const _todayStr = TODAY
   const _todayParts = _todayStr.split('-').map(Number)
   const _todayDays = _todayParts[0]*365 + _todayParts[1]*30 + _todayParts[2]
   for (const [url, info] of Object.entries(p0_tracker.assets)) {
@@ -327,87 +313,81 @@ if (mode.startsWith('phase5')) {
   progress.findings_count = 1
   showProgress()
 } else if (!companyName) {
-  // 无参数：列出公司并退出
-  const listing = await agent(
-    `列出 ${SRC_BASE}/ 目录下的所有公司目录（排除 .html/.json/.js 文件和隐藏目录），
-    输出格式为每行一个 "N. 公司名"，最后统计总数。`,
-    { label: '📋 列出可用厂商', phase: '资产发现' }
-  )
-  log('可用目标厂商:')
-  log(listing || '（无法列出）')
+  // 无参数：列出TSRC产品类别并退出
+  log('📋 TSRC 产品类别:')
+  log('  核心产品: 微信/QQ/企业微信/QQ邮箱/腾讯云/腾讯视频/腾讯会议/腾讯文档/王者荣耀/和平精英/腾讯元宝/腾讯元器')
+  log('  重点产品: 腾讯新闻/腾讯地图/视频号/直播/搜一搜/腾讯微汇款')
+  log('  其他产品: 腾讯动漫/搜狗/腾讯音乐TME/阅文(独立上市子公司)')
+  log('  2026新品: 吐司(Toast)/TDream/TenPayGo/微信小薇/造化工坊/Craft')
   log('')
-  log('使用方式: 在 Workflow args 中指定 company 参数')
-  log('  例: Workflow({scriptPath: "...", args: {company: "理想汽车", mode: "full"}})')
-  throw new Error('need_company: 请指定目标公司名')
+  log('使用方式:')
+  log('  完整模式: Workflow({scriptPath: "...", args: {mode: "full"}})')
+  log('  指定URL:  Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com"}})')
+  log('  跳过发现:  Workflow({scriptPath: "...", args: {mode: "phase3"}})')
+  log('  仅报告:    Workflow({scriptPath: "...", args: {mode: "phase5"}})')
+  log('')
+  log('提示: TSRC的资产数据位于 /home/my/SRC/TSRC/资产收集/')
+  throw new Error('need_target: 指定 mode 或 url 参数')
   } else {
-
+    const TSRC_TARGET = '腾讯'
 markPhase(1, '🔄')
-log(`[1/8] 资产发现 — ${companyName}`)
+log(`[1/8] 资产发现 — ${TSRC_TARGET}`)
 
 p1_assets = await agent(
   `你是SRC漏洞挖掘专家，负责 "资产发现与目标识别" 阶段。
-  目标厂商: ${companyName}
+  目标: 腾讯 (TSRC 腾讯安全应急响应中心)
 
   请依次执行:
 
-  1. 读取厂商信息
-     - 目录: ${SRC_BASE}/${companyName}/
-     - 查找并读取 *_Information.html（提取SRC范围、赏金规则、域名列表、禁止事项）
-     - 查找并读取 VulnType.html（提取接受的漏洞类型和忽略清单）
+  1. 读取腾讯资产信息
+     - Read 腾讯资产清单: ${TSRC_BASE}/资产收集/腾讯资产清单.md
+     - Read TSRC评分标准: ${TSRC_BASE}/漏洞处理和评分标准/markdown/TSRC漏洞处理和评分标准.md
+     - Read TSRC安全测试规范: ${TSRC_BASE}/安全测试规范/markdown/TSRC安全测试规范.md
 
-  2. 解析Hunter资产数据
-     - 目录: ${SRC_BASE}/${companyName}/hunter_info/
-     - 读取所有CSV文件，CSV格式: IP,端口,域名,IP标签,url,网站标题,高危协议,协议,通讯协议,网站状态码,操作系统,备案单位,备案号,备案异常,国家,省份,市区,Web资产,运营商,注册机构,应用/组件,资产标签,探查时间
+  2. 解析FOFA/Hunter资产数据
+     - 读取 CSV: ${TSRC_BASE}/资产收集/mht_fofa.csv
      - 按以下维度给资产打标签:
-       · [范围内] — 域名在 Information.html 收录范围内
-       · [新发现] — Hunter发现但不在已知列表的子域名
+       · [核心产品] — 微信/QQ/企业微信/腾讯云/腾讯视频/腾讯会议/腾讯文档/王者荣耀/和平精英/电脑管家/手机管家/腾讯元宝/腾讯元器
+       · [重点产品] — 腾讯新闻/腾讯地图/视频号/直播/搜一搜/腾讯微汇款
+       · [其他产品] — 腾讯动漫/搜狗/阅文/TME/非Top游戏
+       · [2026新品] — 吐司/TDream/TenPayGo/造化工坊/Craft/微信小薇
+       · [管理后台] — 标题含登录/管理/后台/admin/dashboard/运维/控制台
        · [非常见端口] — 非80/443
-       · [管理后台] — 标题含"登录/管理/后台/admin/dashboard/运维/控制台"
        · [组件指纹] — 应用/组件列识别到具体版本
-       · [境外资产] — 备案异常/境外IP/无备案号
      - 同一域名多端口做URL聚合去重
 
-  3. **严格域名合法性过滤（必须执行，不可跳过）**
-     ⚠️ 只保留**主域后缀在 Information.html 定义的 SRC 范围内**的资产。参考示例：
-       合法主域: *.lixiang.com / *.chehejia.com / *.lixiangoa.com
-       非法示例（必须全部剔除）:
-       - 第三方镜像/代理: *.xxx.domain.name, *.xxx.internet.com, *.xxx.com.com, *.xxx.itotolink.com, *.xxx.783.com, *.xxx.ht.com
-       - CDN/云代理: *.xxx.baidu-itm.com, *.xxx.hz.ali.com, *.xxx.www.router.cmiot.cn, *.xxx.www.xshotel.com
-       - 仿冒/抢注域名: ah-lixiang.com, gz-lixiang.com.cn, lixiang.com.cn, cn-lixiang.com, lixiang.com.uz, *.khcc.site, *.ixem.ru
-       - 扫描陷阱/蜜罐: www_lixiang_com.*（下划线格式域名）, lixiang_com_cn.*
-       - 其它公司域名: *.wucai.com, *.chehejia.com.cn, *.gxjmxy.com, *.gfxy.com, *.anti-spam.org.cn
-     - 过滤方法: 取 url 的域名，提取最后两级主域（如 lixiang.com, baidu-itm.com），不在 Information.html 声明的 SRC 主域内的全部剔除
-     - 结合备案单位（"备案单位"列）交叉验证：备案单位为其他公司的资产剔除
-     - 有疑问的资产标记到 reason 字段中说明判断依据
+  3. **域名合法性过滤（必须执行）**
+     - 只保留腾讯旗下域名: *.qq.com, *.tencent.com, *.weixin.qq.com, *.wechat.com, *.tenpay.com, *.exmail.qq.com, *.mail.qq.com
+     - 剔除第三方云上客户业务（腾讯云的IP不代表=腾讯资产）
+     - 剔除仿冒/抢注域名
+     - 结合备案单位交叉验证
 
   4. **优先级排序输出**
-     - 最高: [管理后台][境外资产]
-     - 高: [范围内][新发现]
+     - 最高: [核心产品][管理后台]
+     - 高: [重点产品][2026新品]
      - 中: [非常见端口][组件指纹]
+     - 低: [其他产品]
 
-5. **URL聚合去重**：同域名多端口→保留HTTP+HTTPS各一；同IP多域名→独立保留
+  5. **URL聚合去重**
 
   JSON输出格式:
   {
-    "company_name": "公司名",
-    "src_scope_summary": "SRC范围简述",
-    "accepted_vuln_types": "接受的漏洞类型",
-    "prohibited_items": "禁止事项",
-    "category_breakdown": {
-      "management": N, "new_discovery": N, "uncommon_port": N,
-      "overseas": N, "component_fingerprint": N, "in_scope": N
-    },
+    "company_name": "腾讯",
+    "product_scope_summary": "TSRC产品范围简述",
+    "accepted_vuln_types": "TSRC接受的漏洞类型",
+    "prohibited_items": "TSRC禁止事项",
+    "category_breakdown": { "core": N, "key": N, "other": N, "new_2026": N, "management": N, "uncommon_port": N },
     "priority_targets": [
       {"url": "https://xxx", "ip": "x.x.x.x", "port": 443, "title": "xxx",
-       "tags": ["[管理后台]"], "priority": "最高", "reason": "标题含"管理""}
+       "tags": ["[核心产品]"], "product_category": "核心", "priority": "最高", "reason": "核心产品"}
     ],
     "all_urls": ["url1", "url2", ...]
   }`,
-  { label: `📡 ${companyName} 资产分析`, schema: {
+  { label: '📡 TSRC 资产分析', schema: {
     type: 'object',
     properties: {
       company_name: { type: 'string' },
-      src_scope_summary: { type: 'string' },
+      product_scope_summary: { type: 'string' },
       accepted_vuln_types: { type: 'string' },
       prohibited_items: { type: 'string' },
       category_breakdown: { type: 'object' },
@@ -421,6 +401,7 @@ p1_assets = await agent(
             port: { type: 'number' },
             title: { type: 'string' },
             tags: { type: 'array', items: { type: 'string' } },
+            product_category: { type: 'string', enum: ['核心', '重点', '其他', '2026新品'] },
             priority: { type: 'string', enum: ['最高', '高', '中', '低'] },
             reason: { type: 'string' },
           },
@@ -444,27 +425,32 @@ if (!p1_assets) {
 // 🔧 程序化域名合法性过滤（第二层防线）
 // 剔除 agent 可能遗漏的非厂商资产
 // ============================================================
-const ILLEGAL_TLDS = [
+const ILLEGAL_DOMAINS = [
   'domain.name', 'baidu-itm.com', 'internet.com', 'com.com', 'itotolink.com',
   'dfgoshine.com', 'tianshikeji.cn', 'china-elenice.com', 'xjdd.net',
   'caiwangxing.net', 'twyls.cn', 'a300wr.net', 'ali.com', 'yjhst.com.cn',
   '52fad.com', 'rqorrvtz.cn', 'jiaojiang.cn', 'xshotel.com',
-  'router.cmiot.cn', 'ht.com', '783.com', 'chehejia.com.cn',
+  'router.cmiot.cn', 'ht.com', '783.com',
   'com.uz', 'khcc.site', 'cast508.com', 'anti-spam.org.cn', 'gxjmxy.com',
-  'cn-lixiang.com', 'gfxy.com', 'toptrans.com', 'weidesen.net',
-  'yuelong56.com', 'wucai.com', 'ah-lixiang.com', 'gz-lixiang.com.cn',
-  'lixiang.com.cn', 'ixem.ru',
+  'gfxy.com', 'toptrans.com', 'weidesen.net',
+  'yuelong56.com',
+  'ixem.ru',
 ]
+
+// TSRC: 腾讯旗下合法域名列表
+const TENCENT_DOMAINS = ['qq.com', 'tencent.com', 'weixin.qq.com', 'wechat.com', 'tenpay.com', 'exmail.qq.com', 'mail.qq.com', 'weixin.com']
 
 function isDomainLegit(url) {
   try {
     const domain = url.split('://')[1].split(':')[0].toLowerCase()
-    // 扫描陷阱: 包含下划线（如 www_lixiang_com.xxx）
     if (domain.includes('_')) return false
-    // 检查主域后缀是否在黑名单中
-    for (const bad of ILLEGAL_TLDS) {
+    // 检查是否腾讯旗下域名
+    if (TENCENT_DOMAINS.some(d => domain === d || domain.endsWith('.' + d))) return true
+    // 黑名单检查
+    for (const bad of ILLEGAL_DOMAINS) {
       if (domain.endsWith(bad) || domain === bad) return false
     }
+    // 无法确认的也允许通过（后续 agent 会再次验证）
     return true
   } catch (_) { return false }
 }
@@ -473,13 +459,13 @@ if (p1_assets?.priority_targets) {
   const before = p1_assets.priority_targets.length
   p1_assets.priority_targets = p1_assets.priority_targets.filter(t => isDomainLegit(t.url))
   const filtered = before - p1_assets.priority_targets.length
-  if (filtered > 0) log(`  🛡️ 程序化域名过滤: 已剔除 ${filtered} 个非厂商资产（第三方代理/仿冒/扫描陷阱）`)
+  if (filtered > 0) log(`  🛡️ 程序化域名过滤: 已剔除 ${filtered} 个非腾讯资产（第三方代理/仿冒/扫描陷阱）`)
 }
 if (p1_assets?.all_urls) {
   const before2 = p1_assets.all_urls.length
   p1_assets.all_urls = p1_assets.all_urls.filter(u => isDomainLegit(u))
   const filtered2 = before2 - p1_assets.all_urls.length
-  if (filtered2 > 0) log(`  🛡️ 程序化域名过滤: 已剔除 ${filtered2} 个非厂商URL`)
+  if (filtered2 > 0) log(`  🛡️ 程序化域名过滤: 已剔除 ${filtered2} 个非腾讯URL`)
 }
 // ============================================================
 
@@ -494,7 +480,7 @@ if (p0_testedUrls.size > 0 && p1_assets?.priority_targets) {
 
 // 记录 Phase 1 资产维度
 ;(p1_assets.priority_targets || []).forEach(t => {
-  const isLogin = (t.tags || []).includes('[管理后台]')
+  const isLogin = (t.tags || []).includes('[管理后台]') || (t.tags || []).includes('[核心产品]')
   dimTracker.record(t.url, 'http_probe', 'done', { title: t.title || '' })
   if (isLogin) dimTracker.record(t.url, 'weak_pass', 'pending')
 })
@@ -2007,15 +1993,15 @@ if (progress.findings_count === 0) {
   // 准备输出目录
   await agent(
     `执行以下命令创建报告输出目录:
-    mkdir -p ${SRC_BASE}/${companyName}/submittable_reports/
-    mkdir -p ${SRC_BASE}/${companyName}/submittable_reports/reports_html/
+    mkdir -p ${TSRC_BASE}/报告/reports/
+    mkdir -p ${TSRC_BASE}/报告/reports/reports_html/
     确认目录已创建成功。`,
     { label: '📁 准备输出目录', phase: '报告编写' }
   )
 
   // 列出已有报告避免重复
   const existingReports = await agent(
-    `列出 ${SRC_BASE}/${companyName}/submittable_reports/ 下所有 .md 文件的文件名（不含路径），
+    `列出 ${TSRC_BASE}/报告/reports/ 下所有 .md 文件的文件名（不含路径），
     每行一个。如果没有文件则返回空。`,
     { label: '📋 检查已有报告', phase: '报告编写' }
   )
@@ -2062,7 +2048,7 @@ if (progress.findings_count === 0) {
 1. 只对【确认有效】的漏洞写报告，不要虚构
 2. 同类漏洞合并为一个综合报告
 3. 文件名以中文开头：{严重等级}_{漏洞类型}_{公司简称}_{简述}.md
-   例：高危_信息泄露_货讯通_DWR接口.md
+   例：高危_信息泄露_TSRC_腾讯云API未授权.md
 4. 默认过滤规则（可被 user_request 覆盖）：
    - **低危漏洞默认不生成报告**（除非用户明确要求包含低危）
    - **CORS同源配置缺陷默认不生成报告**（CORS Access-Control-Allow-Origin: * 或任意源反射，除非用户明确要求）
@@ -2071,7 +2057,7 @@ if (progress.findings_count === 0) {
 ${findingsJSON}
 ================================================================
 
-先检查 ${SRC_BASE}/${companyName}/submittable_reports/ 下已有报告避免重复。
+先检查 ${TSRC_BASE}/报告/reports/ 下已有报告避免重复。
 
 ${existingReports ? `已有报告：
 ${existingReports}` : ''}
@@ -2125,7 +2111,7 @@ ${existingReports}` : ''}
         // 只取出该报告分到的发现数据（按finding_indices过滤）
         const myFindings = (rpt.finding_indices || []).map(i => allFindingsData[i])
         const myFindingsJSON = JSON.stringify(myFindings, null, 2)
-        const filePath = `${SRC_BASE}/${companyName}/submittable_reports/${rpt.file_name}`
+        const filePath = `${TSRC_BASE}/报告/reports/${rpt.file_name}`
 
         // 用闭包包裹重试逻辑
         const tryWrite = async (attempt = 1) => {
@@ -2138,7 +2124,7 @@ ${existingReports}` : ''}
 - 标题: ${rpt.title}
 - 严重等级: ${rpt.severity}
 - 厂商: ${companyName}
-- 目录: ${SRC_BASE}/${companyName}/submittable_reports/
+- 目录: ${TSRC_BASE}/报告/reports/
 
 ====== 该报告包含的结构化发现（仅该报告所属的${myFindings.length}个发现）======
 ${myFindingsJSON}
@@ -2191,9 +2177,9 @@ ${p5_template_content ? '```\n' + p5_template_content.substring(0, 1500) + '\n``
   // 生成HTML版本
   const p5_html = await agent(
     `运行HTML报告生成脚本:
-    python3 ${SKILL_SCRIPTS}/generate_html.py ${SRC_BASE}/${companyName}/submittable_reports/
+    python3 ${SKILL_SCRIPTS}/generate_html.py ${TSRC_BASE}/报告/
 
-    检查输出目录 ${SRC_BASE}/${companyName}/submittable_reports/reports_html/ 是否生成了对应的 .html 文件。
+    检查输出目录 ${TSRC_BASE}/报告/reports/reports_html/ 是否生成了对应的 .html 文件。
 
     如果脚本不可用或报错，说明原因。`,
     { label: '🎨 生成HTML版本', phase: '报告编写' }
@@ -2224,9 +2210,9 @@ if (progress.reports_count === 0) {
    — 包含严重等级判定参考表
    — 包含 401/403 处理规则
 
-2.  ${SRC_BASE}/${companyName}/VulnType.html
+2.  ${TSRC_BASE}/漏洞处理和评分标准/markdown/TSRC漏洞处理和评分标准.md
    — 如果不存在则读取 ${SRC_BASE}/${companyName}/*_Information.html
-   — 如果都不存在，读取 references/vulntype-matrix.md 中该厂商的条目
+   — 如果都不存在，读取 references/vulntype-matrix.md 中TSRC的等级判定条目
    — 提取接受的漏洞类型和忽略清单
 
 输出读取结果摘要。`,
@@ -2240,14 +2226,14 @@ if (progress.reports_count === 0) {
 ${(p6_rules || '(读取失败)').substring(0, 2500)}
 ======================================================
 
-报告目录: ${SRC_BASE}/${companyName}/submittable_reports/
+报告目录: ${TSRC_BASE}/报告/
 先用 ReadFile 读取完整的 judgment-rules.md 和 VulnType.html
 运行审计脚本检查格式: python3 ${SKILL_SCRIPTS}/audit_reports.py 2>&1 | tail -30
 
 你的任务 — 对每份报告逐项判定：
 
 ### 1. 文件格式检查
-- 命名规范: {等级}_{类型}_{公司}_{简述}.md
+- 命名规范: {等级}_{类型}_TSRC_{简述}.md
 - 包含完整HTTP请求/响应包
 - 包含curl可复现命令
 - 敏感数据已脱敏
@@ -2272,7 +2258,7 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
 ### 5. 最终判定 (F/R/T)
 - **F (不符)** — 资产不符/无复现细节/漏洞不成立/明确不收 → 移入 _invalid/
 - **R (保留)** — 非敏感泄露/利用门槛高/暴露未深入 → 需进一步观察
-- **T (属实)** — 可提交补天
+- **T (属实)** — 可提交TSRC
 
 输出JSON格式，每份报告一个判定结果。`,
     { label: '🔍 最终判定 (F/R/T)', schema: {
@@ -2320,10 +2306,10 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
 ${fNames.map(function(n) { return '   mv "' + SRC_BASE + '/' + companyName + '/submittable_reports/' + n + '" "' + SRC_BASE + '/' + companyName + '/submittable_reports/_invalid/' + n + '"' }).join('\\n')}
 
 2. 运行整合脚本:
-   python3 ${SKILL_SCRIPTS}/consolidate_findings.py ${SRC_BASE}/${companyName}/submittable_reports/
+   python3 ${SKILL_SCRIPTS}/consolidate_findings.py ${TSRC_BASE}/报告/
 
 3. 确认文件已移动:
-   ls -la "${SRC_BASE}/${companyName}/submittable_reports/_invalid/"`,
+   ls -la "${TSRC_BASE}/报告/reports/_invalid/"`,
         { label: '🗑️ 处理F判定报告', phase: '自审' }
       )
     }
@@ -2341,13 +2327,16 @@ markPhase(8, '🔄')
 log('[8/8] 提交准备')
 
 const p7_final = await agent(
-  `提交准备 — 执行以下6项最终检查:
+  `TSRC 提交平台: https://security.tencent.com/
+**禁止：** 未经授权以任何形式传播漏洞细节
+
+提交准备 — 执行以下6项最终检查:
 
 **检查清单：**
 
 1. 文件名规范检查:
-   ls "${SRC_BASE}/${companyName}/submittable_reports/"*.md
-   确认文件名格式: {等级}_{类型}_{公司}_{简述}.md
+   ls "${TSRC_BASE}/报告/reports/"*.md
+   确认文件名格式: {等级}_{类型}_TSRC_{简述}.md
 
 2. 完整HTTP请求/响应包确认:
    对每份报告，用Read工具读取md文件，确认包含:
@@ -2359,11 +2348,11 @@ const p7_final = await agent(
    提取每份报告中的漏洞URL，用 curl -sI -H 'User-Agent: Mozilla/5.0 ...' 确认当前仍可访问且返回200（必须带浏览器UA）
 
 4. HTML版本确认:
-   ls "${SRC_BASE}/${companyName}/submittable_reports/reports_html/"*.html
+   ls "${TSRC_BASE}/报告/reports/reports_html/"*.html
    确认每份.md都有对应的.html
 
 5. 厂商合规检查:
-   Read ${SRC_BASE}/${companyName}/VulnType.html 或 ${SRC_BASE}/${companyName}/*_Information.html
+   Read ${TSRC_BASE}/漏洞处理和评分标准/markdown/TSRC漏洞处理和评分标准.md 或 ${SRC_BASE}/${companyName}/*_Information.html
    确认漏洞类型在厂商接受范围内 + 不在忽略清单中
 
 6. 敏感数据脱敏确认:

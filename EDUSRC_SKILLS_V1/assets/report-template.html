@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>漏洞报告模板</title>
+<style>
+body { font-family: -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif; line-height: 1.6; color: #333; max-width: 1000px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+.report-container { background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+h1 { color: #d32f2f; border-bottom: 2px solid #d32f2f; padding-bottom: 10px; }
+h2 { color: #1976d2; margin-top: 25px; border-left: 4px solid #1976d2; padding-left: 10px; }
+h3 { color: #333; margin-top: 20px; }
+h4 { color: #555; margin-top: 16px; font-size: 1.05em; }
+table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+th { background: #f0f0f0; font-weight: 600; }
+tr:nth-child(even) { background: #fafafa; }
+code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-family: "Consolas", "Courier New", monospace; font-size: 0.9em; }
+pre { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 0.85em; line-height: 1.4; }
+pre code { background: none; padding: 0; color: inherit; }
+blockquote { border-left: 4px solid #ff9800; background: #fff8e1; padding: 10px 15px; margin: 15px 0; }
+hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
+ol, ul { padding-left: 24px; }
+li { margin: 6px 0; }
+.severity-critical { display: inline-block; background: #b71c1c; color: #fff; padding: 3px 10px; border-radius: 3px; font-weight: bold; }
+.severity-high { display: inline-block; background: #d32f2f; color: #fff; padding: 3px 10px; border-radius: 3px; font-weight: bold; }
+.severity-medium { display: inline-block; background: #f57c00; color: #fff; padding: 3px 10px; border-radius: 3px; font-weight: bold; }
+.severity-low { display: inline-block; background: #fbc02d; color: #333; padding: 3px 10px; border-radius: 3px; font-weight: bold; }
+.http-request { background: #e3f2fd; border-left: 4px solid #1565c0; padding: 10px; margin: 10px 0; font-family: monospace; white-space: pre-wrap; }
+.http-response { background: #e8f5e9; border-left: 4px solid #2e7d32; padding: 10px; margin: 10px 0; font-family: monospace; white-space: pre-wrap; }
+.footer { text-align: center; color: #999; margin-top: 30px; font-size: 0.9em; border-top: 1px solid #eee; padding-top: 15px; }
+</style>
+</head>
+<body>
+<div class="report-container">
+
+<!-- ========== 报告标题 ========== -->
+<h1>[厂商名称] - [漏洞简述]</h1>
+
+<!-- ========== 漏洞信息 ========== -->
+<h2>漏洞信息</h2>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>漏洞名称</strong></td>
+<td>[完整漏洞名称，如: XXX系统未授权访问导致XXX信息泄露]</td>
+</tr>
+<tr>
+<td><strong>漏洞等级</strong></td>
+<td><span class="severity-high">[严重/高危/中危/低危]</span></td>
+</tr>
+<tr>
+<td><strong>漏洞类型</strong></td>
+<td>[未授权访问 / SQL注入 / 信息泄露 / SSRF / RCE / 越权 / 存储XSS ...]</td>
+</tr>
+<tr>
+<td><strong>影响范围</strong></td>
+<td>[受影响的URL/域名/系统]</td>
+</tr>
+<tr>
+<td><strong>漏洞版本</strong></td>
+<td>[软件/框架版本号，如已知]</td>
+</tr>
+<tr>
+<td><strong>发现时间</strong></td>
+<td>[YYYY-MM-DD]</td>
+</tr>
+</tbody>
+</table>
+
+<!-- ========== 漏洞描述 ========== -->
+<h2>漏洞描述</h2>
+<p>[详细描述漏洞的成因、发现过程、技术细节。说明为什么这构成一个安全漏洞，攻击者如何利用它。]</p>
+
+<!-- ========== 暴露范围/影响 ========== -->
+<h3>[暴露范围/影响细节 — 可选小标题]</h3>
+
+<table>
+<thead>
+<tr>
+<th>[列名]</th>
+<th>[列名]</th>
+<th>[列名]</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[数据]</td>
+<td>[数据]</td>
+<td>[数据]</td>
+</tr>
+</tbody>
+</table>
+
+<!-- ========== 漏洞复现 ========== -->
+<h2>漏洞复现</h2>
+
+<h3>复现1：[步骤描述]</h3>
+<pre><code>GET /api/example HTTP/1.1
+Host: target.example.com
+
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"sensitive_data": "..."}</code></pre>
+
+<h3>复现2：[步骤描述]</h3>
+<pre><code>GET /api/another-endpoint HTTP/1.1
+Host: target.example.com
+
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"more_data": "..."}</code></pre>
+
+<!-- ========== 漏洞影响 ========== -->
+<h2>漏洞影响</h2>
+<ol>
+<li><strong>[影响点1]</strong>：[详细说明]</li>
+<li><strong>[影响点2]</strong>：[详细说明]</li>
+<li><strong>[影响点3]</strong>：[详细说明]</li>
+</ol>
+
+<!-- ========== 修复建议 ========== -->
+<h2>修复建议</h2>
+
+<h3>紧急措施（24小时内）</h3>
+<ol>
+<li><strong>[建议1]</strong></li>
+<li><strong>[建议2]</strong></li>
+</ol>
+
+<h3>短期措施（1周内）</h3>
+<ol>
+<li><strong>[建议1]</strong></li>
+<li><strong>[建议2]</strong></li>
+</ol>
+
+<h3>长期措施</h3>
+<ol>
+<li><strong>[建议1]</strong></li>
+<li><strong>[建议2]</strong></li>
+</ol>
+
+<!-- ========== 验证记录（可选） ========== -->
+<h2>验证记录 ([YYYY-MM-DD] 重验证)</h2>
+
+<h3>验证结果: <strong>全部确认有效 (200 OK)</strong></h3>
+<p>所有端点经 <code>curl -v</code> 重验证，确认全部可未经认证直接访问。</p>
+
+<h3>验证1：[端点描述]</h3>
+<pre><code>$ curl -v "https://target.example.com/api/endpoint"
+
+&gt; GET /api/endpoint HTTP/2
+&gt; Host: target.example.com
+
+&lt; HTTP/2 200
+&lt; server: nginx
+&lt; content-type: application/json
+
+{"response": "..."}</code></pre>
+
+<h3>验证总结</h3>
+<table>
+<thead>
+<tr>
+<th>端点</th>
+<th>HTTP状态</th>
+<th>是否有数据</th>
+<th>有效</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/api/endpoint1</code></td>
+<td>200 OK</td>
+<td>是</td>
+<td><strong>有效</strong></td>
+</tr>
+<tr>
+<td><code>/api/endpoint2</code></td>
+<td>200 OK</td>
+<td>是</td>
+<td><strong>有效</strong></td>
+</tr>
+<tr>
+<td><code>/api/endpoint3</code></td>
+<td>401 / 403</td>
+<td>-</td>
+<td>受保护</td>
+</tr>
+</tbody>
+</table>
+<p><strong>结论: [验证总结描述]。验证结果: 有效。</strong></p>
+
+<!-- ========== 参考 ========== -->
+<h2>参考</h2>
+<ul>
+<li>[参考链接或文档]</li>
+</ul>
+
+<div class="footer">Generated by Butian SRC Report Generator | [YYYY-MM-DD]</div>
+</div>
+</body>
+</html>

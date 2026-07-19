@@ -23,6 +23,16 @@ export const meta = {
 // ============================================================
 const ZC_BASE = '/home/my/360zc'
 const SKILL_SCRIPTS = '/home/my/.claude/skills/ZC_SKILLS_V1/scripts'
+
+// 动态检测 dirsearch 字典路径（兼容不同 Python 版本）
+const DIRSEARCH_DICT = (() => {
+  const pyVers = ['python3.14', 'python3.13', 'python3.12', 'python3.11', 'python3.10']
+  for (const v of pyVers) {
+    try { const p = `/home/my/.local/lib/${v}/site-packages/dirsearch/db/dicc.txt`; if (require('fs').existsSync(p)) return p } catch(_) {}
+  }
+  return '/home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt'
+})()
+
 let projectName, mode, singleUrl
 
 if (typeof args === 'string') {
@@ -49,8 +59,8 @@ if (typeof args === 'string') {
   mode = 'full'
 }
 
-// 自动探测项目目录 — 以当前工作目录为准
-const CWD = '/home/my/360zc/1516_中远海运'
+// 自动探测项目目录 — 以 resolvedProject 为准（不再硬编码）
+const CWD = `${ZC_BASE}/${resolvedProject}`
 
 // 未指定项目名时从URL自动提取
 let _isAutoCompany = false
@@ -201,8 +211,9 @@ if (!mode.startsWith('phase5')) {
 }
 
 // E: TTL 过期检查 — 降级过期资产（基于字符串日期比较，避免new Date()被Workflow禁用）
+// 日期优先级: args.today > args.date > 默认值
+const _todayStr = args?.today || args?.date || '2026-07-20'
 if (p0_tracker?.exists && p0_tracker?.assets) {
-  const _todayStr = '2026-07-09'
   const _todayParts = _todayStr.split('-').map(Number)
   const _todayDays = _todayParts[0]*365 + _todayParts[1]*30 + _todayParts[2]
   for (const [url, info] of Object.entries(p0_tracker.assets)) {
@@ -540,70 +551,88 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
       analyses = await pipeline(
       targets,
       async (target) => {
-        // === 合并机械操作:下载JS+枚举chunk+提取凭证（含自动重试） ===
-        let mechResult = ''
+        // === Step A: 下载JS（使用schema结构化输出，自动重试1次，VPN隔离） ===
+        let dlResult = null
         for (let _retry = 0; _retry < 2; _retry++) {
-          mechResult = await agent(
-          `执行以下命令串行:
-# 1. 下载JS(VPN)
+          dlResult = await agent(
+            `执行以下命令:
 python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${PROJECT_DIR}/js_dumps" --ua "${REAL_UA}" --interface tun0
-# 2. 枚举chunk补下
-python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "<从下载结果提取的dump_dir>" "${target}" --ua "${REAL_UA}" --interface tun0
-# 3. 提取凭证
-python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
 
-输出格式: ---DOWNLOAD_RESULT---{...}---CHUNK_RESULT---{...}---CREDS_RESULT---{...}`,
-          { label: `🤖 机械操作: ${target}`, phase: '深度分析' }
-        )
-
-        let dl_dump_dir = "${PROJECT_DIR}/js_dumps"
-        let dl_file_count = 0
-        let target_hash = ""
-        try {
-          const dlPart = (mechResult || '').split('---DOWNLOAD_RESULT---')[1] || ''
-          const dlMatch = dlPart.match(/{[^}]+}/)
-          if (dlMatch) {
-            const dl = JSON.parse(dlMatch[0])
-            if (dl.dump_dir) dl_dump_dir = dl.dump_dir
-            if (dl.file_count) dl_file_count = dl.file_count
-            if (dl.target_hash) target_hash = dl.target_hash
+将下载结果JSON原样输出，不要加任何额外文字。`,
+            { label: `📥 下载JS: ${target}`, schema: {
+              type: 'object',
+              properties: {
+                status: { type: 'string', enum: ['ok', 'unreachable'] },
+                target: { type: 'string' },
+                dump_dir: { type: 'string' },
+                file_count: { type: 'number' },
+                target_hash: { type: 'string' },
+              },
+              required: ['status', 'dump_dir', 'file_count', 'target_hash'],
+            }, phase: '深度分析' }
+          )
+          if (dlResult && dlResult.file_count > 0) {
+            log(`  📥 ${target}: 下载 ${dlResult.file_count} 个文件, hash=${dlResult.target_hash}`)
+            break
           }
-        } catch(e) {}
-        if (dl_file_count > 0) log(`  📥 ${target}: 下载 ${dl_file_count} 个文件`)
-        if (dl_file_count === 0) log(`  ⚠️ ${target}: JS下载可能失败（0文件），检查VPN或target是否可达`)
-
-        try {
-          const credsPart = (mechResult || '').split('---CREDS_RESULT---')[1] || ''
-          const credsMatch = credsPart.match(/{[^}]+}/)
-          if (credsMatch) {
-            const credsData = JSON.parse(credsMatch[0])
-            const creds = credsData.credentials || []
-            if (creds.length > 0) {
-              if (!globalThis.__zc_creds_json) globalThis.__zc_creds_json = '[]'
-              const existing = JSON.parse(globalThis.__zc_creds_json)
-              existing.push(...creds)
-              globalThis.__zc_creds_json = JSON.stringify(existing)
-              log(`  🔐 ${target}: 提取 ${creds.length} 条凭证`)
-            }
-          }
-        } catch(e) {}
-
-        if (dl_file_count > 0) break
-          if (_retry === 0) log(`  🔄 ${target}: 下载结果为0文件，等待2秒后重试...`)
-        }  // end retry loop
-
-        if (target_hash) {
-          if (!globalThis.__zc_js_dirs_json) globalThis.__zc_js_dirs_json = '[]'
-          const dirs = JSON.parse(globalThis.__zc_js_dirs_json)
-          dirs.push({ target_hash, dump_dir: dl_dump_dir, js_count: dl_file_count })
-          globalThis.__zc_js_dirs_json = JSON.stringify(dirs)
+          if (_retry === 0) log(`  ⚠️ ${target}: JS下载0文件，重试...`)
+          dlResult = null
         }
 
-        // === Step C: Agent 创造性分析 ===
+        const dump_dir = dlResult?.dump_dir || "${PROJECT_DIR}/js_dumps"
+        const dl_file_count = dlResult?.file_count || 0
+        const target_hash = dlResult?.target_hash || ''
+
+        // 下载成功后执行枚举chunk和提取凭证
+        if (dl_file_count > 0) {
+          // === Step B: 枚举chunk补下（VPN隔离） ===
+          try {
+            await agent(
+              `python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "${dump_dir}" "${target}" --ua "${REAL_UA}" --interface tun0
+输出命令的stdout摘要。`,
+              { label: `🧩 枚举chunk: ${target}`, phase: '深度分析' }
+            )
+          } catch(e) { log(`  ⚠️ chunk枚举跳过: ${e.message}`) }
+
+          // === Step C: 提取凭证 ===
+          try {
+            const credsResult = await agent(
+              `python3 ${SKILL_SCRIPTS}/extract_creds.py "${dump_dir}" --output "${dump_dir}/_credentials.json"
+将最后一行的JSON结果原样输出。`,
+              { label: `🔐 提取凭证: ${target}`, phase: '深度分析' }
+            )
+            const credLines = (credsResult || '').split('\\n').reverse()
+            for (const l of credLines) {
+              try {
+                const parsed = JSON.parse(l.trim())
+                if (parsed.credentials && parsed.credentials.length > 0) {
+                  if (!globalThis.__zc_creds_json) globalThis.__zc_creds_json = '[]'
+                  const existing = JSON.parse(globalThis.__zc_creds_json)
+                  existing.push(...parsed.credentials)
+                  globalThis.__zc_creds_json = JSON.stringify(existing)
+                  log(`  🔐 ${target}: 提取 ${parsed.credentials.length} 条凭证`)
+                }
+                break
+              } catch(_) { /* 不是JSON行，继续找下一行 */ }
+            }
+          } catch(e) { log(`  ⚠️ 凭证提取跳过: ${e.message}`) }
+
+          // === 记录JS缓存目录信息 ===
+          if (target_hash) {
+            if (!globalThis.__zc_js_dirs_json) globalThis.__zc_js_dirs_json = '[]'
+            const dirs = JSON.parse(globalThis.__zc_js_dirs_json)
+            dirs.push({ target_hash, dump_dir, js_count: dl_file_count })
+            globalThis.__zc_js_dirs_json = JSON.stringify(dirs)
+          }
+        } else {
+          log(`  ⚠️ ${target}: JS下载失败，跳过chunk枚举/凭证提取/分析`)
+        }
+
+        // === Step D: Agent 阅读本地文件 + 创造性分析 ===
         return await agent(
           `你是JS逆向和API发现专家，分析已下载到本地的JS文件: ${target}
 
-    已下载文件目录: ${dl_dump_dir}
+    已下载文件目录: ${dump_dir}
     下载文件数: ${dl_file_count}
 
     **你的任务：用Read工具阅读本地JS文件，发挥创造性分析以下内容：**
@@ -623,6 +652,11 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     - 本地文件分析完成后不要删除缓存文件，留作证据
     - 发挥第一性原理和创造性思维，不要局限于固定模式
     - 注意看Source Map还原出的文件: 检查是否有 reconstructed/ 目录（包含原始TS/Vue/React源码）
+    - 注意检查 _page.html 中的内嵌JSON: 提取 __NUXT__(Nuxt.js)、__NEXT_DATA__(Next.js)、__INITIAL_STATE__(React)、__PRELOADED_STATE__ 等SSR注入数据，其中可能包含API路径、用户角色、权限配置
+    - Source Map sourcesContent 深度分析: reconstructed/ 目录下还原出的源码中可能包含原始TypeScript/Vue/React/JSX，检查其中的API端点定义、配置对象、未公开功能接口
+    - 检查 WebAssembly 引用: 扫描 .wasm 文件路径和 WebAssembly.instantiate 调用，wasm 中可能包含核心算法/密钥
+    - 分析 Service Worker: 检查 sw.js 或 navigator.serviceWorker.register 中的请求拦截逻辑和缓存策略，可能改写/代理API请求
+    - 注意 ESM CDN 依赖: 扫描 esm.sh/jsdelivr/unpkg 等CDN导入，CDN模块可能包含额外API端点
 
     ${UA_INSTR}`,
           { label: `🔬 分析: ${target}`, phase: '深度分析' }
@@ -993,11 +1027,11 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url + ' — ' + (t.tags
 写入临时文件: /tmp/zc_dirsearch_custom.txt（每行一个路径，无前导/）
 
 **Step 2: 对每个目标执行 dirsearch 命令**
-dirsearch 内置字典: /home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt（9482条）
+dirsearch 内置字典: ${DIRSEARCH_DICT}（9482条）
 
 对每个目标URL依次执行:
 \`\`\`bash
-cat /home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt /tmp/zc_dirsearch_custom.txt | sort -u > /tmp/zc_merged_dict.txt
+cat ${DIRSEARCH_DICT} /tmp/zc_dirsearch_custom.txt | sort -u > /tmp/zc_merged_dict.txt
 dirsearch -u "<target_url>" \
   -w /tmp/zc_merged_dict.txt \
   --interface tun0 \
@@ -1066,7 +1100,7 @@ ${targets.map(function(t) { return '  ' + t.priority + ' | ' + t.url + ' | tags:
 ${allUrls.map(function(u) { return '  ' + u }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点:
-${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}\n\n\t${zc_dirsearch_ctx}
+${p2_discoveries_text != null && p2_discoveries_text !== '' ? p2_discoveries_text.substring(0, 10000) : typeof p2_discoveries_text === 'string' ? '（JS分析了但无发现）' : '（无 JS 分析数据）'}\n\n\t${zc_dirsearch_ctx}
 \n	**Phase 2提取的结构化凭证（优先级高，优先于下方文本）**:
 	${typeof globalThis.__zc_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__zc_creds_json).slice(0, 10), null, 2) : '（无）'}
 
@@ -1147,7 +1181,7 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分
 ${targets.map(function(t) { return '  ' + t.url }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点:
-${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
+${p2_discoveries_text != null && p2_discoveries_text !== '' ? p2_discoveries_text.substring(0, 10000) : typeof p2_discoveries_text === 'string' ? '（JS分析了但无发现）' : '（无 JS 分析数据）'}
 
 1. 越权测试:
    - 对含数字ID的路径，尝试替换ID值

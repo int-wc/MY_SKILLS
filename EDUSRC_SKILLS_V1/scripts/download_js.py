@@ -45,60 +45,6 @@ def extract_script_srcs(html, base_url):
             urls.append(full_url)
     return list(dict.fromkeys(urls))  # 去重保持顺序
 
-
-def extract_route_paths(js_dir, main_js_path=None):
-    """从已下载JS中提取Nuxt/Vue路由路径，用于子页面遍历"""
-    routes = set()
-    js_files = []
-    if main_js_path and os.path.isfile(main_js_path):
-        js_files.append(main_js_path)
-    if os.path.isdir(js_dir):
-        for root, dirs, files in os.walk(js_dir):
-            for f in files:
-                if f.endswith('.js') and not f.endswith('.map'):
-                    js_files.append(os.path.join(root, f))
-    for fp in js_files:
-        try:
-            with open(fp, 'r', encoding='utf-8', errors='replace') as fh:
-                data = fh.read()
-            for m in re.finditer(r'path\s*:\s*["\'](/[^"\']+)["\']', data):
-                route = m.group(1)
-                if len(route) > 1 and ':' not in route and route not in routes:
-                    routes.add(route)
-        except:
-            pass
-    return sorted(routes)
-
-
-def fetch_subpage_js(base_url, routes, dump_dir, curl_base, already_downloaded):
-    """遍历子页面路由，提取并下载懒加载JS chunk"""
-    new_files = []
-    visited_urls = set()
-    for route in routes[:15]:
-        target = base_url.rstrip('/') + '/' + route.lstrip('/')
-        if target in visited_urls:
-            continue
-        visited_urls.add(target)
-        html, rc = run(curl_base + " '" + target + "'", timeout=15)
-        if rc != 0 or not html:
-            continue
-        if not html or '<title>登录</title>' in html[:300] or '/login' in html[:300]:
-            continue
-        sub_urls = extract_script_srcs(html, target)
-        for su in sub_urls:
-            if su in already_downloaded:
-                continue
-            already_downloaded.add(su)
-            js_name = os.path.basename(urllib.parse.urlparse(su).path) or ('subpage_' + md5(su.encode()).hexdigest()[:8] + '.js')
-            js_path = os.path.join(dump_dir, 'subpage_' + js_name)
-            content2, rc2 = run(curl_base + " '" + su + "'", timeout=15)
-            if rc2 == 0 and content2:
-                with open(js_path, 'w', encoding='utf-8', errors='replace') as f:
-                    f.write(content2)
-                new_files.append(js_path)
-    return new_files
-
-
 def download_js(target_url, output_dir, ua='', iface='', cookie=''):
     """主流程"""
     os.makedirs(output_dir, exist_ok=True)
@@ -177,21 +123,7 @@ def download_js(target_url, output_dir, ua='', iface='', cookie=''):
                 print(f"[+] JS: {js_name}", file=sys.stderr)
         else:
             failed.append(js_url)
-
-    # Step 4: 子页面路由遍历 — 发现懒加载chunk中的隐藏API端点
-    print("[*] 扫描路由并遍历子页面...", file=sys.stderr)
-    route_paths = extract_route_paths(dump_dir, downloaded[0] if downloaded else None)
-    if route_paths:
-        print("[*] 发现 %d 个路由: %s" % (len(route_paths), ', '.join(route_paths[:10])), file=sys.stderr)
-        downloaded_urls = set(js_urls)
-        subpage_files = fetch_subpage_js(target_url, route_paths, dump_dir, curl_base, downloaded_urls)
-        downloaded.extend(subpage_files)
-        if subpage_files:
-            print("[+] 子页面额外下载 %d 个JS文件" % len(subpage_files), file=sys.stderr)
-    else:
-        print("[*] 未发现额外路由，跳过子页面遍历", file=sys.stderr)
-
-        print(f"[-] JS下载失败: {js_url}", file=sys.stderr)
+            print(f"[-] JS下载失败: {js_url}", file=sys.stderr)
 
     return {
         "status": "ok",

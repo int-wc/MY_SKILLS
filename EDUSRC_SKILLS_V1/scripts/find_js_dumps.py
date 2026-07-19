@@ -4,7 +4,7 @@ find_js_dumps.py — 查找已下载JS缓存目录和还原源码目录
 
 用法:
   python3 find_js_dumps.py <base_dir> [--target <target_url>]
-  python3 find_js_dumps.py /home/my/butiansrc/Exclusive_SRC/某公司/js_dumps
+  python3 find_js_dumps.py /home/my/edusrc/某院校/js_dumps
 
 输出: 每个目标对应的 js_dump_dir 和 reconstructed_dir
 """

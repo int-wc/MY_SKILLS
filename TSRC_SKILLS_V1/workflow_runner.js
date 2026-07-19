@@ -1074,10 +1074,23 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url + ' — ' + (t.tags
 - common_endpoints 列表
 写入临时文件: \`/tmp/dirsearch_custom.txt\`（每行一个路径，无前导/）
 
-**Step 2: 对每个目标执行 dirsearch 命令**
+**Step 2: 对每个目标先做 WAF 预检**
+对每个目标URL先执行轻量探测，不要直接开始目录爆破:
+\`\`\`bash
+curl -skI --max-time 8 "<target_url>" | tee /tmp/waf_headers.txt
+curl -sk --max-time 8 "<target_url>/_dirsearch_waf_probe_$(date +%s)" -o /tmp/waf_body.txt -D /tmp/waf_probe_headers.txt
+\`\`\`
+如果响应头或响应体出现以下任一特征，判定为存在WAF/安全防护并**跳过该目标的dirsearch**:
+- HTTP 403/406/429/503 且响应包含拦截页、验证码、人机验证、访问过快等提示
+- server/header/body 包含 cloudflare, cf-ray, aliyun, yundun, waf, safedog, yunjiasu, baidu, tencent, qcloud, huawei, imperva, akamai, incapsula, f5, barricade, access denied, forbidden, captcha, request blocked 等关键词
+- 随机不存在路径触发统一拦截页或挑战页
+
+命中时只在 waf_detected 中记录 target、evidence、action="skipped_dirsearch"，不要继续扫该目标。
+
+**Step 3: 对未命中WAF的目标执行 dirsearch 命令**
 dirsearch 内置字典: ${DIRSEARCH_DICT}（9482条内置路径）
 
-对每个目标URL依次执行:
+仅对未命中WAF的目标URL依次执行:
 \`\`\`bash
 # 合并字典运行
 dirsearch -u "<target_url>" \
@@ -1097,15 +1110,16 @@ dirsearch -u "<target_url>" \
   -o /tmp/dirsearch_results.txt --format plain 2>&1 | tail -50
 \`\`\`
 
-**Step 3: 解析运行结果**
+**Step 4: 解析运行结果**
 读取 /tmp/dirsearch_results.txt，提取所有状态码为 200/301/401/403 的端点。
 
-**Step 4: 对发现的端点做快速验证（确认非空页面）**
+**Step 5: 对发现的端点做快速验证（确认非空页面）**
 对每个200端点，用 curl -s -o /tmp/verify.html -w "%{http_code}" 获取响应体，
 检查文件大小 > 100字节才视为有效发现。
 
 **输出要求：**
 只记录确认有效的端点。每个发现附带: endpoint, status_code, source（dirsearch内置/积累字典/混合）
+命中WAF的目标必须写入 waf_detected，表示已识别防护并跳过dirsearch。
 同时在 new_endpoints 中输出本次新发现的可积累端点。
 
       ${UA_INSTR}
@@ -1133,10 +1147,28 @@ dirsearch -u "<target_url>" \
             items: { type: 'string' },
             description: '本次新发现的可用端点，用于更新字典本',
           },
+          waf_detected: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                target: { type: 'string' },
+                evidence: { type: 'string' },
+                action: { type: 'string', enum: ['skipped_dirsearch'] },
+              },
+              required: ['target', 'evidence', 'action'],
+            },
+            description: '检测到WAF/安全防护并跳过dirsearch的目标',
+          },
         },
         required: ['findings'],
       }, phase: '漏洞挖掘' }
     )
+
+    if (p3_dirsearch && p3_dirsearch.waf_detected && p3_dirsearch.waf_detected.length > 0) {
+      log(`  🛡️ WAF/安全防护目标 ${p3_dirsearch.waf_detected.length} 个，已跳过dirsearch:`)
+      p3_dirsearch.waf_detected.forEach(w => log(`    🛡️ ${w.target} — ${w.evidence}`))
+    }
 
     if (p3_dirsearch && p3_dirsearch.findings && p3_dirsearch.findings.length > 0) {
       log(`  目录扫描发现 ${p3_dirsearch.findings.length} 个端点:`)

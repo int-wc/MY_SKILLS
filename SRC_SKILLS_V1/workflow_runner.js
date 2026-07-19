@@ -124,15 +124,13 @@ const workflowProxyUrl = (
   workflowOptions.httpProxy ||
   workflowOptions.httpsProxy ||
   workflowOptions.allProxy ||
-  (parseWorkflowBool(workflowOptions.useProxy) ? (process.env.CLAUDE_WORKFLOW_PROXY || process.env.WORKFLOW_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '') : '') ||
-  process.env.CLAUDE_WORKFLOW_PROXY ||
-  process.env.WORKFLOW_PROXY ||
+  (parseWorkflowBool(workflowOptions.useProxy) ? (() => { try { return typeof process !== 'undefined' ? (process.env.CLAUDE_WORKFLOW_PROXY || process.env.WORKFLOW_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '') : '' } catch(e) { return '' } })() : '') ||
+  (() => { try { return typeof process !== 'undefined' ? (process.env.CLAUDE_WORKFLOW_PROXY || process.env.WORKFLOW_PROXY || '') : '' } catch(e) { return '' } })() ||
   ''
 )
 const skipDirsearch = parseWorkflowBool(workflowOptions.skipDirsearch) ||
   parseWorkflowBool(workflowOptions.noDirsearch) ||
-  parseWorkflowBool(process.env.CLAUDE_WORKFLOW_SKIP_DIRSEARCH) ||
-  parseWorkflowBool(process.env.WORKFLOW_SKIP_DIRSEARCH)
+  (() => { try { return typeof process !== 'undefined' ? (parseWorkflowBool(process.env.CLAUDE_WORKFLOW_SKIP_DIRSEARCH) || parseWorkflowBool(process.env.WORKFLOW_SKIP_DIRSEARCH)) : false } catch(e) { return false } })()
 const PROXY_ENV_PREFIX = workflowProxyUrl
   ? `HTTP_PROXY=${shQuote(workflowProxyUrl)} HTTPS_PROXY=${shQuote(workflowProxyUrl)} ALL_PROXY=${shQuote(workflowProxyUrl)} http_proxy=${shQuote(workflowProxyUrl)} https_proxy=${shQuote(workflowProxyUrl)} all_proxy=${shQuote(workflowProxyUrl)}`
   : ''

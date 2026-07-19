@@ -83,6 +83,13 @@ const DIRSEARCH_DICT = (() => {
 
 const parseWorkflowBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true' || String(v).toLowerCase() === 'yes'
 const shQuote = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'"
+const workflowEnv = (name) => {
+  try {
+    return typeof process !== 'undefined' && process.env ? (process.env[name] || '') : ''
+  } catch (_) {
+    return ''
+  }
+}
 
 let companyName, mode, singleUrl, workflowOptions
 if (typeof args === 'string') {
@@ -121,15 +128,15 @@ const workflowProxyUrl = (
   workflowOptions.httpProxy ||
   workflowOptions.httpsProxy ||
   workflowOptions.allProxy ||
-  (parseWorkflowBool(workflowOptions.useProxy) ? (process.env.CLAUDE_WORKFLOW_PROXY || process.env.WORKFLOW_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '') : '') ||
-  process.env.CLAUDE_WORKFLOW_PROXY ||
-  process.env.WORKFLOW_PROXY ||
+  (parseWorkflowBool(workflowOptions.useProxy) ? (workflowEnv('CLAUDE_WORKFLOW_PROXY') || workflowEnv('WORKFLOW_PROXY') || workflowEnv('HTTPS_PROXY') || workflowEnv('HTTP_PROXY') || '') : '') ||
+  workflowEnv('CLAUDE_WORKFLOW_PROXY') ||
+  workflowEnv('WORKFLOW_PROXY') ||
   ''
 )
 const skipDirsearch = parseWorkflowBool(workflowOptions.skipDirsearch) ||
   parseWorkflowBool(workflowOptions.noDirsearch) ||
-  parseWorkflowBool(process.env.CLAUDE_WORKFLOW_SKIP_DIRSEARCH) ||
-  parseWorkflowBool(process.env.WORKFLOW_SKIP_DIRSEARCH)
+  parseWorkflowBool(workflowEnv('CLAUDE_WORKFLOW_SKIP_DIRSEARCH')) ||
+  parseWorkflowBool(workflowEnv('WORKFLOW_SKIP_DIRSEARCH'))
 const PROXY_ENV_PREFIX = workflowProxyUrl
   ? `HTTP_PROXY=${shQuote(workflowProxyUrl)} HTTPS_PROXY=${shQuote(workflowProxyUrl)} ALL_PROXY=${shQuote(workflowProxyUrl)} http_proxy=${shQuote(workflowProxyUrl)} https_proxy=${shQuote(workflowProxyUrl)} all_proxy=${shQuote(workflowProxyUrl)}`
   : ''

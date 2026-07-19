@@ -1081,8 +1081,8 @@ curl -skI --max-time 8 "<target_url>" | tee /tmp/waf_headers.txt
 curl -sk --max-time 8 "<target_url>/_dirsearch_waf_probe_$(date +%s)" -o /tmp/waf_body.txt -D /tmp/waf_probe_headers.txt
 \`\`\`
 如果响应头或响应体出现以下任一特征，判定为存在WAF/安全防护并**跳过该目标的dirsearch**:
-- HTTP 403/406/429/503 且响应包含拦截页、验证码、人机验证、访问过快等提示
-- server/header/body 包含 cloudflare, cf-ray, aliyun, yundun, waf, safedog, yunjiasu, baidu, tencent, qcloud, huawei, imperva, akamai, incapsula, f5, barricade, access denied, forbidden, captcha, request blocked 等关键词
+- HTTP 403/405/406/429/503 且响应包含拦截页、验证码、人机验证、访问过快等提示
+- server/header/body 包含 cloudflare, cf-ray, aliyun, acw_tc, punish-loc, keepper, yundun, waf, safedog, yunjiasu, baidu, tencent, qcloud, huawei, imperva, akamai, incapsula, f5, barricade, access denied, forbidden, captcha, request blocked 等关键词
 - 随机不存在路径触发统一拦截页或挑战页
 
 命中时只在 waf_detected 中记录 target、evidence、action="skipped_dirsearch"，不要继续扫该目标。

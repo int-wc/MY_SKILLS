@@ -1098,6 +1098,10 @@ if (mode.startsWith('phase5')) {
     log('  ⚠️ 无可用测试目标')
     markPhase(3, '⏭️')
   } else {
+    if (skipDirsearch) {
+      log('  📂 skipDirsearch=true，跳过字典目录扫描 (dirsearch)')
+      p3_dirsearch = { findings: [], new_endpoints: [], waf_detected: [], skipped: true, reason: 'skipDirsearch option enabled' }
+    } else {
     // ============================================================
     // 3.0 dirsearch — 基于字典的标准目录扫描
     // 原理：读取积累字典+通用字典，对目标做广度优先的路径爆破
@@ -1238,6 +1242,7 @@ ${p3_dirsearch.new_endpoints.map(function(e) { return '  - ' + e }).join(String.
       ;(targets || []).forEach(t => dimTracker.record(t.url, 'dirsearch_scan', 'done'))
     } else {
       log('  目录扫描: 未发现新端点')
+    }
     }
 
     // dirsearch发现的端点 → 注入到unauth_test上下文

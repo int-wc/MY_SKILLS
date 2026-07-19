@@ -585,7 +585,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
         for (let _retry = 0; _retry < 2; _retry++) {
           dlResult = await agent(
             `执行以下命令:
-python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/js_dumps" --ua "${REAL_UA}"
+${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/js_dumps" --ua "${REAL_UA}"
 
 将下载结果JSON原样输出，不要加任何额外文字。`,
             { label: `📥 下载JS: ${target}`, schema: {
@@ -617,7 +617,7 @@ python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/
           // === Step B: 枚举chunk补下 ===
           try {
             await agent(
-              `python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "${dump_dir}" "${target}" --ua "${REAL_UA}"
+              `${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "${dump_dir}" "${target}" --ua "${REAL_UA}"
 输出命令的stdout摘要。`,
               { label: `🧩 枚举chunk: ${target}`, phase: '深度分析' }
             )
@@ -995,7 +995,7 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.from
     const fuzz_targets = targets.slice(0, 15)
     for (const ft of fuzz_targets) {
       const fuzz_out = "/tmp/smart_fuzz_" + companyName.replace(/[^a-zA-Z0-9]/g,'_') + "_" + ft.replace(/[^a-zA-Z0-9]/g,'_') + ".json"
-      const fuzz_cmd = `python3 ${SKILL_SCRIPTS}/smart_fuzz.py "${ft}" --dict ${P2_DICT_PATH} --output ${fuzz_out} --ua "${REAL_UA}"`
+      const fuzz_cmd = `${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/smart_fuzz.py "${ft}" --dict ${P2_DICT_PATH} --output ${fuzz_out} --ua "${REAL_UA}"`
       
       let fuzz_raw = null
       try {
@@ -1126,8 +1126,8 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url + ' — ' + (t.tags
 **Step 2: 对每个目标先做 WAF 预检**
 对每个目标URL先执行轻量探测，不要直接开始目录爆破:
 \`\`\`bash
-curl -skI --max-time 8 "<target_url>" | tee /tmp/waf_headers.txt
-curl -sk --max-time 8 "<target_url>/_dirsearch_waf_probe_$(date +%s)" -o /tmp/waf_body.txt -D /tmp/waf_probe_headers.txt
+curl ${PROXY_CURL_FLAG} -skI --max-time 8 "<target_url>" | tee /tmp/waf_headers.txt
+curl ${PROXY_CURL_FLAG} -sk --max-time 8 "<target_url>/_dirsearch_waf_probe_$(date +%s)" -o /tmp/waf_body.txt -D /tmp/waf_probe_headers.txt
 \`\`\`
 如果响应头或响应体出现以下任一特征，判定为存在WAF/安全防护并**跳过该目标的dirsearch**:
 - HTTP 403/405/406/429/503 且响应包含拦截页、验证码、人机验证、访问过快等提示
@@ -1142,7 +1142,7 @@ dirsearch 内置字典: ${DIRSEARCH_DICT}（9482条内置路径）
 仅对未命中WAF的目标URL依次执行:
 \`\`\`bash
 # 合并字典运行
-dirsearch -u "<target_url>" \
+dirsearch -u "<target_url>" ${PROXY_DIRSEARCH_FLAG} \
   -w ${DIRSEARCH_DICT} \
   --extra-dict /tmp/dirsearch_custom.txt \
   -e php,asp,aspx,jsp,html,js,json,xml,txt,sql,conf,zip,tar.gz,bak,old,log \
@@ -1152,7 +1152,7 @@ dirsearch -u "<target_url>" \
 如果 --extra-dict 参数不可用，则改为:
 \`\`\`bash
 cat ${DIRSEARCH_DICT} /tmp/dirsearch_custom.txt | sort -u > /tmp/merged_dict.txt
-dirsearch -u "<target_url>" \
+dirsearch -u "<target_url>" ${PROXY_DIRSEARCH_FLAG} \
   -w /tmp/merged_dict.txt \
   -e php,asp,aspx,jsp,html,js,json,xml,txt,sql,conf,zip,tar.gz,bak,old,log \
   -t 10 --timeout=5 \
@@ -2430,6 +2430,7 @@ const p7_final = await agent(
 
 3. 漏洞URL复测:
    提取每份报告中的漏洞URL，用 curl -sI -H 'User-Agent: Mozilla/5.0 ...' 确认当前仍可访问且返回200（必须带浏览器UA）
+   ${UA_INSTR}
 
 4. HTML版本确认:
    ls "${SRC_BASE}/${companyName}/submittable_reports/reports_html/"*.html

@@ -2478,4 +2478,4 @@ log('╚════════════════════════
 showProgress()
 
 // Final return
-return { company: companyName, mode: mode, done: true }
+return { company: companyName, mode: mode, done: true, proxy_enabled: Boolean(workflowProxyUrl), proxy: workflowProxyUrl || null, skip_dirsearch: skipDirsearch }

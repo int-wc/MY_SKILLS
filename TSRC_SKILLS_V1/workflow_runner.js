@@ -1,6 +1,7 @@
 // TSRC_SKILLS_V1 - 八阶段全流程 Workflow 编排
 // 使用: Workflow({scriptPath: '...', args: {mode: 'full'}})
 // mode: 'full' | 'phase3' (跳过资产发现和深度分析，直接挖洞) | 'phase5' (直接出报告) | 'url' (指定单个URL)
+// 可选: proxy: 'http://127.0.0.1:8080' 强制所有阶段网络请求走代理；skipDirsearch: true 直接跳过 Phase 3 dirsearch
 
 export const meta = {
   name: 'tsrc-full-scan',
@@ -69,7 +70,7 @@ const SKILL_SCRIPTS = '/home/my/.claude/skills/TSRC_SKILLS_V1/scripts'
 // ============================================================
 const REAL_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 const UA_FLAG = `-H 'User-Agent: ${REAL_UA}'`
-const UA_INSTR = `⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: ${REAL_UA}'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**`
+let UA_INSTR = `⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: ${REAL_UA}'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**`
 
 // 动态检测 dirsearch 字典路径（兼容不同 Python 版本）
 const DIRSEARCH_DICT = (() => {
@@ -80,21 +81,27 @@ const DIRSEARCH_DICT = (() => {
   return '/home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt'
 })()
 
-let companyName, mode, singleUrl
+const parseWorkflowBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true' || String(v).toLowerCase() === 'yes'
+const shQuote = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'"
+
+let companyName, mode, singleUrl, workflowOptions
 if (typeof args === 'string') {
   // 修复：Workflow 工具传递的对象 args 可能被序列化为 JSON 字符串
   // 先尝试 JSON 解析，成功则作为对象处理，否则当做公司名
   let parsed = null
   try { parsed = JSON.parse(args) } catch (_) {}
   if (parsed && typeof parsed === 'object') {
+    workflowOptions = parsed
     companyName = parsed.company || null
     mode = parsed.mode || 'full'
     singleUrl = parsed.url || null
   } else {
+    workflowOptions = {}
     companyName = args
     mode = 'full'
   }
 } else if (typeof args === 'object' && args) {
+  workflowOptions = args
   companyName = args.company || null
   mode = args.mode || 'full'
   singleUrl = args.url || null
@@ -103,9 +110,37 @@ if (typeof args === 'string') {
     return { error: 'need_url', message: '请指定url参数' }
   }
 } else {
+  workflowOptions = {}
   companyName = null
   mode = 'full'
 }
+
+const workflowProxyUrl = (
+  workflowOptions.proxy ||
+  workflowOptions.proxyUrl ||
+  workflowOptions.httpProxy ||
+  workflowOptions.httpsProxy ||
+  workflowOptions.allProxy ||
+  (parseWorkflowBool(workflowOptions.useProxy) ? (process.env.CLAUDE_WORKFLOW_PROXY || process.env.WORKFLOW_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '') : '') ||
+  process.env.CLAUDE_WORKFLOW_PROXY ||
+  process.env.WORKFLOW_PROXY ||
+  ''
+)
+const skipDirsearch = parseWorkflowBool(workflowOptions.skipDirsearch) ||
+  parseWorkflowBool(workflowOptions.noDirsearch) ||
+  parseWorkflowBool(process.env.CLAUDE_WORKFLOW_SKIP_DIRSEARCH) ||
+  parseWorkflowBool(process.env.WORKFLOW_SKIP_DIRSEARCH)
+const PROXY_ENV_PREFIX = workflowProxyUrl
+  ? `HTTP_PROXY=${shQuote(workflowProxyUrl)} HTTPS_PROXY=${shQuote(workflowProxyUrl)} ALL_PROXY=${shQuote(workflowProxyUrl)} http_proxy=${shQuote(workflowProxyUrl)} https_proxy=${shQuote(workflowProxyUrl)} all_proxy=${shQuote(workflowProxyUrl)}`
+  : ''
+const NET_ENV_PREFIX = PROXY_ENV_PREFIX ? `${PROXY_ENV_PREFIX} ` : ''
+const PROXY_CURL_FLAG = workflowProxyUrl ? `--proxy ${shQuote(workflowProxyUrl)}` : ''
+const PROXY_DIRSEARCH_FLAG = workflowProxyUrl ? `--proxy ${shQuote(workflowProxyUrl)}` : ''
+if (workflowProxyUrl) {
+  UA_INSTR += `\n🌐 **代理硬性规则：本次 workflow 已启用代理 ${workflowProxyUrl}。所有阶段的网络请求都必须走该代理：curl 添加 ${PROXY_CURL_FLAG}；dirsearch 添加 ${PROXY_DIRSEARCH_FLAG}；httpx 使用 -proxy ${workflowProxyUrl}；wget 使用 -e use_proxy=yes -e http_proxy=${workflowProxyUrl} -e https_proxy=${workflowProxyUrl}；python/requests/脚本命令前置 ${PROXY_ENV_PREFIX}。禁止绕过代理直连目标。**`
+}
+if (workflowProxyUrl) log(`🌐 Workflow代理已启用: ${workflowProxyUrl}`)
+if (skipDirsearch) log('📂 skipDirsearch 已启用: Phase 3 将跳过 dirsearch')
 
 // 未指定公司名时从URL自动提取
 let _isAutoCompany = false

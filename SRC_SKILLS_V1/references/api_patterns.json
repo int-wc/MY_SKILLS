@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-19",
+  "updated": "2026-07-20",
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
@@ -816,7 +816,11 @@
     "/runtime-config.js",
     "/login/",
     "/",
-    "/api/v1/public/material/list"
+    "/api/v1/public/material/list",
+    "/apix/V1/open-portal/competition/list",
+    "/apix/V1/omp/open/oauth/idpUrl",
+    "/api/v1/public/work/list",
+    "/zh-cn/login"
   ],
   "framework_patterns": {
     "JeecgBoot": [

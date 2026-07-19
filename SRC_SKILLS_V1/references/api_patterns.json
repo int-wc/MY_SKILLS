@@ -820,7 +820,12 @@
     "/apix/V1/open-portal/competition/list",
     "/apix/V1/omp/open/oauth/idpUrl",
     "/api/v1/public/work/list",
-    "/zh-cn/login"
+    "/zh-cn/login",
+    "/api/v1/square/public/works",
+    "/api/v1/system/notify",
+    "/api/v1/square/public/tags",
+    "/emp/passport/getsetting",
+    "/api/v1/square/public/works?page=1&pageSize=100"
   ],
   "framework_patterns": {
     "JeecgBoot": [

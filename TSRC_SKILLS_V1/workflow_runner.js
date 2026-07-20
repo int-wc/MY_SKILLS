@@ -708,6 +708,9 @@ ${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE
     2. **路径模式提取** — 提取所有 "/xxx/yyy" 路径，关注非标准前缀 /gateway/ /dwr/ /sys/ /manage/ /crm/ /erp/
     3. **敏感信息提取** — 查找 AccessKey、SecretKey、JWT(eyJ...)、数据库连接串(mongodb://...)、内网IP、硬编码密码
     4. **鉴权方式识别** — Authorization: Bearer/Basic/X-TOKEN/Cookie/localStorage Token存放
+    5. **Call Site 深度追溯** — 对每个API端点继续寻找调用现场，提取请求体字段、参数来源、返回值消费方式。必须输出类似:
+       - /api/example POST request_params={url,id,pageSize} caller=xxx.vue risk=SSRF,IDOR,batch_traversal
+       - 如果找不到调用参数，标记 request_params=unresolved，并说明需要空Body探测响应字段提示。
     5. **凭证反思（关键思维环节）**:
        - 找到accessKey+secretKey → 哪个云服务？试枚举 OBS/S3/OSS Bucket
        - 找到JWT → 解码看user/role，试调API看是否越权

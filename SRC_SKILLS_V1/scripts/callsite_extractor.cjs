@@ -229,6 +229,21 @@ function extractParamsFromExpression(expr, varMap) {
   return { keys: [], evidence: [], unresolved_reason: 'dynamic_expression' }
 }
 
+function extractObjectPropertyExpression(objExpr, prop) {
+  const src = String(objExpr || '').trim()
+  if (!src.startsWith('{')) return ''
+  const bal = takeBalanced(src, 0, '{', '}', 6000)
+  if (!bal) return ''
+  for (const raw of splitTopLevel(bal.body)) {
+    const part = raw.trim()
+    const m = part.match(/^([A-Za-z_$][\w$-]*|['"`][^'"`]+['"`])\s*:\s*([\s\S]*)$/)
+    if (!m) continue
+    const key = cleanKey(m[1])
+    if (key === prop) return m[2].trim()
+  }
+  return ''
+}
+
 function extractFormalParamHints(src) {
   const keys = new Set()
   const objectFormal = String(src || '').match(/\(\s*\{([^)]{1,800})\}\s*\)\s*=>/)
@@ -394,6 +409,7 @@ function collectCalleesForFile(text, def, sameFile) {
 
 function extractResponseParamHints(text, endpoint) {
   const hints = new Set()
+  const banned = /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|http|https|url|api|error|message|msg|code|data|success|false|true)$/i
   const rel = String(endpoint || '').replace(/^https?:\/\/[^/]+/, '')
   const names = [rel, rel.split('/').filter(Boolean).pop()].filter(Boolean)
   for (const name of names) {
@@ -403,13 +419,13 @@ function extractResponseParamHints(text, endpoint) {
     const end = Math.min(text.length, idx + 2000)
     const win = text.slice(start, end)
     if (!/(缺少|不能为空|必填|required|missing|invalid|param|field|参数|字段|body|payload)/i.test(win)) continue
-    const quoted = /['"`]([A-Za-z_$][\w$]{1,60})['"`]\s*(?:不能为空|必填|required|missing|invalid|参数|字段)?/gi
+    const quoted = /(?:缺少|missing|required|invalid|参数|字段|field|param|不能为空|必填)[^'"`]{0,60}['"`]([A-Za-z_$][\w$]{1,60})['"`]|['"`]([A-Za-z_$][\w$]{1,60})['"`][^'"`]{0,60}(?:不能为空|必填|required|missing|invalid|参数|字段)/gi
     let m
-    while ((m = quoted.exec(win))) hints.add(m[1])
+    while ((m = quoted.exec(win))) hints.add(m[1] || m[2])
     const words = /(?:缺少|missing|required|invalid|参数|字段|field|param)\s*[:：=]?\s*([A-Za-z_$][\w$]{1,60})/gi
     while ((m = words.exec(win))) hints.add(m[1])
   }
-  return Array.from(hints).filter(k => !/^(error|message|msg|code|data|success|false|true)$/i.test(k)).slice(0, 20)
+  return Array.from(hints).filter(k => !banned.test(k)).slice(0, 20)
 }
 
 function mergeEntryParams(entry, params, strategy, evidence) {

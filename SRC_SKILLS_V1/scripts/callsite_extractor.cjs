@@ -505,13 +505,28 @@ function mergeCallSites(existing, additions) {
   for (const item of [...(existing || []), ...(additions || [])]) {
     if (!item || !item.endpoint) continue
     const key = `${item.method || ''} ${item.endpoint} ${item.definition_file || ''} ${item.wrapper || ''}`
-    const cur = map.get(key) || { ...item, request_params: [], caller_files: [], evidence: [], risk_types: [], exported_names: [] }
-    for (const field of ['request_params', 'caller_files', 'evidence', 'risk_types', 'exported_names']) {
+    const cur = map.get(key) || {
+      ...item,
+      request_params: [],
+      caller_files: [],
+      evidence: [],
+      risk_types: [],
+      exported_names: [],
+      wrapper_param_hints: [],
+      response_param_hints: [],
+      unresolved_reasons: [],
+      resolution_strategies: [],
+    }
+    for (const field of ['request_params', 'caller_files', 'evidence', 'risk_types', 'exported_names', 'wrapper_param_hints', 'response_param_hints', 'unresolved_reasons', 'resolution_strategies']) {
       const values = Array.isArray(item[field]) ? item[field] : []
       cur[field] = Array.from(new Set([...(cur[field] || []), ...values])).filter(Boolean).slice(0, field === 'evidence' ? 6 : 80)
     }
+    if (cur.request_params.length > 1 && cur.request_params.includes('unresolved')) {
+      cur.request_params = cur.request_params.filter(p => p !== 'unresolved')
+    }
     cur.unresolved = cur.request_params.length === 0 || cur.request_params.includes('unresolved')
     cur.response_probe_required = cur.unresolved || item.response_probe_required === true
+    cur.source_kind = cur.source_kind || item.source_kind || 'unknown'
     map.set(key, cur)
   }
   return Array.from(map.values()).slice(0, 500)
@@ -530,7 +545,9 @@ function summarize(entries, maxItems = 60) {
     const params = (e.request_params || []).join(', ')
     const risks = (e.risk_types || []).join(', ')
     const callers = (e.caller_files || []).slice(0, 3).join(', ')
-    return `${e.method || 'GET_OR_UNKNOWN'} ${e.endpoint} params={${params}} risks=[${risks}] callers=[${callers || e.definition_file || 'definition_only'}]`
+    const strategies = (e.resolution_strategies || []).slice(0, 3).join(',')
+    const unresolved = e.response_probe_required ? ` probe=${(e.unresolved_reasons || []).slice(0, 2).join('|') || 'required'}` : ''
+    return `${e.method || 'GET_OR_UNKNOWN'} ${e.endpoint} params={${params}} risks=[${risks}] via=[${strategies || e.source_kind || 'unknown'}] callers=[${callers || e.definition_file || 'definition_only'}]${unresolved}`
   })
   return rows.length ? rows.join('\n') : '（无结构化 call-site 参数）'
 }

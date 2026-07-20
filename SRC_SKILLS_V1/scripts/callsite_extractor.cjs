@@ -393,10 +393,42 @@ function collectCalleesForFile(text, def, sameFile) {
   return Array.from(callees)
 }
 
+function extractResponseParamHints(text, endpoint) {
+  const hints = new Set()
+  const rel = String(endpoint || '').replace(/^https?:\/\/[^/]+/, '')
+  const names = [rel, rel.split('/').filter(Boolean).pop()].filter(Boolean)
+  for (const name of names) {
+    const idx = text.indexOf(name)
+    if (idx < 0) continue
+    const start = Math.max(0, idx - 1000)
+    const end = Math.min(text.length, idx + 2000)
+    const win = text.slice(start, end)
+    if (!/(缺少|不能为空|必填|required|missing|invalid|param|field|参数|字段|body|payload)/i.test(win)) continue
+    const quoted = /['"`]([A-Za-z_$][\w$]{1,60})['"`]\s*(?:不能为空|必填|required|missing|invalid|参数|字段)?/gi
+    let m
+    while ((m = quoted.exec(win))) hints.add(m[1])
+    const words = /(?:缺少|missing|required|invalid|参数|字段|field|param)\s*[:：=]?\s*([A-Za-z_$][\w$]{1,60})/gi
+    while ((m = words.exec(win))) hints.add(m[1])
+  }
+  return Array.from(hints).filter(k => !/^(error|message|msg|code|data|success|false|true)$/i.test(k)).slice(0, 20)
+}
+
+function mergeEntryParams(entry, params, strategy, evidence) {
+  if (!params || !params.length) return
+  for (const p of params) if (!entry.request_params.includes(p)) entry.request_params.push(p)
+  entry.unresolved = false
+  if (strategy && !entry.resolution_strategies.includes(strategy)) entry.resolution_strategies.push(strategy)
+  for (const ev of evidence || []) {
+    if (ev && entry.evidence.length < 8) entry.evidence.push(String(ev).replace(/\s+/g, ' ').slice(0, 320))
+  }
+}
+
 function parseCallSites(files, root, defs) {
   const entries = new Map()
   for (const def of defs) {
     const key = `${def.method} ${def.endpoint} ${def.definition_file} ${def.wrapper || ''}`
+    const inlineParams = Array.from(new Set([...(def.inline_request_params || []), ...(def.wrapper_param_hints || [])])).filter(Boolean)
+    const unresolved = inlineParams.length === 0
     entries.set(key, {
       target: null,
       endpoint: def.endpoint,
@@ -404,13 +436,18 @@ function parseCallSites(files, root, defs) {
       wrapper: def.wrapper || null,
       exported_names: def.exported_names || [],
       request_carrier: def.request_carrier || null,
-      request_params: [],
-      unresolved: true,
+      request_params: inlineParams,
+      wrapper_param_hints: def.wrapper_param_hints || [],
+      response_param_hints: [],
+      unresolved,
+      unresolved_reasons: unresolved ? [def.unresolved_reason || 'no_static_request_params_yet'] : [],
+      resolution_strategies: inlineParams.length ? [def.source_kind || 'definition_inline'] : [],
+      source_kind: def.source_kind || 'unknown',
       definition_file: def.definition_file,
-      caller_files: [],
+      caller_files: def.caller_files || [],
       evidence: [def.evidence].filter(Boolean),
       risk_types: [],
-      response_probe_required: true,
+      response_probe_required: unresolved,
     })
   }
 
@@ -418,25 +455,36 @@ function parseCallSites(files, root, defs) {
     const text = readText(file)
     if (!text) continue
     const rel = path.relative(root, file)
+    const varMap = buildObjectVarMap(text)
     for (const def of defs) {
       const key = `${def.method} ${def.endpoint} ${def.definition_file} ${def.wrapper || ''}`
       const entry = entries.get(key)
       const callees = collectCalleesForFile(text, def, rel === def.definition_file)
       for (const callee of callees) {
         if (!callee) continue
-        const callRe = new RegExp(`\\b${escRe(callee)}\\s*\\(\\s*\\{([\\s\\S]{0,1200}?)\\}\\s*\\)`, 'g')
-        let cm
-        while ((cm = callRe.exec(text))) {
-          const params = extractObjectKeys(cm[1])
-          if (params.length) {
-            entry.unresolved = false
-            for (const p of params) if (!entry.request_params.includes(p)) entry.request_params.push(p)
-          }
+        for (const cm of findCalleeCalls(text, callee)) {
+          const args = splitTopLevel(cm.args)
+          const firstArg = args[0] || ''
+          const params = extractParamsFromExpression(firstArg, varMap)
+          mergeEntryParams(entry, params.keys, firstArg.trim().startsWith('{') ? 'callsite_object_literal' : 'callsite_variable_resolution', params.evidence)
+          if (params.unresolved_reason && !entry.unresolved_reasons.includes(params.unresolved_reason)) entry.unresolved_reasons.push(params.unresolved_reason)
           if (!entry.caller_files.includes(rel)) entry.caller_files.push(rel)
-          const sample = `${callee}({${cm[1].slice(0, 240)}})`.replace(/\s+/g, ' ')
+          const sample = `${callee}(${cm.args.slice(0, 260)})`.replace(/\s+/g, ' ')
           if (sample && entry.evidence.length < 4) entry.evidence.push(sample)
         }
       }
+    }
+  }
+
+  for (const file of files) {
+    const text = readText(file)
+    if (!text) continue
+    for (const e of entries.values()) {
+      if (!e.unresolved && !e.response_probe_required) continue
+      const hints = extractResponseParamHints(text, e.endpoint)
+      if (!hints.length) continue
+      e.response_param_hints = Array.from(new Set([...(e.response_param_hints || []), ...hints])).slice(0, 20)
+      mergeEntryParams(e, hints, 'local_response_hint', [`response hints: ${hints.join(', ')}`])
     }
   }
 
@@ -444,6 +492,10 @@ function parseCallSites(files, root, defs) {
     if (e.request_params.length === 0) e.request_params = ['unresolved']
     e.risk_types = inferRiskTypes(e.request_params, e.endpoint)
     e.response_probe_required = e.unresolved || e.request_params.includes('unresolved')
+    if (!e.unresolved && e.request_params.includes('unresolved')) {
+      e.request_params = e.request_params.filter(p => p !== 'unresolved')
+    }
+    if (e.unresolved_reasons.length === 0 && e.response_probe_required) e.unresolved_reasons.push('needs_empty_body_or_error_response_probe')
   }
   return Array.from(entries.values())
 }

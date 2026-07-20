@@ -137,6 +137,10 @@ def main():
         if not os.path.isdir(company_dir):
             continue
         has_reports = False
+        # Check if company_dir itself has .md reports (direct-style layout)
+        if any(f.endswith(".md") and f not in ("README.md","evidence.md") for f in os.listdir(company_dir)):
+            has_reports = True
+        # Also check for subdirectories (legacy layout)
         for subdir in ["reports", "submittable_reports"]:
             check_dir = os.path.join(company_dir, subdir)
             if os.path.isdir(check_dir) and any(f.endswith(".md") and f not in ("README.md","evidence.md") for f in os.listdir(check_dir)):

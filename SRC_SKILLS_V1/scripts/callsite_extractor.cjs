@@ -273,9 +273,12 @@ function addEndpointDef(defs, seen, def) {
 
 function parseApiDefs(files, root) {
   const defs = []
+  const seen = new Set()
   for (const file of files) {
     const text = readText(file)
     if (!text) continue
+    const rel = path.relative(root, file)
+    const varMap = buildObjectVarMap(text)
     const urlRe = /url\s*:\s*['"`]([^'"`]*\/[^'"`]*)['"`]/g
     let m
     while ((m = urlRe.exec(text))) {
@@ -289,28 +292,89 @@ function parseApiDefs(files, root) {
       const method = methodM ? methodM[1].toUpperCase() : 'GET_OR_UNKNOWN'
       let wrapper = null
       let arg = null
-      const wrapperMatches = Array.from(before.matchAll(/(?:(?:const|let|var)\s+|,\s*)([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(?\s*([A-Za-z_$][\w$]*)?/g))
+      const wrapperMatches = Array.from(before.matchAll(/(?:(?:const|let|var)\s+|,\s*)([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\(([^)]{0,500})\)|([A-Za-z_$][\w$]*))?/g))
       if (wrapperMatches.length) {
         const last = wrapperMatches[wrapperMatches.length - 1]
         wrapper = last[1]
-        arg = last[2] || null
+        arg = (last[2] || last[3] || '').trim() || null
       }
       const carrier = arg && new RegExp(`(?:req|data|params|body)\\s*:\\s*${escRe(arg)}\\b`).test(win) ? arg : null
-      const exportNames = []
-      if (wrapper) {
-        const exportAs = new RegExp(`\\b${escRe(wrapper)}\\s+as\\s+([A-Za-z_$][\\w$]*)`, 'g')
-        let em
-        while ((em = exportAs.exec(text))) exportNames.push(em[1])
+      const inlineParams = new Set()
+      const wrapperParamHints = new Set()
+      addMany(wrapperParamHints, extractFormalParamHints(before))
+      if (carrier) {
+        const bodyProp = win.match(new RegExp(`(?:req|data|params|body)\\s*:\\s*(${escRe(carrier)}|\\{[\\s\\S]{0,1200}?\\})`))
+        if (bodyProp) addMany(inlineParams, extractParamsFromExpression(bodyProp[1], varMap).keys)
       }
-      defs.push({
+      addEndpointDef(defs, seen, {
         endpoint,
         method,
         wrapper,
         request_carrier: carrier || arg || null,
-        exported_names: Array.from(new Set(exportNames)),
-        definition_file: path.relative(root, file),
+        exported_names: extractExportNames(text, wrapper),
+        definition_file: rel,
+        inline_request_params: Array.from(inlineParams),
+        wrapper_param_hints: Array.from(wrapperParamHints),
+        source_kind: 'config_url_property',
         evidence: win.slice(0, 260).replace(/\s+/g, ' '),
       })
+    }
+
+    const methodCallRe = /\b([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*\.\s*(get|post|put|patch|delete)\s*\(\s*['"`]([^'"`]*\/[^'"`]*)['"`]/g
+    while ((m = methodCallRe.exec(text))) {
+      const method = m[2].toUpperCase()
+      const endpoint = m[3]
+      if (!endpoint || endpoint.startsWith('http') || endpoint.length > 240) continue
+      const openIndex = text.indexOf('(', m.index)
+      const bal = takeBalanced(text, openIndex, '(', ')', 5000)
+      if (!bal) continue
+      const args = splitTopLevel(bal.body)
+      const bodyCandidate = method === 'GET' || method === 'DELETE' ? args[1] : args[1]
+      const params = extractParamsFromExpression(bodyCandidate, varMap)
+      addEndpointDef(defs, seen, {
+        endpoint,
+        method,
+        wrapper: null,
+        request_carrier: null,
+        exported_names: [],
+        definition_file: rel,
+        caller_files: [rel],
+        inline_request_params: params.keys,
+        wrapper_param_hints: [],
+        source_kind: 'method_direct_call',
+        unresolved_reason: params.unresolved_reason,
+        evidence: text.slice(m.index, Math.min(text.length, bal.end + 1)).slice(0, 300).replace(/\s+/g, ' '),
+      })
+      methodCallRe.lastIndex = bal.end + 1
+    }
+
+    const fetchRe = /\bfetch\s*\(\s*['"`]([^'"`]*\/[^'"`]*)['"`]/g
+    while ((m = fetchRe.exec(text))) {
+      const endpoint = m[1]
+      if (!endpoint || endpoint.startsWith('http') || endpoint.length > 240) continue
+      const openIndex = text.indexOf('(', m.index)
+      const bal = takeBalanced(text, openIndex, '(', ')', 6000)
+      if (!bal) continue
+      const args = splitTopLevel(bal.body)
+      const options = args[1] || ''
+      const methodM = options.match(/method\s*:\s*['"`]([A-Za-z]+)['"`]/)
+      const bodyM = options.match(/body\s*:\s*([^,}]+(?:\([^)]*\))?|\{[\s\S]{0,1200}?\})/)
+      const params = extractParamsFromExpression(bodyM ? bodyM[1] : '', varMap)
+      addEndpointDef(defs, seen, {
+        endpoint,
+        method: methodM ? methodM[1].toUpperCase() : 'GET_OR_UNKNOWN',
+        wrapper: null,
+        request_carrier: null,
+        exported_names: [],
+        definition_file: rel,
+        caller_files: [rel],
+        inline_request_params: params.keys,
+        wrapper_param_hints: [],
+        source_kind: 'fetch_direct_call',
+        unresolved_reason: params.unresolved_reason,
+        evidence: text.slice(m.index, Math.min(text.length, bal.end + 1)).slice(0, 300).replace(/\s+/g, ' '),
+      })
+      fetchRe.lastIndex = bal.end + 1
     }
   }
   return defs

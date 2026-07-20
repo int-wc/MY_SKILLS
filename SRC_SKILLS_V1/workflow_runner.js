@@ -598,7 +598,8 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
           const dirs = JSON.parse(globalThis.__p2_js_dirs_json)
           // 检查reconstructed目录
           const reconDir = dl_dump_dir + '/reconstructed'
-          const hasRecon = fs.existsSync(reconDir) ? fs.readdirSync(reconDir).length > 0 : false
+          const _fs = require('fs')
+          const hasRecon = _fs.existsSync(reconDir) ? _fs.readdirSync(reconDir).length > 0 : false
           dirs.push({
             target_hash: target_hash,
             dump_dir: dl_dump_dir,

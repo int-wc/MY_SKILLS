@@ -66,15 +66,209 @@ function inferRiskTypes(params, endpoint) {
   return Array.from(risks)
 }
 
-function extractObjectKeys(src) {
-  const keys = new Set()
-  const keyRe = /(?:^|[,{]\s*)([A-Za-z_$][\w$-]*)\s*:/g
-  let m
-  while ((m = keyRe.exec(src))) {
-    const k = m[1]
-    if (!['http', 'https'].includes(k)) keys.add(k)
+function cleanKey(k) {
+  if (!k) return null
+  const out = String(k).trim().replace(/^['"`]|['"`]$/g, '')
+  if (!out || out.length > 80 || ['http', 'https'].includes(out)) return null
+  return out
+}
+
+function addMany(set, values) {
+  for (const v of values || []) {
+    const k = cleanKey(v)
+    if (k) set.add(k)
   }
+}
+
+function splitTopLevel(src, sep = ',') {
+  const parts = []
+  let cur = ''
+  let depth = 0
+  let quote = null
+  let escaped = false
+  for (const ch of String(src || '')) {
+    cur += ch
+    if (quote) {
+      if (escaped) {
+        escaped = false
+      } else if (ch === '\\') {
+        escaped = true
+      } else if (ch === quote) {
+        quote = null
+      }
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch
+    } else if ('({['.includes(ch)) {
+      depth += 1
+    } else if (')}]'.includes(ch)) {
+      depth = Math.max(0, depth - 1)
+    } else if (ch === sep && depth === 0) {
+      parts.push(cur.slice(0, -1))
+      cur = ''
+    }
+  }
+  if (cur.trim()) parts.push(cur)
+  return parts
+}
+
+function takeBalanced(text, openIndex, openCh = '(', closeCh = ')', maxLen = 8000) {
+  let depth = 0
+  let quote = null
+  let escaped = false
+  for (let i = openIndex; i < text.length && i - openIndex <= maxLen; i += 1) {
+    const ch = text[i]
+    if (quote) {
+      if (escaped) {
+        escaped = false
+      } else if (ch === '\\') {
+        escaped = true
+      } else if (ch === quote) {
+        quote = null
+      }
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch
+    } else if (ch === openCh) {
+      depth += 1
+    } else if (ch === closeCh) {
+      depth -= 1
+      if (depth === 0) return { body: text.slice(openIndex + 1, i), end: i }
+    }
+  }
+  return null
+}
+
+function extractObjectInfo(src) {
+  const keys = new Set()
+  const spreads = new Set()
+  for (const raw of splitTopLevel(src)) {
+    const part = raw.trim()
+    if (!part) continue
+    const spread = part.match(/^\.\.\.\s*([A-Za-z_$][\w$]*)/)
+    if (spread) {
+      spreads.add(spread[1])
+      continue
+    }
+    const quoted = part.match(/^['"`]([^'"`]+)['"`]\s*:/)
+    const named = part.match(/^([A-Za-z_$][\w$-]*)\s*:/)
+    const shorthand = part.match(/^([A-Za-z_$][\w$]*)$/)
+    const destructured = part.match(/^([A-Za-z_$][\w$]*)\s*=\s*[^,]+$/)
+    const key = cleanKey((quoted && quoted[1]) || (named && named[1]) || (shorthand && shorthand[1]) || (destructured && destructured[1]))
+    if (key) keys.add(key)
+  }
+  return { keys: Array.from(keys), spreads: Array.from(spreads) }
+}
+
+function extractObjectKeys(src) {
+  return extractObjectInfo(src).keys
+}
+
+function buildObjectVarMap(text) {
+  const map = new Map()
+  const re = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\{/g
+  let m
+  while ((m = re.exec(text))) {
+    const openIndex = text.indexOf('{', m.index)
+    const bal = takeBalanced(text, openIndex, '{', '}', 5000)
+    if (!bal) continue
+    const info = extractObjectInfo(bal.body)
+    map.set(m[1], {
+      keys: info.keys,
+      spreads: info.spreads,
+      evidence: `${m[1]}={${bal.body.slice(0, 220)}}`.replace(/\s+/g, ' '),
+    })
+    re.lastIndex = bal.end + 1
+  }
+  return map
+}
+
+function resolveObjectVar(name, varMap, seen = new Set()) {
+  if (!name || seen.has(name) || !varMap.has(name)) return { keys: [], evidence: [] }
+  seen.add(name)
+  const item = varMap.get(name)
+  const keys = new Set(item.keys || [])
+  const evidence = item.evidence ? [item.evidence] : []
+  for (const spread of item.spreads || []) {
+    const nested = resolveObjectVar(spread, varMap, seen)
+    addMany(keys, nested.keys)
+    evidence.push(...nested.evidence)
+  }
+  return { keys: Array.from(keys), evidence: evidence.slice(0, 3) }
+}
+
+function extractParamsFromExpression(expr, varMap) {
+  const src = String(expr || '').trim()
+  if (!src) return { keys: [], evidence: [], unresolved_reason: 'empty_argument' }
+  if (src.startsWith('{')) {
+    const bal = takeBalanced(src, 0, '{', '}', 5000)
+    if (!bal) return { keys: [], evidence: [], unresolved_reason: 'unbalanced_object_literal' }
+    const info = extractObjectInfo(bal.body)
+    const keys = new Set(info.keys)
+    const evidence = [`{${bal.body.slice(0, 220)}}`.replace(/\s+/g, ' ')]
+    for (const spread of info.spreads) {
+      const nested = resolveObjectVar(spread, varMap)
+      addMany(keys, nested.keys)
+      evidence.push(...nested.evidence)
+    }
+    return { keys: Array.from(keys), evidence: evidence.slice(0, 4), unresolved_reason: keys.size ? null : 'object_without_static_keys' }
+  }
+  const stringify = src.match(/JSON\.stringify\s*\(\s*(\{[\s\S]*\}|[A-Za-z_$][\w$]*)\s*\)/)
+  if (stringify) return extractParamsFromExpression(stringify[1], varMap)
+  const ident = src.match(/^([A-Za-z_$][\w$]*)$/)
+  if (ident) {
+    const resolved = resolveObjectVar(ident[1], varMap)
+    return {
+      keys: resolved.keys,
+      evidence: resolved.evidence,
+      unresolved_reason: resolved.keys.length ? null : 'identifier_argument_not_resolved',
+    }
+  }
+  return { keys: [], evidence: [], unresolved_reason: 'dynamic_expression' }
+}
+
+function extractFormalParamHints(src) {
+  const keys = new Set()
+  const objectFormal = String(src || '').match(/\(\s*\{([^)]{1,800})\}\s*\)\s*=>/)
+  if (objectFormal) addMany(keys, extractObjectKeys(objectFormal[1]))
   return Array.from(keys)
+}
+
+function extractExportNames(text, wrapper) {
+  const names = new Set()
+  if (!wrapper) return []
+  const exportAs = new RegExp(`\\b${escRe(wrapper)}\\s+as\\s+([A-Za-z_$][\\w$]*)`, 'g')
+  let em
+  while ((em = exportAs.exec(text))) names.add(em[1])
+  const namedExport = new RegExp(`export\\s*\\{[^}]*\\b${escRe(wrapper)}\\b[^}]*\\}`, 'g')
+  if (namedExport.test(text)) names.add(wrapper)
+  const directExport = new RegExp(`export\\s+(?:const|let|var|function)\\s+${escRe(wrapper)}\\b`)
+  if (directExport.test(text)) names.add(wrapper)
+  return Array.from(names)
+}
+
+function findCalleeCalls(text, callee) {
+  const calls = []
+  const re = new RegExp(`\\b${escRe(callee)}\\s*\\(`, 'g')
+  let m
+  while ((m = re.exec(text))) {
+    const openIndex = text.indexOf('(', m.index)
+    const bal = takeBalanced(text, openIndex, '(', ')', 6000)
+    if (!bal) continue
+    calls.push({ args: bal.body, start: m.index, end: bal.end })
+    re.lastIndex = bal.end + 1
+  }
+  return calls
+}
+
+function addEndpointDef(defs, seen, def) {
+  if (!def || !def.endpoint || def.endpoint.startsWith('http') || def.endpoint.length > 240) return
+  const key = `${def.method || 'GET_OR_UNKNOWN'} ${def.endpoint} ${def.definition_file || ''} ${def.wrapper || ''} ${def.source_kind || ''} ${def.evidence || ''}`
+  if (seen.has(key)) return
+  seen.add(key)
+  defs.push(def)
 }
 
 function parseApiDefs(files, root) {

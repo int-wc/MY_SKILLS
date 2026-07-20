@@ -80,6 +80,23 @@ def process_directory(company_dir):
     name = os.path.basename(company_dir)
     results = {"name": name, "md_count": 0, "html_count": 0}
 
+    # Also scan .md files directly in company_dir (for when the dir itself
+    # is submittable_reports/ or reports/ rather than a company-level dir)
+    reports_dir = os.path.join(company_dir, "reports_html")
+    for fname in os.listdir(company_dir):
+        if not fname.endswith(".md") or fname in ("README.md", "evidence.md"):
+            continue
+        md_path = os.path.join(company_dir, fname)
+        html_name = fname.replace(".md", ".html")
+        html_path = os.path.join(reports_dir, html_name)
+        try:
+            convert_md_to_html(md_path, html_path)
+            results["html_count"] += 1
+        except Exception as e:
+            print(f"  ERROR: {md_path} -> {e}")
+    results["md_count"] += len([f for f in os.listdir(company_dir) if f.endswith('.md') and f not in ('README.md', 'evidence.md')])
+
+    # Also scan subdirectories for compatibility with the old layout
     for subdir in ["reports", "submittable_reports"]:
         src_dir = os.path.join(company_dir, subdir)
         if not os.path.isdir(src_dir):

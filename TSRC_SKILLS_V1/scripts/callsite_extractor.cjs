@@ -128,7 +128,7 @@ function collectCalleesForFile(text, def, sameFile) {
   for (const exported of def.exported_names || []) {
     if (!exported) continue
     if (sameFile) callees.add(exported)
-    const importRe = new RegExp(`\\b${escRe(exported)}(?:\\s+as\\s+([A-Za-z_$][\\w$]*))?`, 'g')
+    const importRe = new RegExp(`(?:^|[^\\w$])${escRe(exported)}(?:\\s+as\\s+([A-Za-z_$][\\w$]*))?`, 'g')
     let im
     while ((im = importRe.exec(text))) callees.add(im[1] || exported)
   }

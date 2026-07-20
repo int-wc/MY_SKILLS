@@ -1233,14 +1233,45 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? 'JS文件已下载到本
 
 **【核心策略 — 🎯 Agent 发散思维 + 靶标定制】**
 
-**首先思考：这个系统做什么的？数据流？鉴权怎么实现的？哪个模块最可能有漏洞？**
-基于 Phase 2 的 JS 分析 + 框架识别 + 发现的 API 路径，用第一性原理推断：
-- 物流平台 → 关注订单/运单/用户API的越权和遍历
-- 管理后台 → 关注权限提升/未授权/配置泄露
-- API网关 → 关注SSRF/路径穿越/鉴权绕过
-- **先理解系统再动手，不要机械照搬路径列表**
+**核心原则：基于请求参数决定漏洞测试方向，而非API路径名。**
 
-不要只测固定路径列表。对于从 JS 发现的 API 路径，先分析命名再选择测试手法：
+Phase 2 的 JS 分析已经提取了每个 API 端点的调用现场参数结构。收到 API 端点列表后，对每个端点按以下多级策略执行：
+
+---
+
+### 第一级：Call Site 参数驱动（最高优先级 — 根据JS分析到的请求参数字段名决定漏洞方向）
+
+如果该端点有明确的请求参数字段名数据，则**完全基于参数字段名决定漏洞测试方向**：
+
+| 请求参数中的字段名 | 对应的漏洞测试方向 |
+|---|---|
+| url, image_url, file_url, src, href, link, download_url, redirect | **SSRF**（IPv6绕过/DNS重绑定）+ **路径穿越** |
+| file, file_path, path, filename, download, template_path | **路径遍历/任意文件读取** |
+| content, html, markdown, template, body, message, render | **XSS/SSTI模板注入** |
+| page, limit, offset, pageSize, pageNum, start, end | **批量数据遍历/未授权分页访问** |
+| id, userId, orderId, studentId, companyId, appId, key | **IDOR水平越权** |
+| price, amount, quantity, discount, coupon, total | **逻辑漏洞/金额篡改/优惠券滥用** |
+| data, xml, json, document, payload | **XXE/注入/反序列化** |
+| redirect, callback, next, forward, returnUrl, referer | **开放重定向/SSRF** |
+| token, accessToken, sessionKey, apiKey, secret | **Token伪造/越权/凭证泄露** |
+| image, video, media, file, attachment, upload | **文件上传绕过/任意文件写入** |
+| command, cmd, exec, shell, code, expression | **命令执行/表达式注入/RCE** |
+
+**关键认知：同一个端点名可能对应完全不同的漏洞类型，取决于它收什么参数：**
+- /apix/image-colors 若参数含 url 则测 **SSRF**
+- /apix/data/export 若参数含 id 则测 **IDOR**；若含 file 则测 **路径遍历**
+
+**针对每个端点的测试步骤：**
+1. 看它的参数字段名列表，从上方映射表找到对应的漏洞类型
+2. 对每个参数名做相应的攻击测试
+3. **如果某个参数的含义是让服务端去获取外部资源（url/image_url/href等），必须测 SSRF**
+4. **SSRF测不了再测参数注入/越权/其他**
+
+---
+
+### 第二级：按API路径名推断（兜底 — 当Phase 2未提供call site参数结构时使用）
+
+当无JS call site数据或不明确参数结构时，才按API路径名推断：
 
 1. 分析 API 命名 → 推断功能 → 对应攻击:
    upload/file/import/attachment       → **文件上传绕过/任意文件写入**

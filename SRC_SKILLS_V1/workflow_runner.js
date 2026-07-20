@@ -613,6 +613,17 @@ let p3_unauth, p3_other, p3_quick, p3_dirsearch, p3_codeaudit, p4_dirscan, p4_ve
 // 聚合发现数据，供 Phase 5 写入线索文件
 let p3_findings_data = []
 
+try {
+  const savedP2 = readPhase2State()
+  if (savedP2) {
+    globalThis.__p2_creds_json = savedP2.creds || globalThis.__p2_creds_json || '[]'
+    globalThis.__p2_js_dirs_json = savedP2.js_dirs || globalThis.__p2_js_dirs_json || '[]'
+    globalThis.__p2_call_sites_json = savedP2.call_sites || globalThis.__p2_call_sites_json || '[]'
+    globalThis.__p2_fw_info = savedP2.fw_info || globalThis.__p2_fw_info || '[]'
+    log(`  ♻️ 恢复Phase2结构化状态: ${PHASE2_STATE_PATH}`)
+  }
+} catch(e) {}
+
 if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
   log('[2/8] ⏭️ 跳过（用户指定模式）')
   markPhase(2, '⏭️')

@@ -369,6 +369,17 @@ let p2_discoveries_text = ''
 let p3_unauth, p3_other, p3_quick, p3_dirsearch, p3_codeaudit, p4_dirscan, p4_verify
 let p3_findings_data = []
 
+try {
+  const savedP2 = readPhase2State()
+  if (savedP2) {
+    globalThis.__zc_creds_json = savedP2.creds || globalThis.__zc_creds_json || '[]'
+    globalThis.__zc_js_dirs_json = savedP2.js_dirs || globalThis.__zc_js_dirs_json || '[]'
+    globalThis.__zc_call_sites_json = savedP2.call_sites || globalThis.__zc_call_sites_json || '[]'
+    globalThis.__zc_fw_info = savedP2.fw_info || globalThis.__zc_fw_info || '[]'
+    log(`  ♻️ 恢复Phase2结构化状态: ${PHASE2_STATE_PATH}`)
+  }
+} catch(e) {}
+
 // ============================================================
 // Phase 1: 项目信息读取 + 资产发现
 // ============================================================

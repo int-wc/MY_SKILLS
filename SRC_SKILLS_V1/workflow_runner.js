@@ -596,16 +596,13 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
         if (target_hash) {
           if (!globalThis.__p2_js_dirs_json) globalThis.__p2_js_dirs_json = '[]'
           const dirs = JSON.parse(globalThis.__p2_js_dirs_json)
-          // 检查reconstructed目录
-          const reconDir = dl_dump_dir + '/reconstructed'
-          const _fs = require('fs')
-          const hasRecon = _fs.existsSync(reconDir) ? _fs.readdirSync(reconDir).length > 0 : false
+          // reconstructed目录由Step C agent自行检查，此处不依赖Node fs模块
           dirs.push({
             target_hash: target_hash,
             dump_dir: dl_dump_dir,
             js_count: dl_file_count,
-            has_reconstructed: hasRecon,
-            reconstructed_dir: hasRecon ? reconDir : null,
+            has_reconstructed: false,
+            reconstructed_dir: null,
           })
           globalThis.__p2_js_dirs_json = JSON.stringify(dirs)
         }

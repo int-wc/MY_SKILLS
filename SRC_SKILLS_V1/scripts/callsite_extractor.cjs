@@ -372,8 +372,8 @@ function parseApiDefs(files, root) {
       const args = splitTopLevel(bal.body)
       const options = args[1] || ''
       const methodM = options.match(/method\s*:\s*['"`]([A-Za-z]+)['"`]/)
-      const bodyM = options.match(/body\s*:\s*([^,}]+(?:\([^)]*\))?|\{[\s\S]{0,1200}?\})/)
-      const params = extractParamsFromExpression(bodyM ? bodyM[1] : '', varMap)
+      const bodyExpr = extractObjectPropertyExpression(options, 'body')
+      const params = extractParamsFromExpression(bodyExpr, varMap)
       addEndpointDef(defs, seen, {
         endpoint,
         method: methodM ? methodM[1].toUpperCase() : 'GET_OR_UNKNOWN',

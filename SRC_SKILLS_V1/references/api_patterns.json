@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-13",
+  "updated": "2026-07-20",
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
@@ -265,7 +265,12 @@
     "GET /",
     "GET /.env + GET /js/app.js 组合利用",
     "/static/",
-    "https://localhost:8090/static/"
+    "https://localhost:8090/static/",
+    "/api/system/info/getOSinfo",
+    "/emp/passport/getsetting",
+    "/.well-known/openid-configuration",
+    "/apix/V1/omp/open/oauth/idpUrl",
+    "/api/V1/omp/open/oauth/idpUrl"
   ],
   "framework_patterns": {
     "JeecgBoot": [

@@ -1041,8 +1041,12 @@ if (mode.startsWith('phase5')) {
     // 3.0 dirsearch — 基于字典的标准目录扫描
     // 原理：读取积累字典+通用字典，对目标做广度优先的路径爆破
     // ============================================================
-    log('  📂 执行字典目录扫描 (dirsearch)...')
-    const P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
+    if (skipDirsearch) {
+      log('  ⏭️ 跳过字典目录扫描（用户指定 skipDirsearch=true）')
+      p3_dirsearch = { findings: [], new_endpoints: [] }
+    } else {
+      log('  📂 执行字典目录扫描 (dirsearch)...')
+      const P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
 
     const p3_dirsearch = await agent(
       `对 ${companyName} 执行 dirsearch 目录扫描（使用 dirsearch 内置字典 + 积累字典）。

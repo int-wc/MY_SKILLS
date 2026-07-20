@@ -1319,6 +1319,10 @@ ${typeof globalThis.__p2_creds_json !== 'undefined' ? '以下凭证可直接用�
 **【Phase 2 JS缓存目录 — 可回查阅本地JS/还原源码】**
 ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? 'JS文件已下载到本地，可直接Read查阅:\n' + JSON.parse(globalThis.__p2_js_dirs_json).map(d => '  ' + d.dump_dir + ' (' + d.js_count + '个JS文件' + (d.has_reconstructed ? ', 含还原源码 reconstructed/' : '') + ')').join('\n') : '（无本地缓存）'}
 
+**【Phase 2 结构化 Call Site 请求参数 — 优先级最高】**
+${formatStructuredCallSiteContext('__p2_call_sites_json')}
+
+${PARAM_DRIVEN_TESTING_GUIDE}
 
 测试矩阵（按优先级执行）:
 
@@ -1443,6 +1447,11 @@ ${typeof globalThis.__p2_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(
 
 JS缓存目录（可回查本地JS/还原源码）:
 ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__p2_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\n') : '（无）'}
+
+Phase 2结构化Call Site请求参数（优先级最高）:
+${formatStructuredCallSiteContext('__p2_call_sites_json')}
+
+${PARAM_DRIVEN_TESTING_GUIDE}
 
 1. 越权测试:
    - 对含数字ID的路径，尝试替换ID值

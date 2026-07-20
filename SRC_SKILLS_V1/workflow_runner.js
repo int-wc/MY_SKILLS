@@ -1037,14 +1037,19 @@ if (mode.startsWith('phase5')) {
     log('  ⚠️ 无可用测试目标')
     markPhase(3, '⏭️')
   } else {
+    let p3_dirsearch; let P3_DICT_PATH
     // ============================================================
     // 3.0 dirsearch — 基于字典的标准目录扫描
     // 原理：读取积累字典+通用字典，对目标做广度优先的路径爆破
     // ============================================================
-    log('  📂 执行字典目录扫描 (dirsearch)...')
-    const P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
+    if (skipDirsearch) {
+      log('  ⏭️ 跳过字典目录扫描（用户指定 skipDirsearch=true）')
+      p3_dirsearch = { findings: [], new_endpoints: [] }
+    } else {
+      log('  📂 执行字典目录扫描 (dirsearch)...')
+      P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
 
-    const p3_dirsearch = await agent(
+    p3_dirsearch = await agent(
       `对 ${companyName} 执行 dirsearch 目录扫描（使用 dirsearch 内置字典 + 积累字典）。
 
 ===== 目标列表（前20个） =====
@@ -1160,6 +1165,7 @@ ${p3_dirsearch.new_endpoints.map(function(e) { return '  - ' + e }).join(String.
       }
     }
 
+    }  // end skipDirsearch else block
     // 3.1 未授权/信息泄露测试（遵循: 反思为主→迁跃为辅→分析为底→扩展为路）
     p3_unauth = await agent(
       `你是SRC漏洞挖掘专家，对 ${companyName} 执行未授权访问和信息泄露测试。

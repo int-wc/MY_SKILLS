@@ -647,7 +647,8 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     - 发挥第一性原理和创造性思维，不要局限于固定模式
     - 注意看Source Map还原出的文件: 检查是否有 reconstructed/ 目录（包含原始TS/Vue/React源码）
 
-    ${UA_INSTR}`,
+    ${UA_INSTR}
+    ${PROXY_INSTR}`,
           { label: `🔬 分析: ${target}`, phase: '深度分析' }
         )
       },

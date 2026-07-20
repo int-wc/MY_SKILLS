@@ -1631,6 +1631,11 @@ ${p4_findings_json.substring(0, 6000)}
 - **数据类漏洞需说明数量及泄露了哪些数据**（如：泄露 1000 条用户信息，包含姓名/手机号/身份证号）
 
 ---
+**Phase 2结构化Call Site请求参数（验证和发散时必须优先回查）**
+${formatStructuredCallSiteContext('__zc_call_sites_json')}
+
+${PARAM_DRIVEN_TESTING_GUIDE}
+
 ### 🎯 Step 4: Agent 发散扩展（验证一个点时思考变种，不要只机械复述）
 
 发散方向（对每个确认有效的发现依次思考）:

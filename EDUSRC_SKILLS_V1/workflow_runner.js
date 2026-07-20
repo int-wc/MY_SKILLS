@@ -1739,6 +1739,11 @@ Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
 输出时 confirmed_findings 只放 confirmed + suspected 的。false_positives 和 needs_manual_test 各自归位。
 
 ---
+**Phase 2结构化Call Site请求参数（验证和发散时必须优先回查）**
+${formatStructuredCallSiteContext('__p2_call_sites_json')}
+
+${PARAM_DRIVEN_TESTING_GUIDE}
+
 ### 🎯 Step 4: Agent 发散扩展（关键思维环节 — 不要跳过）
 
 **验证一个发现时，发散思考是否存在变种/扩展，不要只复述已有发现。**

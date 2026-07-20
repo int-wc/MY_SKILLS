@@ -102,6 +102,16 @@ const parseWorkflowBool = (v) => v === true || v === 1 || v === '1' || String(v)
 const skipDirsearch = parseWorkflowBool(workflowOptions?.skipDirsearch) || parseWorkflowBool(workflowOptions?.noDirsearch)
 const skipFuzz = parseWorkflowBool(workflowOptions?.skipFuzz) || parseWorkflowBool(workflowOptions?.noFuzz)
 
+// ============================================================
+// 代理配置 — 所有 curl 请求通过代理发送
+// 用法: {..., proxy: "http://127.0.0.1:7890"}
+// ============================================================
+const PROXY_URL = workflowOptions?.proxy || workflowOptions?.httpProxy || workflowOptions?.httpsProxy || ''
+const PROXY_FLAG = PROXY_URL ? `-x '${PROXY_URL}'` : ''
+const PROXY_INSTR = PROXY_URL
+  ? `⚠️ **代理硬性规则：所有 curl 命令必须添加 ${PROXY_FLAG} 参数，通过代理 ${PROXY_URL} 发出请求。禁止直连目标服务器。**`
+  : ''
+
 // 目标进度追踪
 const progress = {
   company: companyName || '未指定',

@@ -278,7 +278,11 @@
     "https://aimdk-support.agibot.com/api/health",
     "https://srm-mall.agibot.com/",
     "https://www.agibot.com/vendor/composer/installed.json",
-    "https://genie.agibot.com/vendor/composer/installed.json"
+    "https://genie.agibot.com/vendor/composer/installed.json",
+    "/config.js",
+    "/zh-cn (Nuxt SSR __NUXT__ config)",
+    "/cn /en /login (Nuxt SSR __NUXT__ config)",
+    "/apix/V1/omp/open/oauth/idpLogin"
   ],
   "framework_patterns": {
     "JeecgBoot": [

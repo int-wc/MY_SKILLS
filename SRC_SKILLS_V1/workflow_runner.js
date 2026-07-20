@@ -619,21 +619,49 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
 
     **你的任务：用Read工具阅读本地JS文件，发挥创造性分析以下内容：**
 
-    1. **定位API入口** — 查找 baseURL/API_HOST/API_BASE/gatewayUrl/serverUrl 等配置
-    2. **路径模式提取** — 提取所有 "/xxx/yyy" 路径，关注非标准前缀 /gateway/ /dwr/ /sys/ /manage/ /crm/ /erp/
-    3. **敏感信息提取** — 查找 AccessKey、SecretKey、JWT(eyJ...)、数据库连接串(mongodb://...)、内网IP、硬编码密码
-    4. **鉴权方式识别** — Authorization: Bearer/Basic/X-TOKEN/Cookie/localStorage Token存放
-    5. **凭证反思（关键思维环节）**:
-       - 找到accessKey+secretKey → 哪个云服务？试枚举 OBS/S3/OSS Bucket
-       - 找到JWT → 解码看user/role，试调API看是否越权
-       - 找到API路径 → 功能命名推断数据敏感度
-       - 找到内部域名 → 判断环境(dev/test/prod)
+    **Step 0: 先列出目录中所有 JS 文件清单**
+    执行 `ls -la ${dl_dump_dir}/` 或 Read 目录获取完整文件列表。
+    重点关注 Nuxt.js 项目中的 subpage_*.js 文件（这些文件包含前端页面数据和 API 端点定义）。
+
+    **Step 1: 提取 API 端点**
+    在所有 JS 文件中查找:
+    1. baseURL/API_HOST/API_BASE/gatewayUrl/serverUrl 等配置
+    2. 所有 "/xxx/yyy" 路径，关注 /apix/ /gateway/ /dwr/ /sys/ /manage/ /crm/ /erp/
+    3. **必须阅读 subpage_*.js 文件** — 这些文件包含页面级 API 调用定义
+    4. 查找形如 `{url:"/apix/xxx", req:t, method:"POST"}` 的 API 路由定义
+
+    **Step 2: Call Site 深度追溯 — 提取每个端点的请求参数结构**
+    对每个发现的 API 路径，追溯其调用现场（call site）:
+    - 找到定义路由的包装函数: `const n = t => e({url:"/apix/xxx", req:t, method:"POST"})`
+    - 找到所有调用 `n(...)` 的地方，提取传入了哪些字段
+    - 示例:
+        n({url: "...", width: 200, height: 200})
+        → 提取参数字段: url, width, height
+    - 输出格式: `/apix/image-colors: {url, width?, height?}`
+
+    **Step 3: 敏感信息 & 凭证提取**
+    1. AccessKey、SecretKey、JWT(eyJ...)、数据库连接串(mongodb://...)、内网IP、硬编码密码
+    2. 找到accessKey+secretKey → 哪个云服务？
+    3. 找到JWT → 解码看user/role
+    4. 鉴权方式 — Authorization: Bearer/Basic/X-TOKEN/Cookie
+
+    **Step 4: 输出结构化数据**
+    按以下 JSON 格式输出每个端点的参数结构（供 Phase 3 直接使用）:
+
+    \`\`\`json
+    [
+      {"endpoint": "/apix/image-colors", "method": "POST", "params": ["url", "width", "height"], "analysis": "有url参数=SSRF风险"},
+      {"endpoint": "/apix/list", "method": "GET", "params": ["page", "pageSize"], "analysis": "分页参数"}
+    ]
+    \`\`\`
 
     **注意：**
+    - Nuxt.js/Vue 项目: subpage_*.js 每个文件对应一个页面路由，包含该页面的所有 API 调用
+    - **如果不是 Nuxt 项目，仍必须追溯每个端点的请求体参数结构**
+    - 对每个端点，不仅要找出调用处，还要指出哪个字段是用户可控的（来自 URL query/表单/输入框）
+    - 如 JS 混淆/无法追踪，尝试发一个空 POST 看错误提示推断参数名
     - 遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)
-    - 本地文件分析完成后不要删除缓存文件，留作证据
-    - 发挥第一性原理和创造性思维，不要局限于固定模式
-    - 注意看Source Map还原出的文件: 检查是否有 reconstructed/ 目录（包含原始TS/Vue/React源码）
+    - 查看是否有 reconstructed/ 目录（包含原始TS/Vue/React源码）
 
     ${UA_INSTR}
     ${PROXY_INSTR}`,

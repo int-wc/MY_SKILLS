@@ -1175,11 +1175,15 @@ ${p2_discoveries_text != null && p2_discoveries_text !== '' ? p2_discoveries_tex
 \n	**Phase 2提取的结构化凭证（优先级高，优先于下方文本）**:
 	${typeof globalThis.__zc_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__zc_creds_json).slice(0, 10), null, 2) : '（无）'}
 
-	**JS缓存目录（可回查本地JS及还原源码）**:
-	${typeof globalThis.__zc_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__zc_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\n') : '（无）'}
+		**JS缓存目录（可回查本地JS及还原源码）**:
+		${typeof globalThis.__zc_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__zc_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\n') : '（无）'}
 
+	**Phase 2结构化Call Site请求参数（优先级最高）**:
+	${formatStructuredCallSiteContext('__zc_call_sites_json')}
 
-**【核心策略 — 🎯 Agent 发散思维 + 靶标定制】**
+	${PARAM_DRIVEN_TESTING_GUIDE}
+
+	**【核心策略 — 🎯 Agent 发散思维 + 靶标定制】**
 1. 分析 API 命名 → 推断功能 → 对应攻击:
    upload/file/import        → **文件上传绕过**
    download/export/backup    → **路径遍历/任意文件读取**
@@ -1253,6 +1257,11 @@ ${targets.map(function(t) { return '  ' + t.url }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点:
 ${p2_discoveries_text != null && p2_discoveries_text !== '' ? p2_discoveries_text.substring(0, 10000) : typeof p2_discoveries_text === 'string' ? '（JS分析了但无发现）' : '（无 JS 分析数据）'}
+
+Phase 2结构化Call Site请求参数（优先级最高）:
+${formatStructuredCallSiteContext('__zc_call_sites_json')}
+
+${PARAM_DRIVEN_TESTING_GUIDE}
 
 1. 越权测试:
    - 对含数字ID的路径，尝试替换ID值

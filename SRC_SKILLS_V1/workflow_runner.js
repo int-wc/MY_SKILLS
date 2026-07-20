@@ -98,6 +98,9 @@ if (!companyName && singleUrl) {
   }
 }
 
+const parseWorkflowBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true' || String(v).toLowerCase() === 'yes'
+const skipDirsearch = parseWorkflowBool(workflowOptions?.skipDirsearch) || parseWorkflowBool(workflowOptions?.noDirsearch)
+
 // 目标进度追踪
 const progress = {
   company: companyName || '未指定',

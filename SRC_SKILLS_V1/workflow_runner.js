@@ -620,7 +620,7 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     **你的任务：用Read工具阅读本地JS文件，发挥创造性分析以下内容：**
 
     **Step 0: 先列出目录中所有 JS 文件清单**
-    执行 `ls -la ${dl_dump_dir}/` 或 Read 目录获取完整文件列表。
+    执行 **ls -la 目录路径** 或 Read 目录获取完整文件列表。
     重点关注 Nuxt.js 项目中的 subpage_*.js 文件（这些文件包含前端页面数据和 API 端点定义）。
 
     **Step 1: 提取 API 端点**

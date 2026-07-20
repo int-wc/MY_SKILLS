@@ -752,20 +752,17 @@ ${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE
     5. 🔥 **Call Site 深度追溯 — 对每个发现的API端点，必须追溯其调用现场（call site）**
        对每个提取到的API路径（如 `/apix/image-colors`），在JS中找到所有 **调用该端点的地方**，提取：
        - **请求体参数结构**：调用时传入了哪些字段？
-         ```js
-         // 找到类似这样的调用，提取 req 中的字段名
-         const n = t => e({url:"/apix/image-colors", req:t, method:"POST"});
-         // 找到调用 n(...) 的地方：
-         n({url: "https://example.jpg", width: 200, height: 200})
-         // 提取到的字段: url, width, height  → 说明存在 url 参数，即 SSRF 攻击面
-         ```
+            代码示例:
+            const n = t => e({url:"/apix/image-colors", req:t, method:"POST"});
+            // 找到调用 n(...) 的地方：
+            n({url: "...", width: 200, height: 200})
+            // 提取到的字段: url, width, height → 说明存在 url 参数，即 SSRF 攻击面
        - **返回值消费方式**：响应数据被怎样使用了？(渲染到页面？传给其他API？)
        - **参数来源**：参数来自用户输入？固定值？props？store？URL query？
        - **输出格式**：将每个端点的「字段名列表」结构化输出，如：
-         ```
-         /apix/image-colors: {url, width?, height?, quality?}  ← 有 url 参数，SSRF/路径穿越风险
-         /apix/V1/.../list: {page?, pageSize?, categoryId?}    ← 分页参数，批量遍历风险
-         ```
+            输出示例:
+            /apix/image-colors: {url, width?, height?, quality?}  ← 有 url 参数，SSRF风险
+            /apix/V1/.../list: {page?, pageSize?, categoryId?}    ← 分页参数
     6. **调用现场溯源 (Call Site JSON)**：
        - 如果以上分析找到了请求体参数，输出为结构化JSON格式，供Phase 3直接使用
        - 如果JS被严重混淆/无法追溯到call site → 输出 `request_params: "unresolved"`，同时**分析响应线索**：

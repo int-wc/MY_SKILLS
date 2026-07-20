@@ -511,6 +511,11 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
       async (target) => {
         // === Step A+B+Creds: 合并机械操作（含自动重试） ===
         // 失败自动重试1次
+        // 声明在for循环外部（let块作用域：内部声明外部不可访问）
+        let dl_dump_dir = "${SRC_BASE}/${companyName}/js_dumps"
+        let dl_file_count = 0
+        let target_hash = ""
+
         for (let _retry = 0; _retry < 2; _retry++) {
           var mechResult = await agent(
           `执行以下命令串行:
@@ -534,10 +539,6 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
           { label: `🤖 机械操作: ${target}`, phase: '深度分析' }
         )
 
-        // 解析结果
-        let dl_dump_dir = "${SRC_BASE}/${companyName}/js_dumps"
-        let dl_file_count = 0
-        let target_hash = ""
         try {
           const dlPart = (mechResult || '').split('---DOWNLOAD_RESULT---')[1] || ''
           const dlMatch = dlPart.match(/{[^}]+}/)

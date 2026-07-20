@@ -1118,6 +1118,7 @@ dirsearch -u "<target_url>" \
 同时在 new_endpoints 中输出本次新发现的可积累端点。
 
       ${UA_INSTR}
+      ${PROXY_INSTR}
       ⚠️ **边界规则：仅对目标列表URL执行。不要读取本地非字典文件。**`,
       { label: '📂 字典目录扫描 (dirsearch)', schema: {
         type: 'object',

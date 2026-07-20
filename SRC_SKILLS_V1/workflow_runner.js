@@ -603,11 +603,26 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     2. **路径模式提取** — 提取所有 "/xxx/yyy" 路径，关注非标准前缀 /gateway/ /dwr/ /sys/ /manage/ /crm/ /erp/
     3. **敏感信息提取** — 查找 AccessKey、SecretKey、JWT(eyJ...)、数据库连接串(mongodb://...)、内网IP、硬编码密码
     4. **鉴权方式识别** — Authorization: Bearer/Basic/X-TOKEN/Cookie/localStorage Token存放
-    5. **凭证反思（关键思维环节）**:
-       - 找到accessKey+secretKey → 哪个云服务？试枚举 OBS/S3/OSS Bucket
-       - 找到JWT → 解码看user/role，试调API看是否越权
-       - 找到API路径 → 功能命名推断数据敏感度
-       - 找到内部域名 → 判断环境(dev/test/prod)
+    5. **Call Site 深度追溯 — 对每个发现的API端点，必须追溯其调用现场（call site）**
+       对每个提取到的API路径（如 /apix/image-colors），在JS中找到所有调用该端点的地方，提取：
+       - **请求体参数结构**：调用时传入了哪些字段？
+         代码示例:
+           const n = t => e({url:"/apix/image-colors", req:t, method:"POST"});
+           // 找到调用 n(...) 的地方：
+           n({url: "...", width: 200, height: 200})
+           // 提取到的字段: url, width, height 说明存在 url 参数，即 SSRF 攻击面
+       - **返回值消费方式**：响应数据被怎样使用了？(渲染到页面？传给其他API？)
+       - **参数来源**：参数来自用户输入？固定值？props？store？URL query？
+       - **输出格式**：将每个端点的字段名列表结构化输出，如：
+         输出示例:
+           /apix/image-colors: {url, width?, height?, quality?}  ← 有 url 参数，SSRF风险
+           /apix/V1/.../list: {page?, pageSize?, categoryId?}    ← 分页参数
+    6. **调用现场溯源 (Call Site JSON)**：
+       - 如果以上分析找到了请求体参数，输出为结构化JSON格式，供Phase 3直接使用
+       - 如果JS被严重混淆/无法追溯到call site 输出 request_params 为 unresolved，同时分析响应线索：
+         - 用Phase 2已有的curl探测能力，对该端点发送一个空POST，看返回的错误提示中是否包含期望的字段名
+         - 例如返回 {"error":"缺少参数 imageUrl"} 说明有 imageUrl 参数，存在SSRF机会
+         - 这种反向推断也是有效的参数发现手段
 
     **注意：**
     - 遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)
@@ -1556,6 +1571,20 @@ Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
 
 发散方向（对每个发现依次思考）：
 
+**0. 信息流协同 — 验证前先扫描当前对话中的上下文（最高优先级）**
+当你接收到一个 API 端点时，**不要孤立测试**，先在当前信息流中搜索与该端点相关的所有已知信息：
+- 查 Phase 2 JS 分析结果：该端点的 call site 参数结构是什么？（即 {url, width?, height?} 这样的字段列表）
+  - 如果有字段列表，直接按字段名决定漏洞测试方向（每个字段名映射一个漏洞类型）
+- 查 Phase 3 已有结论：该端点之前是否已经被测试过？结论是什么？
+- 查 _credentials.json：该端点涉及的凭证信息（Token/API Key等）是否已被提取？
+- 查 fuzz 结果：该端点的子路径或变体是否已被发现？
+- 联合判定：如果你发现该端点的 JS call site 定义了参数 url: string，无论端点名是什么，都必须测 SSRF
+- 结论：**不要只看端点路径名判断漏洞类型，要看构建请求包时传了哪些参数**
+
+**0b. 响应体逆向推断参数（当JS分析未提供call site参数时）**
+- 对 POST 端点发送空 body，看错误响应是否提示期望字段
+- 例：返回 {"missing":"imageUrl"} 字段含 imageUrl，SSRF机会
+
 **4a. 参数发散 — 同一端点的其他参数**
 发现 /api/user?id=1 → 发散试:
 - /api/user?orderId=2       (是否越权查其他资源)
@@ -1590,7 +1619,15 @@ JSON → Form-URLEncoded（参数解析差异）
 如果 Phase 2 发现了隐藏API路径或凭证，思考这些路径是否存在与当前发现类似的漏洞模式。
 访问本地JS文件确认（路径见上方JS缓存目录）。
 
-**4g. 利用链思考 — 当前发现能否与其他发现串联**
+**4g. 原理级绕过发散（当标准测试被WAF/防护拦截时 — 关键思维能力）**
+如果直接测试被 WAF/防护/校验拦截（403/400/拦截页面），必须从原理推理绕过：
+- SSRF 被拦截: IPv6映射 [::1]/DNS重绑定 127.0.0.1.nip.io/URL解析差异 127.0.0.1#@evil.com
+- 路径穿越被拦截: URL双编码 ..%252f/Unicode变体/协议混合 file://
+- SQL注入被拦截: 大小写混写/参数污染/编码绕过
+- **核心推理链路**：这个参数最终传给什么函数？那个函数接受的合法格式是什么？绕过就在合法格式与黑名单之间的间隙
+- **如果当前手段绕不过，回溯到参数本身**：换个参数尝试、换个HTTP方法、换个Content-Type、加个Header
+
+**4h. 利用链思考 — 当前发现能否与其他发现串联**
 存在利用链可能 → 报告时标记为利用链格式
 
 **Step 5: 变种验证**

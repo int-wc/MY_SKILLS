@@ -825,7 +825,10 @@
     "/api/v1/system/notify",
     "/api/v1/square/public/tags",
     "/emp/passport/getsetting",
-    "/api/v1/square/public/works?page=1&pageSize=100"
+    "/api/v1/square/public/works?page=1&pageSize=100",
+    "/api/v1/auth/lark/doc/ticket",
+    "/runtime-config.js /config.js",
+    "/api/system/info/getOSinfo"
   ],
   "framework_patterns": {
     "JeecgBoot": [

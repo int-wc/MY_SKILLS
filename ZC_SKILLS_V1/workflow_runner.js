@@ -94,9 +94,6 @@ if (typeof args === 'string') {
   mode = 'full'
 }
 
-// 自动探测项目目录 — 以 resolvedProject 为准（不再硬编码）
-const CWD = `${ZC_BASE}/${resolvedProject}`
-
 // 未指定项目名时从URL自动提取
 let _isAutoCompany = false
 if (!projectName && singleUrl) {

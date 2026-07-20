@@ -107,8 +107,6 @@ function parseApiDefs(files, root) {
         const exportAs = new RegExp(`\\b${escRe(wrapper)}\\s+as\\s+([A-Za-z_$][\\w$]*)`, 'g')
         let em
         while ((em = exportAs.exec(text))) exportNames.push(em[1])
-        const named = new RegExp(`export\\s*\\{[^}]*\\b${escRe(wrapper)}\\b[^}]*\\}`, 's')
-        if (named.test(text) && !exportNames.includes(wrapper)) exportNames.push(wrapper)
       }
       defs.push({
         endpoint,

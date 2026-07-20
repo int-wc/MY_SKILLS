@@ -1351,6 +1351,7 @@ b) **通用路径探测**（始终执行）:
 
 
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
+      ${PROXY_INSTR}
 
       ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: `🔓 未授权/信息泄露测试`, schema: {
@@ -1447,6 +1448,7 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__
 
 
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
+      ${PROXY_INSTR}
 
       ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: `🎯 越权/弱口令测试`, schema: {
@@ -1520,6 +1522,7 @@ ${_t2urls}\t第2阶段提取的结构化凭证:
 
 
         ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
+      ${PROXY_INSTR}
 
         ⚠️ **严格边界规则：仅对当前列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
         { label: '⚡ Tier2快速探测', schema: {
@@ -1743,6 +1746,7 @@ JSON → Form-URLEncoded（参数解析差异）
 新增的变种发现追加到 confirmed_findings 数组。
 
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
+      ${PROXY_INSTR}
 
       ⚠️ **严格边界规则：仅验证当前公司的漏洞数据。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: '🔍 漏洞复测验证', schema: {

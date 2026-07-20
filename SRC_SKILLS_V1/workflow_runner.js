@@ -96,6 +96,20 @@ if (!companyName && singleUrl) {
 }
 
 // 目标进度追踪
+const parseWorkflowBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true' || String(v).toLowerCase() === 'yes'
+const skipDirsearch = parseWorkflowBool(workflowOptions?.skipDirsearch) || parseWorkflowBool(workflowOptions?.noDirsearch)
+const skipFuzz = parseWorkflowBool(workflowOptions?.skipFuzz) || parseWorkflowBool(workflowOptions?.noFuzz)
+
+// ============================================================
+// 代理配置 — 所有 curl 请求通过代理发送
+// ============================================================
+const PROXY_URL = workflowOptions?.proxy || workflowOptions?.httpProxy || workflowOptions?.httpsProxy || ''
+const PROXY_FLAG = PROXY_URL ? `-x '${PROXY_URL}'` : ''
+const PROXY_INSTR = PROXY_URL
+  ? `⚠️ **代理硬性规则：所有 curl 命令必须添加 ${PROXY_FLAG} 参数，通过代理 ${PROXY_URL} 发出请求。禁止直连目标服务器。**
+⚠️ **Python脚本/其他工具也需通过代理：执行前先 export HTTP_PROXY=${PROXY_URL} HTTPS_PROXY=${PROXY_URL} http_proxy=${PROXY_URL} https_proxy=${PROXY_URL}，或命令前缀加上 HTTP_PROXY=${PROXY_URL} HTTPS_PROXY=${PROXY_URL}。**`
+  : ''
+
 const progress = {
   company: companyName || '未指定',
   phase1: '⬜',
@@ -616,7 +630,8 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     - 发挥第一性原理和创造性思维，不要局限于固定模式
     - 注意看Source Map还原出的文件: 检查是否有 reconstructed/ 目录（包含原始TS/Vue/React源码）
 
-    ${UA_INSTR}`,
+    ${UA_INSTR}
+    ${PROXY_INSTR}`,
           { label: `🔬 分析: ${target}`, phase: '深度分析' }
         )
       },
@@ -822,6 +837,7 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.from
 **输出 JSON，每个目标一个条目。**
 
       ${UA_INSTR}
+      ${PROXY_INSTR}
       ⚠️ **严格边界规则：仅使用 curl 探测目标URL。不要读取任何本地文件。不要提及或引用任何其他厂商的数据。**`,
       { label: '🔍 快速开发框架识别', schema: {
         type: 'object',
@@ -909,6 +925,9 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.from
     // 2.5 dir_enum — 基于系统特征的智能路径枚举（智能fuzz）
     // 原理：根据已识别的框架 + JS发现的API路径格式，自动泛化fuzz
     // ============================================================
+    if (skipFuzz) {
+      log('  ⏭️ 跳过智能路径枚举（用户指定 skipFuzz=true）')
+    } else {
     log('  🔍 执行智能路径枚举（基于系统特征自动泛化fuzz）...')
     const P2_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
 
@@ -966,6 +985,7 @@ cat ${fuzz_out}`,
       log(`  🔄 ${globalThis.__p2_fuzz_findings.length} 个fuzz发现已注入Phase3上下文`)
     }
     targets.forEach(t => dimTracker.record(t, 'dir_enum', 'done'))
+    }  // end skipFuzz else
   // P0-2: 持久化 accumulated 状态到临时文件（避免agent崩溃丢失）
   try {
     const stateToSave = {
@@ -1076,6 +1096,7 @@ dirsearch -u "<target_url>" \
 同时在 new_endpoints 中输出本次新发现的可积累端点。
 
       ${UA_INSTR}
+      ${PROXY_INSTR}
       ⚠️ **边界规则：仅对目标列表URL执行。不要读取本地非字典文件。**`,
       { label: '📂 字典目录扫描 (dirsearch)', schema: {
         type: 'object',
@@ -1241,6 +1262,7 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? 'JS文件已下载到本
 
 
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
+      ${PROXY_INSTR}
 
       ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: `🔓 未授权/信息泄露测试`, schema: {
@@ -1337,6 +1359,7 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__
 
 
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
+      ${PROXY_INSTR}
 
       ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: `🎯 越权/弱口令测试`, schema: {
@@ -1410,6 +1433,7 @@ ${_t2urls}\t第2阶段提取的结构化凭证:
 
 
         ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
+      ${PROXY_INSTR}
 
         ⚠️ **严格边界规则：仅对当前列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
         { label: '⚡ Tier2快速探测', schema: {
@@ -1611,6 +1635,7 @@ JSON → Form-URLEncoded（参数解析差异）
 新增的变种发现追加到 confirmed_findings 数组。
 
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
+      ${PROXY_INSTR}
 
       ⚠️ **严格边界规则：仅验证当前公司的漏洞数据。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: '🔍 漏洞复测验证', schema: {

@@ -218,7 +218,10 @@ function readPhase2State() {
   const fs = require('fs')
   for (const p of [PHASE2_STATE_PATH, LEGACY_PHASE2_STATE_PATH]) {
     try {
-      if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'))
+      if (!fs.existsSync(p)) continue
+      const state = JSON.parse(fs.readFileSync(p, 'utf8'))
+      if (p === LEGACY_PHASE2_STATE_PATH && (state.workflow !== meta.name || state.state_id !== phase2StateId)) continue
+      return state
     } catch(_) {}
   }
   return null
@@ -226,6 +229,7 @@ function readPhase2State() {
 
 function savePhase2State(state) {
   const fs = require('fs')
+  state = { ...(state || {}), workflow: meta.name, state_id: phase2StateId }
   for (const p of [PHASE2_STATE_PATH, LEGACY_PHASE2_STATE_PATH]) {
     try { fs.writeFileSync(p, JSON.stringify(state)) } catch(_) {}
   }

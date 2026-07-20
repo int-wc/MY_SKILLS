@@ -48,21 +48,24 @@ const REAL_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (K
 const UA_FLAG = `-H 'User-Agent: ${REAL_UA}'`
 const UA_INSTR = `⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: ${REAL_UA}'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**`
 
-let companyName, mode, singleUrl
+let companyName, mode, singleUrl, workflowOptions
 if (typeof args === 'string') {
   // 修复：Workflow 工具传递的对象 args 可能被序列化为 JSON 字符串
   // 先尝试 JSON 解析，成功则作为对象处理，否则当做公司名
   let parsed = null
   try { parsed = JSON.parse(args) } catch (_) {}
   if (parsed && typeof parsed === 'object') {
+    workflowOptions = parsed
     companyName = parsed.company || null
     mode = parsed.mode || 'full'
     singleUrl = parsed.url || null
   } else {
+    workflowOptions = {}
     companyName = args
     mode = 'full'
   }
 } else if (typeof args === 'object' && args) {
+  workflowOptions = args
   companyName = args.company || null
   mode = args.mode || 'full'
   singleUrl = args.url || null
@@ -71,6 +74,7 @@ if (typeof args === 'string') {
     return { error: 'need_url', message: '请指定url参数' }
   }
 } else {
+  workflowOptions = {}
   companyName = null
   mode = 'full'
 }

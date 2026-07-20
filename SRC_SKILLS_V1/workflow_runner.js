@@ -628,16 +628,16 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     1. baseURL/API_HOST/API_BASE/gatewayUrl/serverUrl 等配置
     2. 所有 "/xxx/yyy" 路径，关注 /apix/ /gateway/ /dwr/ /sys/ /manage/ /crm/ /erp/
     3. **必须阅读 subpage_*.js 文件** — 这些文件包含页面级 API 调用定义
-    4. 查找形如 `{url:"/apix/xxx", req:t, method:"POST"}` 的 API 路由定义
+    4. 查找形如 **{url:"/apix/xxx", req:t, method:"POST"}** 的 API 路由定义
 
     **Step 2: Call Site 深度追溯 — 提取每个端点的请求参数结构**
     对每个发现的 API 路径，追溯其调用现场（call site）:
-    - 找到定义路由的包装函数: `const n = t => e({url:"/apix/xxx", req:t, method:"POST"})`
-    - 找到所有调用 `n(...)` 的地方，提取传入了哪些字段
+    - 找到定义路由的包装函数: **const n = t => e({url:"/apix/xxx", req:t, method:"POST"})**
+    - 找到所有调用 **n(...)** 的地方，提取传入了哪些字段
     - 示例:
         n({url: "...", width: 200, height: 200})
         → 提取参数字段: url, width, height
-    - 输出格式: `/apix/image-colors: {url, width?, height?}`
+    - 输出格式: **/apix/image-colors: {url, width?, height?}**
 
     **Step 3: 敏感信息 & 凭证提取**
     1. AccessKey、SecretKey、JWT(eyJ...)、数据库连接串(mongodb://...)、内网IP、硬编码密码

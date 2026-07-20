@@ -45,60 +45,6 @@ def extract_script_srcs(html, base_url):
             urls.append(full_url)
     return list(dict.fromkeys(urls))  # 去重保持顺序
 
-
-def extract_route_paths(js_dir, main_js_path=None):
-    """从已下载JS中提取Nuxt/Vue路由路径，用于子页面遍历"""
-    routes = set()
-    js_files = []
-    if main_js_path and os.path.isfile(main_js_path):
-        js_files.append(main_js_path)
-    if os.path.isdir(js_dir):
-        for root, dirs, files in os.walk(js_dir):
-            for f in files:
-                if f.endswith('.js') and not f.endswith('.map'):
-                    js_files.append(os.path.join(root, f))
-    for fp in js_files:
-        try:
-            with open(fp, 'r', encoding='utf-8', errors='replace') as fh:
-                data = fh.read()
-            for m in re.finditer(r'path\s*:\s*["\'](/[^"\']+)["\']', data):
-                route = m.group(1)
-                if len(route) > 1 and ':' not in route and route not in routes:
-                    routes.add(route)
-        except:
-            pass
-    return sorted(routes)
-
-
-def fetch_subpage_js(base_url, routes, dump_dir, curl_base, already_downloaded):
-    """遍历子页面路由，提取并下载懒加载JS chunk"""
-    new_files = []
-    visited_urls = set()
-    for route in routes[:15]:
-        target = base_url.rstrip('/') + '/' + route.lstrip('/')
-        if target in visited_urls:
-            continue
-        visited_urls.add(target)
-        html, rc = run(curl_base + " '" + target + "'", timeout=15)
-        if rc != 0 or not html:
-            continue
-        if not html or '<title>登录</title>' in html[:300] or '/login' in html[:300]:
-            continue
-        sub_urls = extract_script_srcs(html, target)
-        for su in sub_urls:
-            if su in already_downloaded:
-                continue
-            already_downloaded.add(su)
-            js_name = os.path.basename(urllib.parse.urlparse(su).path) or ('subpage_' + md5(su.encode()).hexdigest()[:8] + '.js')
-            js_path = os.path.join(dump_dir, 'subpage_' + js_name)
-            content2, rc2 = run(curl_base + " '" + su + "'", timeout=15)
-            if rc2 == 0 and content2:
-                with open(js_path, 'w', encoding='utf-8', errors='replace') as f:
-                    f.write(content2)
-                new_files.append(js_path)
-    return new_files
-
-
 def download_js(target_url, output_dir, ua='', iface='', cookie=''):
     """主流程"""
     os.makedirs(output_dir, exist_ok=True)
@@ -109,7 +55,7 @@ def download_js(target_url, output_dir, ua='', iface='', cookie=''):
     os.makedirs(dump_dir, exist_ok=True)
 
     # curl 基础参数
-    curl_base = 'curl -sLk --max-time 15 --connect-timeout 8'
+    curl_base = 'curl -sL --max-time 15 --connect-timeout 8'
     if ua:
         curl_base += f" -H 'User-Agent: {ua}'"
     if iface:
@@ -177,140 +123,7 @@ def download_js(target_url, output_dir, ua='', iface='', cookie=''):
                 print(f"[+] JS: {js_name}", file=sys.stderr)
         else:
             failed.append(js_url)
-
-    # Step 4: 子页面路由遍历 — 发现懒加载chunk中的隐藏API端点
-    print("[*] 扫描路由并遍历子页面...", file=sys.stderr)
-    route_paths = extract_route_paths(dump_dir, downloaded[0] if downloaded else None)
-    if route_paths:
-        print("[*] 发现 %d 个路由: %s" % (len(route_paths), ', '.join(route_paths[:10])), file=sys.stderr)
-        downloaded_urls = set(js_urls)
-        subpage_files = fetch_subpage_js(target_url, route_paths, dump_dir, curl_base, downloaded_urls)
-        downloaded.extend(subpage_files)
-        if subpage_files:
-            print("[+] 子页面额外下载 %d 个JS文件" % len(subpage_files), file=sys.stderr)
-    else:
-        print("[*] 未发现额外路由，跳过子页面遍历", file=sys.stderr)
-
-    # Step 5: 扫描 HTML 中的 Import Map (ESM CDN)
-    for im in re.finditer(r'<script[^>]+type="importmap"[^>]*>(.*?)</script>', html, re.DOTALL | re.IGNORECASE):
-        try:
-            im_data = json.loads(im.group(1))
-            for mod_name, mod_url in (im_data.get("imports") or {}).items():
-                if mod_url.endswith('.js') and mod_url.startswith('http'):
-                    js_path = os.path.join(dump_dir, f"importmap_{mod_name.replace(chr(47), chr(95)).replace(chr(64), chr(95))}.js")
-                    c, rc = run(f"{curl_base} '{mod_url}'")
-                    if rc == 0 and c:
-                        with open(js_path, 'w', encoding='utf-8', errors='replace') as fw: fw.write(c)
-                        downloaded.append(js_path)
-                        print(f"[+] importmap: {mod_name} -> {mod_url}", file=sys.stderr)
-        except: pass
-
-    # Step 6: 从已下载JS扫描 Module Federation remoteEntry
-    for root, dirs, files in os.walk(dump_dir):
-        for f in files:
-            if not f.endswith('.js') or f.endswith('.map'): continue
-            try:
-                _c = open(os.path.join(root, f), 'r', errors='replace').read()
-                for _u in re.finditer(r'["\'](https?://[^"\']+/remoteEntry\.js)["\']', _c):
-                    _n = 'remoteEntry_' + md5(_u.group(1).encode()).hexdigest()[:8] + '.js'
-                    _p = os.path.join(dump_dir, _n)
-                    if not os.path.exists(_p):
-                        _mc, _rc = run(f"{curl_base} '{_u.group(1)}'")
-                        if _rc == 0 and _mc and len(_mc) > 50:
-                            with open(_p, 'w', encoding='utf-8', errors='replace') as fw: fw.write(_mc)
-                            downloaded.append(_p)
-                            print(f"[+] MF remoteEntry: {_u.group(1)}", file=sys.stderr)
-            except: pass
-
-    # Step 7: 扫描 Wasm 引用 — 下载 .wasm 文件
-    for m in re.finditer(r'(?:https?://[^"\'\s]+\.wasm)[^"\'\s]*', html, re.IGNORECASE):
-        wasm_url = m.group(0).rstrip(')\'"')
-        wasm_name = 'wasm_' + md5(wasm_url.encode()).hexdigest()[:8] + '.wasm'
-        wasm_path = os.path.join(dump_dir, wasm_name)
-        if not os.path.exists(wasm_path):
-            _, wrc = run(f"{curl_base} '{wasm_url}' -o '{wasm_path}'")
-            if wrc == 0 and os.path.isfile(wasm_path) and os.path.getsize(wasm_path) > 100:
-                downloaded.append(wasm_path)
-                print(f"[+] wasm: {wasm_url}", file=sys.stderr)
-            else:
-                try: os.remove(wasm_path)
-                except: pass
-    # 从已下载JS中扫描 WebAssembly.instantiate 引用
-    for root, dirs, files in os.walk(dump_dir):
-        for f in files:
-            if not f.endswith('.js') or f.endswith('.map'): continue
-            try:
-                _c = open(os.path.join(root, f), 'r', errors='replace').read()
-                for _u in re.finditer(r'["\'](https?://[^"\']+\.wasm)["\']', _c):
-                    _n = 'wasm_' + md5(_u.group(1).encode()).hexdigest()[:8] + '.wasm'
-                    _p = os.path.join(dump_dir, _n)
-                    if not os.path.exists(_p):
-                        _, _wrc = run(f"{curl_base} '{_u.group(1)}' -o '{_p}'")
-                        if _wrc == 0 and os.path.isfile(_p) and os.path.getsize(_p) > 100:
-                            downloaded.append(_p)
-                            print(f"[+] wasm (JS ref): {_u.group(1)}", file=sys.stderr)
-                        else:
-                            try: os.remove(_p)
-                            except: pass
-            except: pass
-
-    # Step 8: 扫描 Service Worker — 下载 sw.js 及 importScripts 依赖
-    sw_urls = set()
-    for m in re.finditer(r'navigator\.serviceWorker\.register\s*\(\s*["\']([^"\']+)["\']', html, re.IGNORECASE):
-        sw_urls.add(urllib.parse.urljoin(target_url, m.group(1)))
-    for m in re.finditer(r'<script[^>]*>(.*?)</script>', html, re.DOTALL | re.IGNORECASE):
-        for swm in re.finditer(r'navigator\.serviceWorker\.register\s*\(\s*["\']([^"\']+)["\']', m.group(1), re.IGNORECASE):
-            sw_urls.add(urllib.parse.urljoin(target_url, swm.group(1)))
-    for sw_url in sw_urls:
-        sw_name = 'sw_' + (os.path.basename(urllib.parse.urlparse(sw_url).path) or 'worker_' + md5(sw_url.encode()).hexdigest()[:8] + '.js')
-        sw_path = os.path.join(dump_dir, sw_name)
-        if not os.path.exists(sw_path):
-            sc, src = run(f"{curl_base} '{sw_url}'")
-            if src == 0 and sc:
-                with open(sw_path, 'w', encoding='utf-8', errors='replace') as fw:
-                    fw.write(sc)
-                downloaded.append(sw_path)
-                print(f"[+] Service Worker: {sw_url}", file=sys.stderr)
-                # 扫描 importScripts 获取更多依赖
-                for imp in re.finditer(r'importScripts\s*\(\s*["\']([^"\']+)["\']', sc):
-                    imp_url = urllib.parse.urljoin(sw_url, imp.group(1))
-                    imp_name = 'sw_import_' + os.path.basename(urllib.parse.urlparse(imp_url).path)
-                    imp_path = os.path.join(dump_dir, imp_name)
-                    if not os.path.exists(imp_path) and imp_name:
-                        ic, irc = run(f"{curl_base} '{imp_url}'")
-                        if irc == 0 and ic:
-                            with open(imp_path, 'w', encoding='utf-8', errors='replace') as fw:
-                                fw.write(ic)
-                            downloaded.append(imp_path)
-                            print(f"[+] SW import: {imp_url}", file=sys.stderr)
-            else:
-                try: os.remove(sw_path)
-                except: pass
-
-    # Step 9: 扫描 ESM CDN 引用 — 下载 CDN 上的依赖模块
-    cdn_patterns = [
-        r'import\s+[\s\S]{0,100}?\s+from\s+["\'](https?://[^"\']*(?:esm\.sh|cdn\.jsdelivr\.net|unpkg\.com|cdn\.skypack\.dev|cdn\.esm\.dev)[^"\']*)["\']',
-        r'import\s*\(\s*["\'](https?://[^"\']*(?:esm\.sh|cdn\.jsdelivr\.net|unpkg\.com|cdn\.skypack\.dev|cdn\.esm\.dev)[^"\']*)["\']',
-        r'(?:from|require)\s*["\'](https?://[^"\']*(?:esm\.sh|cdn\.jsdelivr\.net|unpkg\.com|cdn\.skypack\.dev|cdn\.esm\.dev)[^"\']*)["\']',
-    ]
-    for root, dirs, files in os.walk(dump_dir):
-        for f in files:
-            if not f.endswith('.js') or f.endswith('.map'): continue
-            try:
-                _c = open(os.path.join(root, f), 'r', errors='replace').read()
-                for pat in cdn_patterns:
-                    for _u in re.finditer(pat, _c, re.IGNORECASE):
-                        _n = 'cdn_' + md5(_u.group(1).encode()).hexdigest()[:8] + '.js'
-                        _p = os.path.join(dump_dir, _n)
-                        if not os.path.exists(_p):
-                            _cc, _crc = run(f"{curl_base} '{_u.group(1)}'")
-                            if _crc == 0 and _cc and len(_cc) > 50:
-                                with open(_p, 'w', encoding='utf-8', errors='replace') as fw:
-                                    fw.write(_cc)
-                                downloaded.append(_p)
-                                print(f"[+] CDN dep: {_u.group(1)}", file=sys.stderr)
-            except: pass
-
+            print(f"[-] JS下载失败: {js_url}", file=sys.stderr)
 
     return {
         "status": "ok",

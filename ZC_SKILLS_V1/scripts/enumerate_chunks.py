@@ -42,31 +42,6 @@ CHUNK_PATTERNS = [
     r'define\([\"\']([a-zA-Z0-9/\-]+)',            # AMD/RequireJS
 ]
 
-def _resolve_chunk_route(chunk_name, js_dump_dir):
-    """从已下载JS中查找哪个页面路由使用了指定chunk（用于WAF阻断时的路由回退）"""
-    chunk_base = chunk_name.replace('.js', '').replace('lazy_', '')
-    js_files = []
-    try:
-        for f in os.listdir(js_dump_dir):
-            if f.endswith('.js') and not f.startswith('lazy_') and not f.endswith('.map') and not f.startswith('inline_') and not f.startswith('subpage_'):
-                js_files.append(os.path.join(js_dump_dir, f))
-    except:
-        pass
-    for fp in js_files:
-        try:
-            data = open(fp, 'r', encoding='utf-8', errors='replace').read()
-            # Pattern: import("./chunk.js") near path:"/route"
-            esc = re.escape(chunk_name)
-            for m in re.finditer(r'import\s*\(\s*["\']\.?\/?' + esc + r'["\'][^}]{0,500}path\s*:\s*["\']([^"\']+)["\']', data, re.DOTALL):
-                return m.group(1)
-            # Reverse: path:"/route" near import
-            for m in re.finditer(r'path\s*:\s*["\']([^"\']+)["\'][^}]{0,300}' + re.escape(chunk_base), data, re.DOTALL):
-                return m.group(1)
-        except:
-            pass
-    return None
-
-
 def enumerate_chunks(js_dump_dir, base_url, ua='', iface=''):
     """枚举并补下载chunk"""
     if not os.path.isdir(js_dump_dir):
@@ -160,37 +135,18 @@ def enumerate_chunks(js_dump_dir, base_url, ua='', iface=''):
                     pass
 
         if not saved:
-            # 路由回退: 如果直接下载被WAF阻断，尝试访问页面路由获取SSR HTML
-            route = _resolve_chunk_route(ref_name, js_dump_dir)
-            if route:
-                route_url = f"{base_url_clean}{route}"
-                print(f"[*] chunk下载被阻断, 尝试通过路由 {route} 获取...", file=sys.stderr)
-                page_html0, rc0 = run(f"{curl_base} -H 'Accept: text/html' '{route_url}'")
-                if rc0 == 0 and page_html0 and '<link' in page_html0:
-                    for href in re.findall(r'<link[^>]+href="([^"]+\.js)"[^>]*>', page_html0):
-                        if ref_name in href:
-                            chunk_url = urllib.parse.urljoin(route_url, href)
-                            out_path = os.path.join(js_dump_dir, f"lazy_{ref_name}")
-                            c2, rc2 = run(f"{curl_base} '{chunk_url}'")
-                            if rc2 == 0 and c2 and len(c2) > 50:
-                                with open(out_path, 'w', encoding='utf-8', errors='replace') as f:
-                                    f.write(c2)
-                                downloaded.append({"url": chunk_url, "file": f"lazy_{ref_name}", "size": len(c2)})
-                                saved = True
-                                print(f"[+] chunk via route: {ref_name} ({len(c2)}b) @ {route}", file=sys.stderr)
-                                break
-            if not saved:
-                test_url = f"{base_url_clean}/{ref}"
-                out_path = os.path.join(js_dump_dir, f"lazy_{os.path.basename(ref)}")
-                content, rc = run(f"{curl_base} '{test_url}' -o '{out_path}' -w '%{{http_code}}'")
-                if rc == 0:
-                    try:
-                        file_size = os.path.getsize(out_path)
-                        if file_size > 50:
-                            downloaded.append({"url": test_url, "file": f"lazy_{os.path.basename(ref)}", "size": file_size})
-                            saved = True
-                    except:
-                        pass
+            # 尝试直接从base_url取
+            test_url = f"{base_url_clean}/{ref}"
+            out_path = os.path.join(js_dump_dir, f"lazy_{os.path.basename(ref)}")
+            content, rc = run(f"{curl_base} '{test_url}' -o '{out_path}' -w '%{{http_code}}'")
+            if rc == 0:
+                try:
+                    file_size = os.path.getsize(out_path)
+                    if file_size > 50:
+                        downloaded.append({"url": test_url, "file": f"lazy_{os.path.basename(ref)}", "size": file_size})
+                        saved = True
+                except:
+                    pass
 
     return {
         "status": "ok",

@@ -192,9 +192,9 @@ if (!companyName && singleUrl) {
   // 统一替换为 _CLI_TARGET_ 作为路径标识
   if (/^\d+\.\d+\.\d+\.\d+$/.test(companyName) || companyName === 'localhost') {
     companyName = '_CLI_TARGET_'
-    log(`ℹ️ URL域名解析为IP/本地地址，统一使用 "_CLI_TARGET_" 作为目录标识`)
+    log(**ℹ️ URL域名解析为IP/本地地址，统一使用 "_CLI_TARGET_" 作为目录标识**)
   } else {
-    log(`ℹ️ 未指定公司名，自动使用URL域名作为公司标识`)
+    log(**ℹ️ 未指定公司名，自动使用URL域名作为公司标识**)
   }
 }
 
@@ -750,7 +750,7 @@ ${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE
     3. **敏感信息提取** — 查找 AccessKey、SecretKey、JWT(eyJ...)、数据库连接串(mongodb://...)、内网IP、硬编码密码
     4. **鉴权方式识别** — Authorization: Bearer/Basic/X-TOKEN/Cookie/localStorage Token存放
     5. 🔥 **Call Site 深度追溯 — 对每个发现的API端点，必须追溯其调用现场（call site）**
-       对每个提取到的API路径（如 `/apix/image-colors`），在JS中找到所有 **调用该端点的地方**，提取：
+       对每个提取到的API路径（如 **/apix/image-colors**），在JS中找到所有 **调用该端点的地方**，提取：
        - **请求体参数结构**：调用时传入了哪些字段？
             代码示例:
             const n = t => e({url:"/apix/image-colors", req:t, method:"POST"});
@@ -765,9 +765,9 @@ ${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE
             /apix/V1/.../list: {page?, pageSize?, categoryId?}    ← 分页参数
     6. **调用现场溯源 (Call Site JSON)**：
        - 如果以上分析找到了请求体参数，输出为结构化JSON格式，供Phase 3直接使用
-       - 如果JS被严重混淆/无法追溯到call site → 输出 `request_params: "unresolved"`，同时**分析响应线索**：
+       - 如果JS被严重混淆/无法追溯到call site → 输出 **request_params: "unresolved"**，同时**分析响应线索**：
          - 用Phase 2已有的curl探测能力，对该端点发送一个空POST → 看返回的错误提示中是否包含期望的字段名
-         - 例如返回 `{"error":"缺少参数 imageUrl"}` → 说明有 imageUrl 参数，存在SSRF机会
+         - 例如返回 **{"error":"缺少参数 imageUrl"}** → 说明有 imageUrl 参数，存在SSRF机会
          - 这种「反向推断」也是有效的参数发现手段
     5. **凭证反思（关键思维环节）**:
        - 找到accessKey+secretKey → 哪个云服务？试枚举 OBS/S3/OSS Bucket
@@ -1037,7 +1037,7 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.from
         }
       })
       // 将识别结果纳入 Phase 3 上下文
-      p2_discoveries_text += `\n\n【快速开发框架识别结果】\n` +
+      p2_discoveries_text += **\n\n【快速开发框架识别结果】\n** +
         p2_oss.findings.map(f => {
           if (f.is_suspected_oss || f.framework_name === '疑似开源系统') {
             return `${f.target}: 疑似开源系统 [${f.oss_verdict || '无法判断'}]
@@ -1217,14 +1217,14 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url + ' — ' + (t.tags
 - framework_patterns 下所有框架的路径
 - api_prefixes 的每个key + path_segments 的每个值组合（如 /api/v3/user, /api/v3/admin ...）
 - common_endpoints 列表
-写入临时文件: \`/tmp/dirsearch_custom.txt\`（每行一个路径，无前导/）
+写入临时文件: \**/tmp/dirsearch_custom.txt\**（每行一个路径，无前导/）
 
 **Step 2: 对每个目标先做 WAF 预检**
 对每个目标URL先执行轻量探测，不要直接开始目录爆破:
-\`\`\`bash
+\**\**\`bash
 curl ${PROXY_CURL_FLAG} -skI --max-time 8 "<target_url>" | tee /tmp/waf_headers.txt
 curl ${PROXY_CURL_FLAG} -sk --max-time 8 "<target_url>/_dirsearch_waf_probe_$(date +%s)" -o /tmp/waf_body.txt -D /tmp/waf_probe_headers.txt
-\`\`\`
+\**\**\`
 如果响应头或响应体出现以下任一特征，判定为存在WAF/安全防护并**跳过该目标的dirsearch**:
 - HTTP 403/405/406/429/503 且响应包含拦截页、验证码、人机验证、访问过快等提示
 - server/header/body 包含 cloudflare, cf-ray, aliyun, acw_tc, punish-loc, keepper, yundun, waf, safedog, yunjiasu, baidu, tencent, qcloud, huawei, imperva, akamai, incapsula, f5, barricade, access denied, forbidden, captcha, request blocked 等关键词
@@ -1236,7 +1236,7 @@ curl ${PROXY_CURL_FLAG} -sk --max-time 8 "<target_url>/_dirsearch_waf_probe_$(da
 dirsearch 内置字典: ${DIRSEARCH_DICT}（9482条内置路径）
 
 仅对未命中WAF的目标URL依次执行:
-\`\`\`bash
+\**\**\`bash
 # 合并字典运行
 dirsearch -u "<target_url>" ${PROXY_DIRSEARCH_FLAG} \
   -w ${DIRSEARCH_DICT} \
@@ -1244,16 +1244,16 @@ dirsearch -u "<target_url>" ${PROXY_DIRSEARCH_FLAG} \
   -e php,asp,aspx,jsp,html,js,json,xml,txt,sql,conf,zip,tar.gz,bak,old,log \
   -t 10 --timeout=5 \
   -o /tmp/dirsearch_results.txt --format plain 2>&1 | tail -50
-\`\`\`
+\**\**\`
 如果 --extra-dict 参数不可用，则改为:
-\`\`\`bash
+\**\**\`bash
 cat ${DIRSEARCH_DICT} /tmp/dirsearch_custom.txt | sort -u > /tmp/merged_dict.txt
 dirsearch -u "<target_url>" ${PROXY_DIRSEARCH_FLAG} \
   -w /tmp/merged_dict.txt \
   -e php,asp,aspx,jsp,html,js,json,xml,txt,sql,conf,zip,tar.gz,bak,old,log \
   -t 10 --timeout=5 \
   -o /tmp/dirsearch_results.txt --format plain 2>&1 | tail -50
-\`\`\`
+\**\**\`
 
 **Step 4: 解析运行结果**
 读取 /tmp/dirsearch_results.txt，提取所有状态码为 200/301/401/403 的端点。
@@ -1395,7 +1395,7 @@ ${PARAM_DRIVEN_TESTING_GUIDE}
 
 	### 🔸 第一级：Call Site 参数驱动（最高优先级 — 根据JS分析到的请求参数字段名决定漏洞方向）
 
-	**收到的 Phase 2 分析结果中包含了每个端点的「请求参数字段名列表」**（如 `/apix/image-colors: {url, width?, height?}`）
+	**收到的 Phase 2 分析结果中包含了每个端点的「请求参数字段名列表」**（如 **/apix/image-colors: {url, width?, height?}**）
 
 	如果该端点有明确的请求参数字段名数据 → **完全基于参数字段名决定漏洞测试方向**，而不是API路径名：
 
@@ -1414,9 +1414,9 @@ ${PARAM_DRIVEN_TESTING_GUIDE}
 	| **command**, **cmd**, **exec**, **shell**, **code**, **expression** | **命令执行/表达式注入/RCE** |
 
 	**关键认知**：同一个端点名可能对应完全不同的漏洞类型，取决于它收什么参数：
-	- `/apix/image-colors` 若参数含 **url** → 测 **SSRF**
-	- `/apix/generate-avatar` 若参数含 **template** → 测 **SSTI**
-	- `/apix/data/export` 若参数含 **id** → 测 **IDOR**；若含 **file** → 测 **路径遍历**
+	- **/apix/image-colors** 若参数含 **url** → 测 **SSRF**
+	- **/apix/generate-avatar** 若参数含 **template** → 测 **SSTI**
+	- **/apix/data/export** 若参数含 **id** → 测 **IDOR**；若含 **file** → 测 **路径遍历**
 
 	**针对每个端点的测试步骤：**
 	1. 看它的参数字段名列表 → 从上方映射表找到对应的漏洞类型
@@ -1449,9 +1449,9 @@ ${PARAM_DRIVEN_TESTING_GUIDE}
 	**对于所有 POST 端点，即使不知道请求参数结构也做以下操作：**
 
 	a) **响应体反向推断**：发一个空POST body → 看错误响应中是否提示期望字段
-	   - 返回 `{"error": "missing field 'imageUrl'"}` → 说明参数含 imageUrl
-	   - 返回 `{"msg": "url不能为空"}` → 说明有 url 参数，SSRF机会
-	   - 返回 `{"error": "file not found"}` → 说明有 file/path 参数
+	   - 返回 **{"error": "missing field 'imageUrl'"}** → 说明参数含 imageUrl
+	   - 返回 **{"msg": "url不能为空"}**` → 说明有 url 参数，SSRF机会
+	   - 返回 **{"error": "file not found"}** → 说明有 file/path 参数
 
 	b) **通用路径探测**（始终执行）:
 	   - API文档: /swagger-ui.html, /v3/api-docs, /doc.html
@@ -1465,20 +1465,20 @@ ${PARAM_DRIVEN_TESTING_GUIDE}
 	**如果标准测试返回403/被WAF拦截/接口无响应 → 不要放弃，从漏洞原理和请求参数出发推理绕过：**
 
 	1. **SSRF绕过（当url/image_url等参数被防护）**:
-	   - IPv6绕过黑名单: `http://[::1]:8080`, `http://[0:0:0:0:0:ffff:127.0.0.1]:8080`, `http://[::ffff:7f00:1]:8080`
-	   - DNS重绑定: `http://127.0.0.1.nip.io:8080`, `http://1.0.0.127.nip.io:8080`
-	   - URL解析差异: `http://127.0.0.1:8080@evil.com`, `http://evil.com#@127.0.0.1`, `http://evil.com/../127.0.0.1/`
+	   - IPv6绕过黑名单: **http://[::1]:8080**, **http://[0:0:0:0:0:ffff:127.0.0.1]:8080**, **http://[::ffff:7f00:1]:8080**
+	   - DNS重绑定: **http://127.0.0.1.nip.io:8080**, **http://1.0.0.127.nip.io:8080**
+	   - URL解析差异: **http://127.0.0.1:8080@evil.com**, **http://evil.com#@127.0.0.1**, **http://evil.com/../127.0.0.1/**
 	   - 短链接/302跳绕过: 自己搭一个302跳转到内网地址的外部域名
-	   - 云元数据IPv6: `http://[fd00:ec2::254]/latest/meta-data/`
+	   - 云元数据IPv6: **http://[fd00:ec2::254]/latest/meta-data/**
 
 	2. **路径穿越绕过（当file/path参数被过滤）**:
-	   - URL编码: `%2e%2e%2f`, `..%252f`, `....//....//`
-	   - Unicode/UTF-8变体: `．．／`, `%c0%ae%c0%ae%c0%af`
-	   - 协议混合: `file:///etc/passwd`, `php://filter/convert.base64-encode/resource=`
+	   - URL编码: **%2e%2e%2f**, **..%252f**, **....//....//**
+	   - Unicode/UTF-8变体: **．．／**, **%c0%ae%c0%ae%c0%af**
+	   - 协议混合: **file:///etc/passwd**, **php://filter/convert.base64-encode/resource=**
 
 	3. **WAF绕过（整体）**:
-	   - 大小写混写: `SQL -> sQl`, `<Script>`
-	   - 参数污染: `id=1&id=2`, `id=1&id[]=2`
+	   - 大小写混写: **SQL -> sQl**, **<Script>**
+	   - 参数污染: **id=1&id=2**, **id=1&id[]=2**
 	   - Content-Type切换: JSON ↔ form-urlEncoded ↔ XML
 	   - 编码绕过: Base64、Unicode、双URL编码
 
@@ -1524,7 +1524,7 @@ ${PARAM_DRIVEN_TESTING_GUIDE}
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
 
       ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
-      { label: `🔓 未授权/信息泄露测试`, schema: {
+      { label: **🔓 未授权/信息泄露测试**, schema: {
         type: 'object',
         properties: {
           findings: {
@@ -1625,7 +1625,7 @@ ${PARAM_DRIVEN_TESTING_GUIDE}
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
 
       ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
-      { label: `🎯 越权/弱口令测试`, schema: {
+      { label: **🎯 越权/弱口令测试**, schema: {
         type: 'object',
         properties: {
           findings: {
@@ -1799,8 +1799,8 @@ ${p4_findings_json.substring(0, 6000)}
 - 如果完全无法提取可测试 URL → 标记为 needs_manual_test
 
 **Step 2: 用 curl 测试**
-1. 先 \`curl -sk -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' -o /dev/null -w "%{http_code}"\` 获取数字HTTP状态码（必须带浏览器UA）
-2. 状态码 200/401/403 的，\`curl -sk -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'\` 获取响应体
+1. 先 \**curl -sk -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' -o /dev/null -w "%{http_code}"\** 获取数字HTTP状态码（必须带浏览器UA）
+2. 状态码 200/401/403 的，\**curl -sk -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'\** 获取响应体
 3. 对比 带Cookie vs 无Cookie 的响应差异
 4. **http_status 必须是数字，不能是字符串。每个 confirmed/suspected 发现都必须有。**
 
@@ -1855,14 +1855,14 @@ ${PARAM_DRIVEN_TESTING_GUIDE}
 - **查 Phase 2 JS 分析结果**：该端点的 call site 参数结构是什么？（即 {url, width?, height?} 这样的字段列表）
   - 如果有字段列表 → 直接按字段名决定漏洞测试方向（每个字段名映射一个漏洞类型）
 - **查 Phase 3 已有结论**：该端点之前是否已经被测试过？结论是什么？
-- **查 `_credentials.json`**：该端点涉及的凭证信息（oken/API Key等）是否已被提取？
+- **查 **_credentials.json****：该端点涉及的凭证信息（oken/API Key等）是否已被提取？
 - **查 fuzz 结果**：该端点的子路径或变体是否已被发现？
-- **联合判定**：如果你发现该端点的 JS call site 定义了参数 `url: string` → 无论端点名是什么，都必须测 SSRF
+- **联合判定**：如果你发现该端点的 JS call site 定义了参数 **url: string** → 无论端点名是什么，都必须测 SSRF
 - 结论：**不要只看端点路径名判断漏洞类型，要看构建请求包时传了哪些参数**
 
 **0b. 响应体逆向推断参数（当JS分析未提供call site参数时）**
 - 对 POST 端点发送空 body → 看错误响应是否提示期望字段
-- 例：返回 `{"missing":"imageUrl"}` → 字段含 imageUrl，SSRF机会
+- 例：返回 **{"missing":"imageUrl"}** → 字段含 imageUrl，SSRF机会
 
 **4a. 参数发散 — 同一端点的其他参数**
 发现 /api/user?id=1 → 发散试:
@@ -1900,8 +1900,8 @@ JSON → Form-URLEncoded（参数解析差异）
 
 **4g. 原理级绕过发散（当标准测试被WAF/防护拦截时 — 关键思维能力）**
 如果直接测试被 WAF/防护/校验拦截（403/400/拦截页面），必须从原理推理绕过：
-- SSRF 被拦截 → IPv6映射 `[::1]`/DNS重绑定 `127.0.0.1.nip.io`/URL解析差异 `127.0.0.1#@evil.com`
-- 路径穿越被拦截 → URL双编码 `..%252f`/Unicode变体 `．．／`/协议混合 `file://`
+- SSRF 被拦截 → IPv6映射 **[::1]**/DNS重绑定 **127.0.0.1.nip.io**/URL解析差异 **127.0.0.1#@evil.com**
+- 路径穿越被拦截 → URL双编码 **..%252f**/Unicode变体 **．．／**/协议混合 **file://**
 - SQL注入被拦截 → 大小写混写/参数污染/编码绕过
 - **核心推理链路**：这个参数最终传给什么函数？那个函数接受的合法格式是什么？绕过就在合法格式与黑名单之间的间隙
 - **如果当前手段绕不过 → 回溯到参数本身**：换个参数尝试、换个HTTP方法、换个Content-Type、加个Header
@@ -2426,8 +2426,8 @@ ${myFindingsJSON}
 
 报告格式要求：
 - 模板结构参考:
-${p5_template_content ? '```\n' + p5_template_content.substring(0, 1500) + '\n```' : '（模板预读失败，请自行Read）'}
-- 如果该报告是**利用链类型**（多个漏洞串联），使用攻击链路图格式：\`漏洞A -> 漏洞B -> 漏洞C -> 最终危害\`，每个步骤附带单独的请求/响应包
+${p5_template_content ? '``**\n' + p5_template_content.substring(0, 1500) + '\n**``' : '（模板预读失败，请自行Read）'}
+- 如果该报告是**利用链类型**（多个漏洞串联），使用攻击链路图格式：\**漏洞A -> 漏洞B -> 漏洞C -> 最终危害\**，每个步骤附带单独的请求/响应包
 - 包含漏洞信息表（名称、等级、类型、范围、发现时间）
 - 包含漏洞描述
 - 包含漏洞复现步骤 + 完整的HTTP请求/响应包 + curl命令

@@ -930,6 +930,9 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.from
     // 2.5 dir_enum — 基于系统特征的智能路径枚举（智能fuzz）
     // 原理：根据已识别的框架 + JS发现的API路径格式，自动泛化fuzz
     // ============================================================
+    if (skipFuzz) {
+      log('  ⏭️ 跳过智能路径枚举（用户指定 skipFuzz=true）')
+    } else {
     log('  🔍 执行智能路径枚举（基于系统特征自动泛化fuzz）...')
     const P2_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
 
@@ -938,7 +941,7 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.from
     for (const ft of fuzz_targets) {
       const fuzz_out = "/tmp/smart_fuzz_" + companyName.replace(/[^a-zA-Z0-9]/g,'_') + "_" + ft.replace(/[^a-zA-Z0-9]/g,'_') + ".json"
       const fuzz_cmd = `python3 ${SKILL_SCRIPTS}/smart_fuzz.py "${ft}" --dict ${P2_DICT_PATH} --output ${fuzz_out} --ua "${REAL_UA}"`
-      
+
       let fuzz_raw = null
       try {
         fuzz_raw = await agent(
@@ -986,6 +989,7 @@ cat ${fuzz_out}`,
       p2_discoveries_text += `\n\n【智能fuzz发现的潜在端点】\n${fuzzSummary}\n`
       log(`  🔄 ${globalThis.__p2_fuzz_findings.length} 个fuzz发现已注入Phase3上下文`)
     }
+    }  // end skipFuzz else
     targets.forEach(t => dimTracker.record(t, 'dir_enum', 'done'))
   // P0-2: 持久化 accumulated 状态到临时文件（避免agent崩溃丢失）
   try {

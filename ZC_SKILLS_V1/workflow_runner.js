@@ -659,6 +659,8 @@ python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${PROJECT_DIR}/js_dumps" --
             dirs.push({ target_hash, dump_dir, js_count: dl_file_count })
             globalThis.__zc_js_dirs_json = JSON.stringify(dirs)
           }
+          const callSites = appendStructuredCallSites('__zc_call_sites_json', dump_dir, target)
+          if (callSites.length) log(`  🧭 ${target}: 结构化call-site ${callSites.length} 条`)
         } else {
           log(`  ⚠️ ${target}: JS下载失败，跳过chunk枚举/凭证提取/分析`)
         }

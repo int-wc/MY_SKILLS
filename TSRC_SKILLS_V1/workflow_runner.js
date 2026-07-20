@@ -689,6 +689,8 @@ ${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE
             })
             globalThis.__p2_js_dirs_json = JSON.stringify(dirs)
           }
+          const callSites = appendStructuredCallSites('__p2_call_sites_json', dump_dir, target)
+          if (callSites.length) log(`  🧭 ${target}: 结构化call-site ${callSites.length} 条`)
         } else {
           log(`  ⚠️ ${target}: JS下载失败，跳过chunk枚举/凭证提取/分析`)
         }

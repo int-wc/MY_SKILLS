@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-20",
+  "updated": "2026-07-21",
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
@@ -270,7 +270,15 @@
     "/emp/passport/getsetting",
     "/.well-known/openid-configuration",
     "/apix/V1/omp/open/oauth/idpUrl",
-    "/api/V1/omp/open/oauth/idpUrl"
+    "/api/V1/omp/open/oauth/idpUrl",
+    "https://srm.agibot.com/app/public/home",
+    "https://genie.agibot.com/composer.json",
+    "https://genie.agibot.com/think",
+    "https://www.agibot.com/think",
+    "https://aimdk-support.agibot.com/api/health",
+    "https://srm-mall.agibot.com/",
+    "https://www.agibot.com/vendor/composer/installed.json",
+    "https://genie.agibot.com/vendor/composer/installed.json"
   ],
   "framework_patterns": {
     "JeecgBoot": [

@@ -117,6 +117,26 @@ if (!projectName && singleUrl) {
 // 如果未指定project，尝试从CWD推断
 const resolvedProject = projectName || '1516_中远海运'
 const PROJECT_DIR = `${ZC_BASE}/${resolvedProject}`
+const phase2StateId = String(resolvedProject || singleUrl || 'default').replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 80)
+const PHASE2_STATE_PATH = `/tmp/workflow_phase2_state_${meta.name}_${phase2StateId}.json`
+const LEGACY_PHASE2_STATE_PATH = '/tmp/workflow_phase2_state.json'
+
+function readPhase2State() {
+  const fs = require('fs')
+  for (const p of [PHASE2_STATE_PATH, LEGACY_PHASE2_STATE_PATH]) {
+    try {
+      if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'))
+    } catch(_) {}
+  }
+  return null
+}
+
+function savePhase2State(state) {
+  const fs = require('fs')
+  for (const p of [PHASE2_STATE_PATH, LEGACY_PHASE2_STATE_PATH]) {
+    try { fs.writeFileSync(p, JSON.stringify(state)) } catch(_) {}
+  }
+}
 
 log(`📂 项目目录: ${PROJECT_DIR}`)
 log(`📋 模式: ${mode}`)

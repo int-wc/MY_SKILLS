@@ -204,6 +204,27 @@ if (!companyName && singleUrl) {
   }
 }
 
+const phase2StateId = String(companyName || singleUrl || 'default').replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 80)
+const PHASE2_STATE_PATH = `/tmp/workflow_phase2_state_${meta.name}_${phase2StateId}.json`
+const LEGACY_PHASE2_STATE_PATH = '/tmp/workflow_phase2_state.json'
+
+function readPhase2State() {
+  const fs = require('fs')
+  for (const p of [PHASE2_STATE_PATH, LEGACY_PHASE2_STATE_PATH]) {
+    try {
+      if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'))
+    } catch(_) {}
+  }
+  return null
+}
+
+function savePhase2State(state) {
+  const fs = require('fs')
+  for (const p of [PHASE2_STATE_PATH, LEGACY_PHASE2_STATE_PATH]) {
+    try { fs.writeFileSync(p, JSON.stringify(state)) } catch(_) {}
+  }
+}
+
 // 目标进度追踪
 const progress = {
   company: companyName || '未指定',

@@ -1153,7 +1153,9 @@ ${p3_dirsearch.new_endpoints.map(function(e) { return '  - ' + e }).join(String.
       log('  目录扫描: 未发现新端点')
     }
 
-    // dirsearch发现的端点 → 注入到unauth_test上下文
+    }  // end skipDirsearch else block
+
+// dirsearch发现的端点 → 注入到unauth_test上下文
     let p3_dirsearch_context = ''
     if (typeof p3_dirsearch !== 'undefined' && p3_dirsearch?.findings && p3_dirsearch.findings.length > 0) {
       const dseps = p3_dirsearch.findings
@@ -1165,7 +1167,6 @@ ${p3_dirsearch.new_endpoints.map(function(e) { return '  - ' + e }).join(String.
       }
     }
 
-    }  // end skipDirsearch else block
     // 3.1 未授权/信息泄露测试（遵循: 反思为主→迁跃为辅→分析为底→扩展为路）
     p3_unauth = await agent(
       `你是SRC漏洞挖掘专家，对 ${companyName} 执行未授权访问和信息泄露测试。

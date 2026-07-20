@@ -242,10 +242,9 @@ function extractExportNames(text, wrapper) {
   const exportAs = new RegExp(`\\b${escRe(wrapper)}\\s+as\\s+([A-Za-z_$][\\w$]*)`, 'g')
   let em
   while ((em = exportAs.exec(text))) names.add(em[1])
-  const namedExport = new RegExp(`export\\s*\\{[^}]*\\b${escRe(wrapper)}\\b[^}]*\\}`, 'g')
-  if (namedExport.test(text)) names.add(wrapper)
+  // 压缩包里的 a/n/t 等短变量名跨文件误报极高；跨文件只信任显式 alias。
   const directExport = new RegExp(`export\\s+(?:const|let|var|function)\\s+${escRe(wrapper)}\\b`)
-  if (directExport.test(text)) names.add(wrapper)
+  if (directExport.test(text) && (wrapper.length >= 3 || wrapper.startsWith('$'))) names.add(wrapper)
   return Array.from(names)
 }
 

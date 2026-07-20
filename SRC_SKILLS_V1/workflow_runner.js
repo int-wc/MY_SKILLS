@@ -100,6 +100,7 @@ if (!companyName && singleUrl) {
 
 const parseWorkflowBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true' || String(v).toLowerCase() === 'yes'
 const skipDirsearch = parseWorkflowBool(workflowOptions?.skipDirsearch) || parseWorkflowBool(workflowOptions?.noDirsearch)
+const skipFuzz = parseWorkflowBool(workflowOptions?.skipFuzz) || parseWorkflowBool(workflowOptions?.noFuzz)
 
 // 目标进度追踪
 const progress = {

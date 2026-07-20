@@ -1401,22 +1401,22 @@ ${PARAM_DRIVEN_TESTING_GUIDE}
 
 	| 请求参数中的字段名 | 对应的漏洞测试方向 |
 	|---|---|
-	| `url`, `image_url`, `file_url`, `src`, `href`, `link`, `download_url`, `redirect` | **SSRF**（IPv6绕过`[::1]`/`[0:0:...:ffff:127.0.0.1]`）+ **路径穿越**`../` |
-	| `file`, `file_path`, `path`, `filename`, `download`, `template_path` | **路径遍历/任意文件读取** |
-	| `content`, `html`, `markdown`, `template`, `body`, `message`, `render` | **XSS/SSTI模板注入** |
-	| `page`, `limit`, `offset`, `pageSize`, `pageNum`, `start`, `end` | **批量数据遍历/未授权分页访问** |
-	| `id`, `userId`, `orderId`, `studentId`, `companyId`, `appId`, `key` | **IDOR水平越权**（替换id值遍历） |
-	| `price`, `amount`, `quantity`, `discount`, `coupon`, `total` | **逻辑漏洞/金额篡改/优惠券滥用** |
-	| `data`, `xml`, `json`, `document`, `payload` | **XXE/注入/反序列化** |
-	| `redirect`, `callback`, `next`, `forward`, `returnUrl`, `referer` | **开放重定向/SSRF** |
-	| `token`, `accessToken`, `sessionKey`, `apiKey`, `secret` | **Token伪造/越权/凭证泄露** |
-	| `image`, `video`, `media`, `file`, `attachment`, `upload` | **文件上传绕过/任意文件写入/SSRF** |
-	| `command`, `cmd`, `exec`, `shell`, `code`, `expression` | **命令执行/表达式注入/RCE** |
+	| **url**, **image_url**, **file_url**, **src**, **href**, **link**, **download_url**, **redirect** | **SSRF**（IPv6绕过**[::1]**/**[0:0:...:ffff:127.0.0.1]**）+ **路径穿越****../** |
+	| **file**, **file_path**, **path**, **filename**, **download**, **template_path** | **路径遍历/任意文件读取** |
+	| **content**, **html**, **markdown**, **template**, **body**, **message**, **render** | **XSS/SSTI模板注入** |
+	| **page**, **limit**, **offset**, **pageSize**, **pageNum**, **start**, **end** | **批量数据遍历/未授权分页访问** |
+	| **id**, **userId**, **orderId**, **studentId**, **companyId**, **appId**, **key** | **IDOR水平越权**（替换id值遍历） |
+	| **price**, **amount**, **quantity**, **discount**, **coupon**, **total** | **逻辑漏洞/金额篡改/优惠券滥用** |
+	| **data**, **xml**, **json**, **document**, **payload** | **XXE/注入/反序列化** |
+	| **redirect**, **callback**, **next**, **forward**, **returnUrl**, **referer** | **开放重定向/SSRF** |
+	| **token**, **accessToken**, **sessionKey**, **apiKey**, **secret** | **Token伪造/越权/凭证泄露** |
+	| **image**, **video**, **media**, **file**, **attachment**, **upload** | **文件上传绕过/任意文件写入/SSRF** |
+	| **command**, **cmd**, **exec**, **shell**, **code**, **expression** | **命令执行/表达式注入/RCE** |
 
 	**关键认知**：同一个端点名可能对应完全不同的漏洞类型，取决于它收什么参数：
-	- `/apix/image-colors` 若参数含 `url` → 测 **SSRF**
-	- `/apix/generate-avatar` 若参数含 `template` → 测 **SSTI**
-	- `/apix/data/export` 若参数含 `id` → 测 **IDOR**；若含 `file` → 测 **路径遍历**
+	- `/apix/image-colors` 若参数含 **url** → 测 **SSRF**
+	- `/apix/generate-avatar` 若参数含 **template** → 测 **SSTI**
+	- `/apix/data/export` 若参数含 **id** → 测 **IDOR**；若含 **file** → 测 **路径遍历**
 
 	**针对每个端点的测试步骤：**
 	1. 看它的参数字段名列表 → 从上方映射表找到对应的漏洞类型

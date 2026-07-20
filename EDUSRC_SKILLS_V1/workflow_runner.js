@@ -1099,6 +1099,7 @@ cat ${fuzz_out}`,
     const stateToSave = {
       creds: globalThis.__p2_creds_json || '[]',
       js_dirs: globalThis.__p2_js_dirs_json || '[]',
+      call_sites: globalThis.__p2_call_sites_json || '[]',
       fw_info: globalThis.__p2_fw_info || '[]',
     }
     require('fs').writeFileSync('/tmp/workflow_phase2_state.json', JSON.stringify(stateToSave))

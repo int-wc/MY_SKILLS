@@ -969,6 +969,7 @@ cat ${fuzz_out_zc}`,
     const stateToSave = {
       creds: globalThis.__zc_creds_json || '[]',
       js_dirs: globalThis.__zc_js_dirs_json || '[]',
+      call_sites: globalThis.__zc_call_sites_json || '[]',
       fw_info: globalThis.__zc_fw_info || '[]',
     }
     require('fs').writeFileSync('/tmp/workflow_phase2_state.json', JSON.stringify(stateToSave))

@@ -95,7 +95,7 @@ function parseApiDefs(files, root) {
       const method = methodM ? methodM[1].toUpperCase() : 'GET_OR_UNKNOWN'
       let wrapper = null
       let arg = null
-      const wrapperMatches = Array.from(before.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(?\s*([A-Za-z_$][\w$]*)?/g))
+      const wrapperMatches = Array.from(before.matchAll(/(?:(?:const|let|var)\s+|,\s*)([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(?\s*([A-Za-z_$][\w$]*)?/g))
       if (wrapperMatches.length) {
         const last = wrapperMatches[wrapperMatches.length - 1]
         wrapper = last[1]

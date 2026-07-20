@@ -109,7 +109,8 @@ const skipFuzz = parseWorkflowBool(workflowOptions?.skipFuzz) || parseWorkflowBo
 const PROXY_URL = workflowOptions?.proxy || workflowOptions?.httpProxy || workflowOptions?.httpsProxy || ''
 const PROXY_FLAG = PROXY_URL ? `-x '${PROXY_URL}'` : ''
 const PROXY_INSTR = PROXY_URL
-  ? `⚠️ **代理硬性规则：所有 curl 命令必须添加 ${PROXY_FLAG} 参数，通过代理 ${PROXY_URL} 发出请求。禁止直连目标服务器。**`
+  ? `⚠️ **代理硬性规则：所有 curl 命令必须添加 ${PROXY_FLAG} 参数，通过代理 ${PROXY_URL} 发出请求。禁止直连目标服务器。**
+⚠️ **Python脚本/其他工具也需通过代理：执行前先 export HTTP_PROXY=${PROXY_URL} HTTPS_PROXY=${PROXY_URL} http_proxy=${PROXY_URL} https_proxy=${PROXY_URL}，或命令前缀加上 HTTP_PROXY=${PROXY_URL} HTTPS_PROXY=${PROXY_URL}。**`
   : ''
 
 // 目标进度追踪

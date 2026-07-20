@@ -1000,7 +1000,7 @@ cat ${fuzz_out_zc}`,
       call_sites: globalThis.__zc_call_sites_json || '[]',
       fw_info: globalThis.__zc_fw_info || '[]',
     }
-    require('fs').writeFileSync('/tmp/workflow_phase2_state.json', JSON.stringify(stateToSave))
+    savePhase2State(stateToSave)
   } catch(e) {}
 
   markPhase(2, '✅')

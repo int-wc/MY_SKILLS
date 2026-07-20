@@ -1146,7 +1146,7 @@ cat ${fuzz_out}`,
       call_sites: globalThis.__p2_call_sites_json || '[]',
       fw_info: globalThis.__p2_fw_info || '[]',
     }
-    require('fs').writeFileSync('/tmp/workflow_phase2_state.json', JSON.stringify(stateToSave))
+    savePhase2State(stateToSave)
   } catch(e) {}
 
   markPhase(2, '✅')

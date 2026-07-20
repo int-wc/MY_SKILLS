@@ -23,6 +23,41 @@ export const meta = {
 // ============================================================
 const ZC_BASE = '/home/my/360zc'
 const SKILL_SCRIPTS = '/home/my/.claude/skills/ZC_SKILLS_V1/scripts'
+const CALLSITE_EXTRACTOR = (() => { try { return require(`${SKILL_SCRIPTS}/callsite_extractor.cjs`) } catch(e) { return null } })()
+
+function getStructuredCallSites(globalName = '__zc_call_sites_json') {
+  try { return JSON.parse(globalThis[globalName] || '[]') } catch(e) { return [] }
+}
+
+function appendStructuredCallSites(globalName, dumpDir, target) {
+  if (!CALLSITE_EXTRACTOR || !dumpDir) return []
+  try {
+    const found = CALLSITE_EXTRACTOR.extractFromDump(dumpDir, target)
+    if (!found.length) return []
+    const merged = CALLSITE_EXTRACTOR.mergeCallSites(getStructuredCallSites(globalName), found)
+    globalThis[globalName] = JSON.stringify(merged)
+    try { require('fs').writeFileSync(`${dumpDir}/_api_call_sites.json`, JSON.stringify(found, null, 2)) } catch(_) {}
+    return found
+  } catch(e) {
+    log(`  ⚠️ call-site结构化提取跳过: ${e.message || e}`)
+    return []
+  }
+}
+
+function formatStructuredCallSiteContext(globalName = '__zc_call_sites_json') {
+  const entries = getStructuredCallSites(globalName)
+  if (!entries.length) return '（无结构化 call-site 参数；POST端点必须先空Body探测并从响应体反推参数）'
+  const summary = CALLSITE_EXTRACTOR ? CALLSITE_EXTRACTOR.summarize(entries, 80) : JSON.stringify(entries.slice(0, 80), null, 2)
+  return `${summary}\n\n原始JSON前80条:\n${JSON.stringify(entries.slice(0, 80), null, 2).substring(0, 12000)}`
+}
+
+const PARAM_DRIVEN_TESTING_GUIDE = `
+**【参数驱动漏洞测试策略 — harness强制】**
+1. 优先使用上方结构化 call-site JSON 的 request_params，而不是只看 API 路径名。
+2. 按参数字段决定漏洞类型：url/src/href/link/redirect/file_url/image_url => SSRF/路径穿越；file/path/filename => 任意文件读写；id/userId/orderId/companyId => IDOR；page/pageSize/limit/offset => 批量遍历；content/html/template/body => XSS/SSTI；xml/json/data/payload => XXE/反序列化/注入；token/apiKey/secret/sign => 认证绕过；cmd/exec/code/expression/sql => RCE/SQLi；price/amount/role/status => 业务逻辑。
+3. request_params 为 unresolved 或 response_probe_required=true 时，对 POST/PUT/PATCH 先发空 JSON/Form body，根据错误响应字段名反推参数，再按字段名选择测试方向。
+4. 标准 payload 被拦截时，从漏洞原理和参数合法格式推绕过：SSRF 试 IPv6/IPv4-mapped/DNS rebinding/302/URL解析差异；路径穿越试双编码/Unicode/协议变体；注入类试大小写、Content-Type、参数污染、编码差异。
+`
 
 // 动态检测 dirsearch 字典路径（兼容不同 Python 版本）
 const DIRSEARCH_DICT = (() => {

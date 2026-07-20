@@ -157,7 +157,18 @@ function extractObjectInfo(src) {
     const shorthand = part.match(/^([A-Za-z_$][\w$]*)$/)
     const destructured = part.match(/^([A-Za-z_$][\w$]*)\s*=\s*[^,]+$/)
     const key = cleanKey((quoted && quoted[1]) || (named && named[1]) || (shorthand && shorthand[1]) || (destructured && destructured[1]))
-    if (key) keys.add(key)
+    if (key) {
+      keys.add(key)
+      const valueM = part.match(/^[A-Za-z_$][\w$-]*\s*:\s*([\s\S]+)$/) || part.match(/^['"`][^'"`]+['"`]\s*:\s*([\s\S]+)$/)
+      const value = valueM ? valueM[1].trim() : ''
+      if (/^(req|data|params|body|payload|query|form)$/i.test(key) && value.startsWith('{')) {
+        addMany(keys, extractObjectKeys(value.slice(1, -1)))
+      }
+      const stringify = value.match(/^JSON\.stringify\s*\(\s*\{([\s\S]{0,1500})\}\s*\)/)
+      if (/^(req|data|params|body|payload|query|form)$/i.test(key) && stringify) {
+        addMany(keys, extractObjectKeys(stringify[1]))
+      }
+    }
   }
   return { keys: Array.from(keys), spreads: Array.from(spreads) }
 }

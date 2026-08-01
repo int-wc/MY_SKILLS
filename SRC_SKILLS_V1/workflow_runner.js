@@ -1125,7 +1125,7 @@ if (mode.startsWith('phase5')) {
     // 原理：读取积累字典+通用字典，对目标做广度优先的路径爆破
     // ============================================================
     if (skipDirsearch) {
-      log('  ⏭️ 跳过字典目录扫描（用户指定 skipDirsearch=true）')
+      log('  ⏭️ 默认跳过 dirsearch（目录枚举已由智能fuzz smart_fuzz.py 覆盖，除非显式传 dirsearch:true）')
       p3_dirsearch = { findings: [], new_endpoints: [] }
     } else {
       log('  📂 执行字典目录扫描 (dirsearch)...')

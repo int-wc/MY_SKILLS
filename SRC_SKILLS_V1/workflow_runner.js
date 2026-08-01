@@ -101,7 +101,8 @@ if (!companyName && singleUrl) {
 
 // 目标进度追踪
 const parseWorkflowBool = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true' || String(v).toLowerCase() === 'yes'
-const skipDirsearch = parseWorkflowBool(workflowOptions?.skipDirsearch) || parseWorkflowBool(workflowOptions?.noDirsearch)
+// 默认跳过 dirsearch（目录枚举统一用智能fuzz smart_fuzz.py），仅当显式指定 dirsearch:true/runDirsearch 时才执行
+const skipDirsearch = parseWorkflowBool(workflowOptions?.skipDirsearch) || parseWorkflowBool(workflowOptions?.noDirsearch) || !(parseWorkflowBool(workflowOptions?.dirsearch) || parseWorkflowBool(workflowOptions?.runDirsearch))
 const skipFuzz = parseWorkflowBool(workflowOptions?.skipFuzz) || parseWorkflowBool(workflowOptions?.noFuzz)
 
 // ============================================================

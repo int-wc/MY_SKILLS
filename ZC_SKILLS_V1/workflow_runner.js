@@ -1520,6 +1520,7 @@ if (progress.findings_count === 0) {
       `你是360众测漏洞验证专家，对 ${resolvedProject} 的发现做严格 curl 验证。
 
 🔒 VPN 强制要求: 所有 curl 命令必须加 --interface tun0（如: curl --interface tun0 -sk ...）
+${SAFETY_API_GUARDRAIL}
 
 ====== Phase 3 传入的发现列表 ======
 ${p4_findings_json.substring(0, 6000)}

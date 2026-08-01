@@ -693,7 +693,9 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
       (result, target) => {
         return result
       }
-    )
+      )
+      analyses.push(...(_batchResults || []))
+    }
     } catch(e) {
       log(`  ⚠️ Pipeline部分失败: ${e.message}`)
     }

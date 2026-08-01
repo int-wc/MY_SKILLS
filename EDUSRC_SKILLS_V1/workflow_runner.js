@@ -1303,7 +1303,8 @@ dirsearch -u "<target_url>" ${PROXY_DIRSEARCH_FLAG} \
 同时在 new_endpoints 中输出本次新发现的可积累端点。
 
       ${UA_INSTR}
-      ⚠️ **边界规则：仅对目标列表URL执行。不要读取本地非字典文件。**`,
+      ⚠️ **边界规则：仅对目标列表URL执行。不要读取本地非字典文件。**
+      ${SAFETY_API_GUARDRAIL}`,
       { label: '📂 字典目录扫描 (dirsearch)', schema: {
         type: 'object',
         properties: {
@@ -1899,7 +1900,8 @@ JSON → Form-URLEncoded（参数解析差异）
 
       ⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**
 
-      ⚠️ **严格边界规则：仅验证当前公司的漏洞数据。不要引用、提及或包含任何其他厂商的数据。**`,
+      ⚠️ **严格边界规则：仅验证当前公司的漏洞数据。不要引用、提及或包含任何其他厂商的数据。**
+      ${SAFETY_API_GUARDRAIL}`,
       { label: '🔍 漏洞复测验证', schema: {
         type: 'object',
         properties: {

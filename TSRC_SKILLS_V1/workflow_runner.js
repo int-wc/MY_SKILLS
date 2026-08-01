@@ -1013,7 +1013,8 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t.url }).join(String.from
 **输出 JSON，每个目标一个条目。**
 
       ${UA_INSTR}
-      ⚠️ **严格边界规则：仅使用 curl 探测目标URL。不要读取任何本地文件。不要提及或引用任何其他厂商的数据。**`,
+      ⚠️ **严格边界规则：仅使用 curl 探测目标URL。不要读取任何本地文件。不要提及或引用任何其他厂商的数据。**
+      ${SAFETY_API_GUARDRAIL}`,
       { label: '🔍 快速开发框架识别', schema: {
         type: 'object',
         properties: {

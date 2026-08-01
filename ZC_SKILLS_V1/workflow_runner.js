@@ -58,7 +58,13 @@ const SAFETY_API_GUARDRAIL = `
 3. **禁止在请求体/参数中携带写指令**: 参数/数据中不得含 delete:true、action=delete、method=DELETE、op=remove 等删除/修改指令。
 4. **发现疑似写漏洞（文件写入/数据篡改/删除类）时，只记录不验证**: 若从 JS/源码/接口文档推断出 write_file 或 modify_state 型漏洞，在 findings 中记录证据并标注"未实际发送写请求，需人工复核"；严禁用写请求复现。
 5. **允许的测试面**: 仅只读探测——GET 与只读 POST（查询/搜索/登录/越权读取类）。一切"读"侧验证（IDOR读取、路径遍历读取、配置泄露读取）均可正常执行。
-6. **禁止 POST 到条目路径**: 禁止对含数字ID的"具体资源条目"路径发送 POST（如 /api/order/999、/api/user/123、/api/order/999/status）——无 action 词的 POST 到条目路径即疑似 IDOR 写/状态修改。IDOR 越权读取一律用 GET 对比响应差异。
+6. **写/改请求三要素判定（参数 + 整体请求 + 前端对返回的解析）**: 对每个非纯GET请求（尤其 POST 到含数字ID的条目路径 /api/order/999、/api/user/123、/api/order/999/status），发送前必须完成三要素判定，任一命中"写"信号即禁止发送并记录为疑似漏洞（evidence="未实际发送写请求，需人工复核"）:
+   - **① 参数信号（看参数是"赋值"还是"筛选"）**: body/query 携带赋值型字段（status/role/config/password/enabled/approved/settings/score/price/title/remark/description/content 等"设置值"字段）→ 写；只有 id/page/keyword/sort/type 等筛选字段 → 读
+   - **② 整体请求信号**: 方法为 POST 且路径指向具体资源/子资源（/api/order/999、/user/123/status、/order/999/pay、/user/123/avatar）+ 携带会话凭证 → 状态修改签名；路径是集合（/api/orders、/api/user/list）或子集合读端点（/999/detail、/999/items、/999/download、/999/info）→ 读
+   - **③ 前端对返回的解析（最高权威，优先回查 Phase 2 call-site 与 JS 还原源码）**: 找到该接口的 caller_files 与 response_param_hints，看响应被前端如何消费:
+     - 响应按数据渲染（res.data.list 填表格 / 详情字段展示 / JSON 拼接到页面）→ 读，可发送
+     - 响应只取 code/success 后触发 UI 副作用（toast"保存/修改成功"、location.reload()、列表刷新、路由跳转、按钮状态切换）→ 写，禁止发送
+   三要素判定为"写"→ 禁止发送；判定为"读"→ 可正常发送。IDOR 越权读取一律用 GET 对比响应差异。若 hook 拦截了你认为只读的请求，说明参数或路径触发了写判定，请改用 GET 对比差异或记录"需人工复核"，不要绕过 hook。
 `
 
 let projectName, mode, singleUrl

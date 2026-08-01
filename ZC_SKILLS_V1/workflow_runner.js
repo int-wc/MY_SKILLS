@@ -739,6 +739,7 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     const p2_oss = await agent(
       `你是快速开发框架识别专家，对 ${resolvedProject} 的以下目标执行开源系统识别。
 🔒 VPN: 所有 curl 探测必须加 --interface tun0
+${SAFETY_API_GUARDRAIL}
 重点识别：JeecgBoot、RuoYi（若依）、JeeSite、Guns、TeaWeb、BladeX、低代码平台等。
 
 目标列表（前 20 个）:

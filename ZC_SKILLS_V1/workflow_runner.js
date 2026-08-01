@@ -2065,7 +2065,9 @@ ${myFindingsJSON}
           })
         })
       })
-    )
+      )
+      writeResults.push(...(_rResults || []))
+    }
 
     const successCount = writeResults.filter(Boolean).length
     log(`  ✅ 完成 ${successCount}/${p5_plan.reports.length} 份报告`)

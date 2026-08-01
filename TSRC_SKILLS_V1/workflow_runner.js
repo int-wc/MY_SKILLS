@@ -1224,7 +1224,7 @@ if (mode.startsWith('phase5')) {
     markPhase(3, '⏭️')
   } else {
     if (skipDirsearch) {
-      log('  📂 skipDirsearch=true，跳过字典目录扫描 (dirsearch)')
+      log('  📂 默认跳过 dirsearch（目录枚举已由智能fuzz smart_fuzz.py 覆盖，除非显式传 dirsearch:true）')
       p3_dirsearch = { findings: [], new_endpoints: [], waf_detected: [], skipped: true, reason: 'skipDirsearch option enabled' }
     } else {
     // ============================================================

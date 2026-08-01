@@ -114,7 +114,7 @@ HF 的数据集 loader 名字看似"数据加载"，本质原语是 **"把数据
 **攻击基元集（按原语选，不按名字）:**
 - **read_file** → 路径遍历/任意文件读取；HDF5外部存储声明本地路径(/proc/self/environ、源码路径)；XML外部实体；配置外部引用；符号链接；响应体必须回显文件内容才算 confirmed
 - **write_file** → 任意文件写入；上传绕过（双扩展名/Content-Type/文件名路径穿越）；覆盖配置文件→提权
-- **exec_code** → SSTI（Jinja2/Velocity/FreeMarker/Thymeleaf: \\${7*7}/#{7*7}/{{7*7}}）；表达式注入；反序列化；**模板/配置字段注入→对象链→exec()**（HF案例: 应填数值的字段填入Jinja2模板，渲染器未做类型校验即执行）
+- **exec_code** → SSTI（Jinja2/Velocity/FreeMarker/Thymeleaf: \${7*7}/#{7*7}/{{7*7}}）；表达式注入；反序列化；**模板/配置字段注入→对象链→exec()**（HF案例: 应填数值的字段填入Jinja2模板，渲染器未做类型校验即执行）
 - **modify_state** → IDOR写越权（改他人资源）；逻辑缺陷（负金额/数量/状态翻转/审批绕过）；未授权增删改
 - **query_data** → IDOR遍历；分页批量；未授权敏感数据
 - **transfer** → SSRF（含 **remote→local 原语切换**: 远程URL被白名单拦时，改让服务端读本地路径——读本地不是URL fetch，白名单看不见）；开放重定向

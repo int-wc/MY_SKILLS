@@ -64,7 +64,15 @@ if printf '%s' "$cmd" | grep -qiE '("[a-zA-Z_]*(delete|remove|drop|clear|update|
 fi
 
 # ---- 规则5: 强写操作端点（即使 GET 也拦截，防止无防护 GET 型写接口）----
+# 含 deleteById/removeById/updateById、/delete[/?] 等写语义路径
 if printf '%s' "$cmd" | grep -qiE '(deleteById|removeById|updateById|deleteAll|removeAll|doDelete|doUpdate|/truncate|/drop[/?]|/delete[/?]|/remove[/?]|/clear[/?]|/update[/?]|/modify[/?]|/save[/?]|/approve[/?]|/reject[/?])'; then
+  block "🚨 SAFETY GUARD: 目标端点含删除/修改写操作语义，已拦截。"
+fi
+
+# ---- 规则5b: camelCase 写动词端点（区分大小写，避免误拦 deleted/deletion 只读页面）----
+# /deleteUser /updateProfile /removeItem 等驼峰写接口，但 /deleted /deletion 等名词页放行
+if printf '%s' "$cmd" | grep -qE '(/[a-zA-Z]*?(delete|remove|update|modify|save|drop|clear)[A-Z][a-zA-Z]+)' && \
+   ! printf '%s' "$cmd" | grep -qiE '/(deleted|deletion|update\.html|delete\.html)' ; then
   block "🚨 SAFETY GUARD: 目标端点含删除/修改写操作语义，已拦截。"
 fi
 

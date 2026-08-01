@@ -76,14 +76,17 @@ if printf '%s' "$cmd" | grep -qE '(/[a-zA-Z]*?(delete|remove|update|modify|save|
   block "🚨 SAFETY GUARD: 目标端点含删除/修改写操作语义，已拦截。"
 fi
 
-# ---- 规则6: POST 到"具体资源条目"路径（纯 IDOR 修改签名，无 action 词也拦）----
-# 经典越权写：POST /api/order/999，body 无 action= 指令、路径不含 update/save 等词。
-# 特征：POST(或携带请求体) + 路径含 /<资源名>/<数字ID>（条目而非集合）。
-# 排除只读性质端点（login/search/detail/download 等，双保险防误拦）。
+# ---- 规则6: POST 到条目路径 + 赋值型修改参数（参数 + 整体请求 判定）----
+# 纯 IDOR 写的高置信特征：POST(带body) 到 /资源/<数字ID>，且 body/query 携带"赋值型"字段
+# （status/role/config/password 等设置值域，而非 id/page/keyword 等筛选字段）。
+# 注意: 前端对返回的解析（响应是渲染数据=读 还是 触发UI副作用=写）由 agent 层判定，hook 只做参数级粗筛。
+# 排除子集合/只读端点（detail/items/download 等），这些即使是 POST 也是读。
+WRITE_FIELD_SIG='(^|[^a-zA-Z0-9_])(status|role|config|password|passwd|secret|secret_key|enabled|disabled|approved|approve|reject|submit|isAdmin|is_admin|is_active|settings|permissions|score|price|amount|stock|title|remark|description|content|mobile|email|nickname|realname|real_name|avatar)\s*["'"'"']?\s*[:=]'
 if printf '%s' "$cmd" | grep -qiE '(\s-X\s+POST|\s--request\s+POST|-d\b|--data\b|--data-raw\b|--form\b|-F\b|(requests|httpx)\.post\s*\()' && \
    printf '%s' "$cmd" | grep -qiE '/[a-zA-Z_][a-zA-Z0-9_.-]*/[0-9]+([^a-zA-Z0-9]|$)' && \
-   ! printf '%s' "$cmd" | grep -qiE '/(login|auth|token|refresh|logout|search|query|list|check|verify|validate|captcha|code|download|export|swagger|api-docs|file|static|assets|public|health|version|detail|info|summary|read|get|find)([/?#]|$)' ; then
-  block "🚨 SAFETY GUARD: POST 到具体资源条目路径(如 /api/order/999)，疑似纯IDOR修改/状态变更。请用GET只读对比差异或记录为疑似漏洞不验证。"
+   printf '%s' "$cmd" | grep -qiE "$WRITE_FIELD_SIG" && \
+   ! printf '%s' "$cmd" | grep -qiE '/(login|auth|token|refresh|logout|search|query|list|items|check|verify|validate|captcha|code|download|export|swagger|api-docs|file|static|assets|public|health|version|detail|info|summary|read|get|find)([/?#]|$)' ; then
+  block "🚨 SAFETY GUARD: POST 到条目路径且携带赋值型修改参数(status/role/config等)，判定为IDOR写/状态修改，已拦截。"
 fi
 
 allow

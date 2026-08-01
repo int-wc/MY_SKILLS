@@ -1100,6 +1100,7 @@ dirsearch -u "<target_url>" \
         required: ['findings'],
       }, phase: '漏洞挖掘' }
     )
+    }  // end skipDirsearch else block
 
     if (p3_dirsearch && p3_dirsearch.findings && p3_dirsearch.findings.length > 0) {
       log(`  目录扫描发现 ${p3_dirsearch.findings.length} 个端点`)

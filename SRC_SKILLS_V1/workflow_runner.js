@@ -1273,6 +1273,8 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? 'JS文件已下载到本
 
 ${BUSINESS_ATTR_GUIDE}
 
+${SAFETY_API_GUARDRAIL}
+
 **【核心策略 — 🎯 Agent 发散思维 + 靶标定制】**
 
 **核心原则：基于本质业务原语 + 请求参数决定漏洞测试方向，而非API路径名。** 先判定原语（read/write/exec/modify/query/transfer/auth），再结合参数选攻击基元；参数与名字都只是原语的表面线索。

@@ -2323,7 +2323,9 @@ ${myFindingsJSON}
           })
         })
       })
-    )
+      )
+      writeResults.push(...(_rResults || []))
+    }
 
     const successCount = writeResults.filter(Boolean).filter(w => w.success).length
     log(`  ✅ 完成 ${successCount}/${p5_plan.reports.length} 份报告的写入${successCount < p5_plan.reports.length ? '（有失败）' : ''}`)

@@ -123,6 +123,10 @@ const PROJECT_DIR = `${ZC_BASE}/${resolvedProject}`
 log(`📂 项目目录: ${PROJECT_DIR}`)
 log(`📋 模式: ${mode}`)
 
+// 默认跳过 dirsearch（目录枚举统一用智能fuzz smart_fuzz.py），仅当显式指定 dirsearch:true/runDirsearch 时才执行
+const parseWorkflowBool_zc = (v) => v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true' || String(v).toLowerCase() === 'yes'
+const skipDirsearch = parseWorkflowBool_zc(args?.dirsearch) || parseWorkflowBool_zc(args?.runDirsearch) ? false : true
+
 // ============================================================
 // VPN 自动启动（渗透隔离 — 仅探测流量走 VPN）
 // ============================================================

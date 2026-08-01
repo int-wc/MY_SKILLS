@@ -1407,6 +1407,7 @@ Phase 2 的 JS 分析已经提取了每个 API 端点的调用现场参数结构
                 title: { type: 'string' },
                 type: { type: 'string' },
                 severity: { type: 'string', enum: ['严重', '高危', '中危', '低危', '信息'] },
+                business_attr: { type: 'string', description: '本质业务原语: read_file/write_file/exec_code/modify_state/query_data/transfer/auth' },
                 target: { type: 'string' },
                 endpoint: { type: 'string' },
                 method: { type: 'string' },

@@ -1107,6 +1107,7 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分
 	**JS缓存目录（可回查本地JS及还原源码）**:
 	${typeof globalThis.__zc_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__zc_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\n') : '（无）'}
 
+${BUSINESS_ATTR_GUIDE}
 
 **【核心策略 — 🎯 Agent 发散思维 + 靶标定制】**
 1. 分析 API 命名 → 推断功能 → 对应攻击:

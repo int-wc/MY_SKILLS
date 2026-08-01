@@ -39,14 +39,14 @@ allow() {
 }
 
 # ---- 规则1: HTTP 方法级拦截 (curl) ----
-# curl -X DELETE / --request PUT / -X PATCH / -X MERGE / -X TRACE
-if printf '%s' "$cmd" | grep -qiE 'curl[^|;]*(\s-X\s+(DELETE|PUT|PATCH|MERGE|TRACE)|\s--request[= ]+(DELETE|PUT|PATCH|MERGE|TRACE))'; then
+# curl -X DELETE / -X 'DELETE' / --request PUT / --request=PATCH / -X PATCH / -X MERGE / -X TRACE
+if printf '%s' "$cmd" | grep -qiE 'curl[^|;]*(\s-X\s+["'"'"']?(DELETE|PUT|PATCH|MERGE|TRACE)["'"'"']?|\s--request[= ]+["'"'"']?(DELETE|PUT|PATCH|MERGE|TRACE)["'"'"']?)'; then
   block "🚨 SAFETY GUARD: 拦截删除/修改类HTTP方法(DELETE/PUT/PATCH)。仅允许只读探测(GET/只读POST)。"
 fi
 
-# ---- 规则2: Python requests 库方法拦截 ----
-if printf '%s' "$cmd" | grep -qiE 'requests\.(delete|put|patch)\s*\('; then
-  block "🚨 SAFETY GUARD: 拦截 requests.delete/put/patch 删除/修改请求。仅允许只读请求。"
+# ---- 规则2: Python requests/httpx/aiohttp 库写方法拦截 ----
+if printf '%s' "$cmd" | grep -qiE '(requests|httpx|aiohttp)\.(delete|put|patch)\s*\('; then
+  block "🚨 SAFETY GUARD: 拦截 requests/httpx delete/put/patch 删除/修改请求。仅允许只读请求。"
 fi
 
 # ---- 规则3: 修改/删除语义端点 + 提交数据方法组合 ----

@@ -1405,6 +1405,8 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? 'JS文件已下载到本
 **【Phase 2 结构化 Call Site 请求参数 — 优先级最高】**
 ${formatStructuredCallSiteContext('__p2_call_sites_json')}
 
+${BUSINESS_ATTR_GUIDE}
+
 ${PARAM_DRIVEN_TESTING_GUIDE}
 
 测试矩阵（按优先级执行）:
@@ -1538,6 +1540,8 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__
 
 Phase 2结构化Call Site请求参数（优先级最高）:
 ${formatStructuredCallSiteContext('__p2_call_sites_json')}
+
+${BUSINESS_ATTR_GUIDE}
 
 ${PARAM_DRIVEN_TESTING_GUIDE}
 
@@ -1811,6 +1815,8 @@ Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
 ---
 **Phase 2结构化Call Site请求参数（验证和发散时必须优先回查）**
 ${formatStructuredCallSiteContext('__p2_call_sites_json')}
+
+${BUSINESS_ATTR_GUIDE}
 
 ${PARAM_DRIVEN_TESTING_GUIDE}
 

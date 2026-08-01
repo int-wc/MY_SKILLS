@@ -214,7 +214,10 @@ const workflowProxyUrl = (
 const skipDirsearch = parseWorkflowBool(workflowOptions.skipDirsearch) ||
   parseWorkflowBool(workflowOptions.noDirsearch) ||
   parseWorkflowBool(workflowEnv('CLAUDE_WORKFLOW_SKIP_DIRSEARCH')) ||
-  parseWorkflowBool(workflowEnv('WORKFLOW_SKIP_DIRSEARCH'))
+  parseWorkflowBool(workflowEnv('WORKFLOW_SKIP_DIRSEARCH')) ||
+  // 默认跳过 dirsearch（目录枚举统一用智能fuzz smart_fuzz.py），仅当显式指定 dirsearch/runDirsearch 时才执行
+  !(parseWorkflowBool(workflowOptions.dirsearch) || parseWorkflowBool(workflowOptions.runDirsearch) ||
+    parseWorkflowBool(workflowEnv('CLAUDE_WORKFLOW_RUN_DIRSEARCH')) || parseWorkflowBool(workflowEnv('WORKFLOW_RUN_DIRSEARCH')))
 const PROXY_ENV_PREFIX = workflowProxyUrl
   ? `HTTP_PROXY=${shQuote(workflowProxyUrl)} HTTPS_PROXY=${shQuote(workflowProxyUrl)} ALL_PROXY=${shQuote(workflowProxyUrl)} http_proxy=${shQuote(workflowProxyUrl)} https_proxy=${shQuote(workflowProxyUrl)} all_proxy=${shQuote(workflowProxyUrl)}`
   : ''

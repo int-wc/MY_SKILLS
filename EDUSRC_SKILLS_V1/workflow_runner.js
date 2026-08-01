@@ -1227,8 +1227,9 @@ if (mode.startsWith('phase5')) {
   // 所有高优目标全量测试（不限制top5，扩大覆盖到MAX_TARGETS个）
   // P3_TIER1_MAX 控制Tier 1全量测试的资产数上限
   // P3_TIER2_MAX 控制Tier 2全量测试的资产数上限（超出Tier 1的部分）
-  const P3_TIER1_MAX = 50
-  const P3_TIER2_MAX = 50
+  // 防冻结：单 agent 上下文爆炸也会拖垮系统，Tier 上限从 50 降至 10
+  const P3_TIER1_MAX = 10
+  const P3_TIER2_MAX = 10
   const targets = (p1_assets.priority_targets || []).slice(0, P3_TIER1_MAX)
 
   // Tier 2: 剩余资产同样全量测试（非快速探测）

@@ -100,6 +100,32 @@ const PARAM_DRIVEN_TESTING_GUIDE = `
 4. 标准 payload 被拦截时，从漏洞原理和参数合法格式推绕过：SSRF 试 IPv6/IPv4-mapped/DNS rebinding/302/URL解析差异；路径穿越试双编码/Unicode/协议变体；注入类试大小写、Content-Type、参数污染、编码差异。
 `
 
+const BUSINESS_ATTR_GUIDE = `
+**【本质业务属性驱动 — harness强制（第一优先级，先于参数驱动）】**
+不要只看API名字或参数名，先判定每个端点的**核心业务原语** business_attr（它"到底对什么东西做什么操作"），再选攻击基元。
+
+**判定法（参照 OpenAI Agent 攻破 HuggingFace 案例）:**
+HF 的数据集 loader 名字看似"数据加载"，本质原语是 **"把数据集配置变成文件读取"（read_file）**；攻击者又用 Jinja2 模板注入把同一表面改成 **"执行本地代码"（exec_code）**。同一表面 = read 原语 + exec 原语，只看名字会同时漏掉"任意文件读取"和"SSTI→RCE"。
+- 从调用链/后端语义问: 这个功能"把什么变成什么"？
+- read_file=会读取并回显文件/配置/数据；write_file=会写入/保存/上传/生成文件；exec_code=会渲染模板/执行命令/求值表达式/加载运行代码；modify_state=会增删改记录/审批/下单/改配置；query_data=纯查询；transfer=代理/转发/拉取外部URL；auth=登录/会话/token。
+- 每个端点输出: \`- /xxx POST business_attr=read_file attr_target=local_fs attr_reason=... params={...} risk=路径遍历,任意文件读取\`
+- attr_target（原语作用对象）∈ {local_fs, remote_url, db, template, user_input, worker}
+
+**攻击基元集（按原语选，不按名字）:**
+- **read_file** → 路径遍历/任意文件读取；HDF5外部存储声明本地路径(/proc/self/environ、源码路径)；XML外部实体；配置外部引用；符号链接；响应体必须回显文件内容才算 confirmed
+- **write_file** → 任意文件写入；上传绕过（双扩展名/Content-Type/文件名路径穿越）；覆盖配置文件→提权
+- **exec_code** → SSTI（Jinja2/Velocity/FreeMarker/Thymeleaf: \${7*7}/#{7*7}/{{7*7}}）；表达式注入；反序列化；**模板/配置字段注入→对象链→exec()**（HF案例: 应填数值的字段填入Jinja2模板，渲染器未做类型校验即执行）
+- **modify_state** → IDOR写越权（改他人资源）；逻辑缺陷（负金额/数量/状态翻转/审批绕过）；未授权增删改
+- **query_data** → IDOR遍历；分页批量；未授权敏感数据
+- **transfer** → SSRF（含 **remote→local 原语切换**: 远程URL被白名单拦时，改让服务端读本地路径——读本地不是URL fetch，白名单看不见）；开放重定向
+- **auth** → 认证绕过/JWT伪造/弱口令
+
+**HF案例强制规则:**
+1. 名字含 load/parse/import/sync/render/convert/transform/download/upload 等"数据处理"语义的端点，**必须强制判定真实原语**——同一表面常同时是 read 原语与 exec 原语。
+2. 每个端点至少自问三连: "如果我让它读本地文件 / 执行我给的代码 / 写入任意路径，业务上它会不会照做？" → 对应 read/exec/write 三个原语测试，各做一遍。
+3. 执行结果可通过**死信投递/数据集回传**等正常平台接口回读（HF 把命令输出写进公开数据集再经公开API读回），不要只盯直接响应。
+`
+
 // ============================================================
 // 真实 User-Agent 配置 — 所有 curl 请求使用浏览器UA
 // ============================================================

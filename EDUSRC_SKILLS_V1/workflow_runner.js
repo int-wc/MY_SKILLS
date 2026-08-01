@@ -1417,6 +1417,8 @@ ${formatStructuredCallSiteContext('__p2_call_sites_json')}
 
 ${BUSINESS_ATTR_GUIDE}
 
+${SAFETY_API_GUARDRAIL}
+
 ${PARAM_DRIVEN_TESTING_GUIDE}
 
 测试矩阵（按优先级执行）:
@@ -1553,6 +1555,8 @@ Phase 2结构化Call Site请求参数（优先级最高）:
 ${formatStructuredCallSiteContext('__p2_call_sites_json')}
 
 ${BUSINESS_ATTR_GUIDE}
+
+${SAFETY_API_GUARDRAIL}
 
 ${PARAM_DRIVEN_TESTING_GUIDE}
 
@@ -1828,6 +1832,8 @@ Step C: 如果响应是 JSON → 提取 d.get('data') 判断类型:
 ${formatStructuredCallSiteContext('__p2_call_sites_json')}
 
 ${BUSINESS_ATTR_GUIDE}
+
+${SAFETY_API_GUARDRAIL}
 
 ${PARAM_DRIVEN_TESTING_GUIDE}
 

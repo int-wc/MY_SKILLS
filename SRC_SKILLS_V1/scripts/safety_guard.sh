@@ -57,8 +57,9 @@ if printf '%s' "$cmd" | grep -qiE '/(delete|remove|drop|clear|truncate|update|ed
 fi
 
 # ---- 规则4: 请求体/参数中的删除/修改指令 ----
-# JSON/参数含 "delete":true, action="delete", method=DELETE 等
-if printf '%s' "$cmd" | grep -qiE '("[a-zA-Z_]*(delete|remove|drop|clear|update|modify|save|edit|approve|reject|submit)[a-zA-Z_]*"\s*[:=]\s*(true|1|yes)|("(action|operation|method|type|op)"\s*:\s*"(delete|remove|drop|update|modify|edit|approve|reject|submit)")|method\s*[=:]\s*["'"'"']?(DELETE|PUT|PATCH))'; then
+# JSON/参数含 "delete":true, action="delete", method=DELETE, ?delete=true, action=update,
+# form body: -d 'action=update' / op=delete / method=POST + write verb 等
+if printf '%s' "$cmd" | grep -qiE '("[a-zA-Z_]*(delete|remove|drop|clear|update|modify|save|edit|approve|reject|submit)[a-zA-Z_]*"\s*[:=]\s*(true|1|yes)|("(action|operation|method|type|op)"\s*:\s*"(delete|remove|drop|update|modify|edit|approve|reject|submit)")|method\s*[=:]\s*["'"'"']?(DELETE|PUT|PATCH)|[?&](delete|remove|drop|clear|update|modify|save|edit)\s*=\s*(true|1|yes)|[?&]action\s*=\s*(delete|remove|drop|update|modify|save|edit|approve|reject|submit)|(^|[^a-zA-Z0-9])(action|op|operation|cmd|command|do|type)\s*=\s*(delete|remove|drop|update|modify|edit|save|approve|reject|submit|destroy|truncate)\b)'; then
   block "🚨 SAFETY GUARD: 请求体/参数含删除修改操作指令，已拦截。"
 fi
 

@@ -20,7 +20,7 @@ except Exception:
 
 # 只检查网络请求类命令；其余放行
 case "$cmd" in
-  *curl*|*wget*|*Invoke-WebRequest*|*requests.get*|*requests.post*|*httpx*|*http.request*|*http.client*)
+  *curl*|*wget*|*Invoke-WebRequest*|*requests.*|*httpx*|*http.request*|*http.client*|*aiohttp*|*urllib.request*)
     ;;
   *)
     printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}'

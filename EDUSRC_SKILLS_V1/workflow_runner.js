@@ -803,6 +803,13 @@ ${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE
     - 分析 Service Worker: 检查 sw.js 或 navigator.serviceWorker.register 中的请求拦截逻辑和缓存策略，可能改写/代理API请求
     - 注意 ESM CDN 依赖: 扫描 esm.sh/jsdelivr/unpkg 等CDN导入，CDN模块可能包含额外API端点
 
+    **Step 6: 本质业务属性判定（最高优先级思维 — 从数据流推断原语，不要看API名字）**
+    对每个端点输出 business_attr（核心业务原语）∈ {read_file, write_file, exec_code, modify_state, query_data, transfer, auth}、attr_target（原语作用对象 ∈ {local_fs, remote_url, db, template, user_input, worker}）、attr_reason（推导依据）。
+    - 参照 OpenAI Agent 攻破 HuggingFace 案例: 数据集 loader 名字看似"数据加载"，本质原语是"把数据集配置变成文件读取"（read_file），又能被 Jinja2 模板注入改成"执行本地代码"（exec_code）——同一表面既是 read 原语又是 exec 原语。
+    - read_file=读取并回显文件/配置；write_file=写入/保存/上传/生成文件；exec_code=渲染模板/执行命令/求值表达式/加载运行代码；modify_state=增删改记录/审批/下单/改配置；query_data=纯查询；transfer=代理/转发/拉取外部URL；auth=登录/会话/token。
+    - 输出格式: - /xxx POST business_attr=read_file attr_target=local_fs attr_reason=... params={...} risk=路径遍历,任意文件读取
+    - bypass 预判（HF案例）: read 原语的远端目标若被 URL 白名单拦截，则把 attr_target 从 remote 切到 local（读 /proc/self/environ、源码路径），"读本地文件"不是 URL fetch，白名单看不见。
+
     ${UA_INSTR}`,
           { label: `🔬 分析: ${target}`, phase: '深度分析' }
         )

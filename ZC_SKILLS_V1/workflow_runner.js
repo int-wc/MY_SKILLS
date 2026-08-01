@@ -1119,6 +1119,8 @@ ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分
 
 ${BUSINESS_ATTR_GUIDE}
 
+${SAFETY_API_GUARDRAIL}
+
 **【核心策略 — 🎯 Agent 发散思维 + 靶标定制】**
 1. 分析 API 命名 → 推断功能 → 对应攻击:
    upload/file/import        → **文件上传绕过**
@@ -1196,6 +1198,8 @@ ${targets.map(function(t) { return '  ' + t.url }).join('\\n')}
 ${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
 
 ${BUSINESS_ATTR_GUIDE}
+
+${SAFETY_API_GUARDRAIL}
 
 1. 越权测试:
    - 对含数字ID的路径，尝试替换ID值

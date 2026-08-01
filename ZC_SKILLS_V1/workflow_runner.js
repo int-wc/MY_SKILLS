@@ -1028,7 +1028,8 @@ if (mode.startsWith('phase5')) {
   // ⚡ VPN 强制指令：所有 curl/HTTP 请求必须走 VPN 接口
   const VPN_CURL = 'curl --interface tun0 -sk'
 
-  const P3_TIER1_MAX = 50
+  // 防冻结：单 agent 上下文爆炸会拖垮系统，Tier 上限从 50 降至 10
+  const P3_TIER1_MAX = 10
   const targets = (p1_assets.priority_targets || []).slice(0, P3_TIER1_MAX)
   const allUrls = [ ...(p1_assets.all_urls || []) ]
 

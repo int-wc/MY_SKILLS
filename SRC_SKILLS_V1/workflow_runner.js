@@ -148,6 +148,7 @@ const SAFETY_API_GUARDRAIL = `
 3. **禁止在请求体/参数中携带写指令**: 参数/数据中不得含 delete:true、action=delete、method=DELETE、op=remove 等删除/修改指令。
 4. **发现疑似写漏洞（文件写入/数据篡改/删除类）时，只记录不验证**: 若从 JS/源码/接口文档推断出 write_file 或 modify_state 型漏洞，在 findings 中记录证据并标注"未实际发送写请求，需人工复核"；严禁用写请求复现。
 5. **允许的测试面**: 仅只读探测——GET 与只读 POST（查询/搜索/登录/越权读取类）。一切"读"侧验证（IDOR读取、路径遍历读取、配置泄露读取）均可正常执行。
+6. **禁止 POST 到条目路径**: 禁止对含数字ID的"具体资源条目"路径发送 POST（如 /api/order/999、/api/user/123、/api/order/999/status）——无 action 词的 POST 到条目路径即疑似 IDOR 写/状态修改。IDOR 越权读取一律用 GET 对比响应差异。
 `
 
 const progress = {

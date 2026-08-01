@@ -831,7 +831,9 @@ ${NET_ENV_PREFIX}python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE
       (result, target) => {
         return result
       }
-    )
+      )
+      analyses.push(...(_batchResults || []))
+    }
     } catch(e) {
       log(`  ⚠️ 管道分析执行异常: ${e.message || e}`)
     }

@@ -723,10 +723,12 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
           { label: `🔬 分析: ${target}`, phase: '深度分析' }
         )
       },
-      (result, target) => {
-        return result
+        (result, target) => {
+          return result
+        }
+        )
+        analyses.push(...(_batchResults || []))
       }
-    )
     } catch(e) {
       log(`  ⚠️ 管道分析执行异常: ${e.message || e}`)
     }

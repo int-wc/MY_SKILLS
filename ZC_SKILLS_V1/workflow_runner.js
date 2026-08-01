@@ -1025,6 +1025,7 @@ if (mode.startsWith('phase5')) {
         const p3_dirsearch = await agent(
       `对 ${resolvedProject} 执行 dirsearch 目录扫描（使用 dirsearch 内置字典 + 积累字典）。
 🔒 VPN: 所有 dirsearch 和 curl 命令必须加 --interface tun0
+${SAFETY_API_GUARDRAIL}
 
 ===== 目标列表（前20个） =====
 ${targets.slice(0, 20).map(function(t) { return '  ' + t.url + ' — ' + (t.tags||[]).join(',') }).join(String.fromCharCode(10))}
@@ -1424,6 +1425,7 @@ ${ossText}${cacheNote}
       p3_quick = await agent(
         `对 ${resolvedProject} 的以下剩余资产做全量漏洞测试。
 
+${SAFETY_API_GUARDRAIL}
 剩余资产列表（${tier2_urls.length} 个）:
 ${tier2_urls.map(function(u) { return '  ' + u }).join('\n')}
 

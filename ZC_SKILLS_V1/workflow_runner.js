@@ -1028,12 +1028,17 @@ if (mode.startsWith('phase5')) {
     markPhase(3, '⏭️')
   } else {
     // ============================================================
-    // 3.0 dirsearch — 基于字典的标准目录扫描
+    // 3.0 dirsearch — 基于字典的标准目录扫描（默认跳过，用智能fuzz smart_fuzz.py）
     // ============================================================
-    log('  📂 执行字典目录扫描 (dirsearch)...')
-    const P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
+    let p3_dirsearch; const P3_DICT_PATH = "${SKILL_SCRIPTS}/../references/api_patterns.json"
 
-        const p3_dirsearch = await agent(
+    if (skipDirsearch) {
+      log('  ⏭️ 默认跳过 dirsearch（目录枚举已由智能fuzz smart_fuzz.py 覆盖，除非显式传 dirsearch:true）')
+      p3_dirsearch = { findings: [], new_endpoints: [] }
+    } else {
+    log('  📂 执行字典目录扫描 (dirsearch)...')
+
+        p3_dirsearch = await agent(
       `对 ${resolvedProject} 执行 dirsearch 目录扫描（使用 dirsearch 内置字典 + 积累字典）。
 🔒 VPN: 所有 dirsearch 和 curl 命令必须加 --interface tun0
 ${SAFETY_API_GUARDRAIL}

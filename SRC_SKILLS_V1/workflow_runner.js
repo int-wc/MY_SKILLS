@@ -2260,8 +2260,13 @@ ${existingReports}` : ''}
     // 按严重等级分批注入，让writer知道上下文
     const severityOrder = { '严重': 0, '高危': 1, '中危': 2, '低危': 3, '信息': 4 }
 
-    const writeResults = await parallel(
-      p5_plan.reports.map((rpt, idx) => () => {
+    const writeResults = []
+    const _REPORT_BATCH = 2
+    for (let _ri = 0; _ri < p5_plan.reports.length; _ri += _REPORT_BATCH) {
+      const _rBatch = p5_plan.reports.slice(_ri, _ri + _REPORT_BATCH)
+      log(`  📄 报告写入批次 ${Math.floor(_ri/_REPORT_BATCH)+1}/${Math.ceil(p5_plan.reports.length/_REPORT_BATCH)}（${_rBatch.length}份·防冻结）`)
+      const _rResults = await parallel(
+      _rBatch.map((rpt) => () => {
         // 只取出该报告分到的发现数据（按finding_indices过滤）
         const myFindings = (rpt.finding_indices || []).map(i => allFindingsData[i])
         const myFindingsJSON = JSON.stringify(myFindings, null, 2)

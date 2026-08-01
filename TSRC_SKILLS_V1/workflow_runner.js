@@ -687,9 +687,16 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
   } else {
     let analyses = []
     try {
-      analyses = await pipeline(
-      targets,
-      async (target) => {
+      // === 防冻结修复：Phase2 并发 agent 风暴 ===
+      // 原 pipeline(10目标) 一次性并发 10×2≈20个满血agent，曾打爆内存导致系统冻结。
+      // 改为每批 P2_BATCH 个目标串行处理，把同时运行的 agent 数压到 ≤ 2×P2_BATCH。
+      const P2_BATCH = 2
+      for (let _bi = 0; _bi < targets.length; _bi += P2_BATCH) {
+        const _batch = targets.slice(_bi, _bi + P2_BATCH)
+        log(`  🔄 深度分析批次 ${Math.floor(_bi/P2_BATCH)+1}/${Math.ceil(targets.length/P2_BATCH)}（${_batch.length}目标·小并发防冻结）`)
+        const _batchResults = await pipeline(
+        _batch,
+        async (target) => {
         // === Step A: 下载JS（使用schema结构化输出，自动重试1次） ===
         let dlResult = null
         for (let _retry = 0; _retry < 2; _retry++) {

@@ -1460,6 +1460,8 @@ ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__
 
 ${BUSINESS_ATTR_GUIDE}
 
+${SAFETY_API_GUARDRAIL}
+
 1. 越权测试:
    - 对含数字ID的路径，尝试替换ID值
    - 观察响应差异（是否返回不同用户数据）

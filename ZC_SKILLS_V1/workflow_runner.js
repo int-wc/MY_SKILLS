@@ -50,6 +50,16 @@ HF 的数据集 loader 名字看似"数据加载"，本质原语是 **"把数据
 3. 执行结果可通过**死信投递/数据集回传**等正常平台接口回读（HF 把命令输出写进公开数据集再经公开API读回），不要只盯直接响应。
 `
 
+const SAFETY_API_GUARDRAIL = `
+**【安全护栏 — harness强制（只读探测，禁止对删除/修改类API发送请求）】**
+以下护栏为硬性要求，测试全程必须遵守，违反任何一条即违规:
+1. **禁止写方法**: 严禁使用 curl -X DELETE / -X PUT / -X PATCH / -X MERGE / -X TRACE 或 --request DELETE/PUT/PATCH 发送任何请求。
+2. **禁止对写语义端点发送任何请求**: 对路径含 /delete /remove /drop /clear /truncate /update /edit /modify /save /write /upload /import /move /copy /publish /approve /reject /submit /close 等删除/修改语义的端点，即使只读 GET 也禁止探测——此类端点本身即高危写面，任何探测都可能触发数据修改。
+3. **禁止在请求体/参数中携带写指令**: 参数/数据中不得含 delete:true、action=delete、method=DELETE、op=remove 等删除/修改指令。
+4. **发现疑似写漏洞（文件写入/数据篡改/删除类）时，只记录不验证**: 若从 JS/源码/接口文档推断出 write_file 或 modify_state 型漏洞，在 findings 中记录证据并标注"未实际发送写请求，需人工复核"；严禁用写请求复现。
+5. **允许的测试面**: 仅只读探测——GET 与只读 POST（查询/搜索/登录/越权读取类）。一切"读"侧验证（IDOR读取、路径遍历读取、配置泄露读取）均可正常执行。
+`
+
 let projectName, mode, singleUrl
 
 if (typeof args === 'string') {

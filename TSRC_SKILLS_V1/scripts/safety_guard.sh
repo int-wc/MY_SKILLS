@@ -76,4 +76,14 @@ if printf '%s' "$cmd" | grep -qE '(/[a-zA-Z]*?(delete|remove|update|modify|save|
   block "🚨 SAFETY GUARD: 目标端点含删除/修改写操作语义，已拦截。"
 fi
 
+# ---- 规则6: POST 到"具体资源条目"路径（纯 IDOR 修改签名，无 action 词也拦）----
+# 经典越权写：POST /api/order/999，body 无 action= 指令、路径不含 update/save 等词。
+# 特征：POST(或携带请求体) + 路径含 /<资源名>/<数字ID>（条目而非集合）。
+# 排除只读性质端点（login/search/detail/download 等，双保险防误拦）。
+if printf '%s' "$cmd" | grep -qiE '(\s-X\s+POST|\s--request\s+POST|-d\b|--data\b|--data-raw\b|--form\b|-F\b|(requests|httpx)\.post\s*\()' && \
+   printf '%s' "$cmd" | grep -qiE '/[a-zA-Z_][a-zA-Z0-9_.-]*/[0-9]+([^a-zA-Z0-9]|$)' && \
+   ! printf '%s' "$cmd" | grep -qiE '/(login|auth|token|refresh|logout|search|query|list|check|verify|validate|captcha|code|download|export|swagger|api-docs|file|static|assets|public|health|version|detail|info|summary|read|get|find)([/?#]|$)' ; then
+  block "🚨 SAFETY GUARD: POST 到具体资源条目路径(如 /api/order/999)，疑似纯IDOR修改/状态变更。请用GET只读对比差异或记录为疑似漏洞不验证。"
+fi
+
 allow

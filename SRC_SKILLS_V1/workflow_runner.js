@@ -1445,6 +1445,8 @@ ${typeof globalThis.__p2_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(
 JS缓存目录（可回查本地JS/还原源码）:
 ${typeof globalThis.__p2_js_dirs_json !== 'undefined' ? JSON.parse(globalThis.__p2_js_dirs_json).map(d => d.dump_dir + (d.has_reconstructed ? ' (含还原源码)' : '')).join('\n') : '（无）'}
 
+${BUSINESS_ATTR_GUIDE}
+
 1. 越权测试:
    - 对含数字ID的路径，尝试替换ID值
    - 观察响应差异（是否返回不同用户数据）

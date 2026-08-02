@@ -1,5 +1,5 @@
 {
-  "updated": "2026-07-21",
+  "updated": "2026-08-02",
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
@@ -282,7 +282,11 @@
     "/config.js",
     "/zh-cn (Nuxt SSR __NUXT__ config)",
     "/cn /en /login (Nuxt SSR __NUXT__ config)",
-    "/apix/V1/omp/open/oauth/idpLogin"
+    "/apix/V1/omp/open/oauth/idpLogin",
+    "/api/login/setting?login_scene=feilian",
+    "/api/login/setting?login_scene=admin",
+    "/api/v1/attach/download?key=flglobal_img_default_user_avatar",
+    "/api/v1/config/agreement?login_scene=feilian"
   ],
   "framework_patterns": {
     "JeecgBoot": [

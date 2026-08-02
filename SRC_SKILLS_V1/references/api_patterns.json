@@ -353,7 +353,12 @@
     "https://saos-mall-admin-ui.chehejia.com/erp",
     "https://saos-mall-admin-ui.chehejia.com/gateway",
     "https://saos-mall-admin-ui.chehejia.com/manage",
-    "https://saos-mall-admin-ui.chehejia.com/sys"
+    "https://saos-mall-admin-ui.chehejia.com/sys",
+    "GET /temp?list-type=2",
+    "GET /temp?policy",
+    "GET /api/v1/config/agreement?use_type=0",
+    "/factory-ems-web/api/codegenerator/dict/selectEnum/all",
+    "/factory-ems-web/api/codegenerator/dict/selectOptions/MalfunctionStatusEnum"
   ],
   "framework_patterns": {
     "JeecgBoot": [

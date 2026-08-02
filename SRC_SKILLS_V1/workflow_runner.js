@@ -1471,7 +1471,7 @@ Phase 2 的 JS 分析已经提取了每个 API 端点的调用现场参数结构
 ${targets.map(function(t) { return '  ' + t.url }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点/API路径:
-${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
+${p2_discoveries_text ? p2_discoveries_text : '（无 JS 分析数据）'}
 
 第2阶段提取的结构化凭证:
 ${typeof globalThis.__p2_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__p2_creds_json).slice(0, 10), null, 2) : '（无）'}

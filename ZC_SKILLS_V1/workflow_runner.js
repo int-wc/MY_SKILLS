@@ -1185,7 +1185,7 @@ ${targets.map(function(t) { return '  ' + t.priority + ' | ' + t.url + ' | tags:
 ${allUrls.map(function(u) { return '  ' + u }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点:
-${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}\n\n\t${zc_dirsearch_ctx}
+${p2_discoveries_text ? p2_discoveries_text : '（无 JS 分析数据）'}\n\n\t${zc_dirsearch_ctx}
 \n	**Phase 2提取的结构化凭证（优先级高，优先于下方文本）**:
 	${typeof globalThis.__zc_creds_json !== 'undefined' ? JSON.stringify(JSON.parse(globalThis.__zc_creds_json).slice(0, 10), null, 2) : '（无）'}
 

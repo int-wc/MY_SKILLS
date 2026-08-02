@@ -22,8 +22,9 @@ from hashlib import md5
 
 def run(cmd, timeout=30):
     try:
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
-        return r.stdout.strip(), r.returncode
+        r = subprocess.run(cmd, shell=True, capture_output=True, timeout=timeout)
+        out = r.stdout.decode('utf-8', errors='replace')
+        return out.strip(), r.returncode
     except subprocess.TimeoutExpired:
         return "", -1
 

@@ -1270,7 +1270,7 @@ ${SAFETY_API_GUARDRAIL}
 ${targets.map(function(t) { return '  ' + t.url }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点:
-${p2_discoveries_text ? p2_discoveries_text.substring(0, 10000) : '（无 JS 分析数据）'}
+${p2_discoveries_text ? p2_discoveries_text : '（无 JS 分析数据）'}
 
 ${BUSINESS_ATTR_GUIDE}
 

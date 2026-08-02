@@ -3,7 +3,7 @@
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
-      "count": 7,
+      "count": 8,
       "first_seen": "2026-07-09",
       "last_seen": "2026-08-02"
     }
@@ -343,7 +343,17 @@
     "http://sso.chehejia.com/erp",
     "http://sso.chehejia.com/gateway",
     "http://sso.chehejia.com/manage",
-    "http://sso.chehejia.com/sys"
+    "http://sso.chehejia.com/sys",
+    "https://saos-mall-admin-ui.chehejia.com/api",
+    "https://saos-mall-admin-ui.chehejia.com/api/v1",
+    "https://saos-mall-admin-ui.chehejia.com/api/v2",
+    "https://saos-mall-admin-ui.chehejia.com/api/v3",
+    "https://saos-mall-admin-ui.chehejia.com/crm",
+    "https://saos-mall-admin-ui.chehejia.com/dwr",
+    "https://saos-mall-admin-ui.chehejia.com/erp",
+    "https://saos-mall-admin-ui.chehejia.com/gateway",
+    "https://saos-mall-admin-ui.chehejia.com/manage",
+    "https://saos-mall-admin-ui.chehejia.com/sys"
   ],
   "framework_patterns": {
     "JeecgBoot": [

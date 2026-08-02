@@ -916,18 +916,53 @@ ${targets.slice(0, 20).map(function(t) { return '  ' + t }).join(String.fromChar
 
     // 对每个目标执行 smart_fuzz.py（VPN）
     const fuzz_targets_zc = targets.slice(0, 15)
+    const FUZZ_SCHEMA_ZC = {
+      type: 'object',
+      properties: {
+        target: { type: 'string' },
+        total_tested: { type: 'integer' },
+        findings: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              endpoint: { type: 'string' },
+              path: { type: 'string' },
+              status_code: { type: 'integer' },
+              source: { type: 'string' },
+            },
+            required: ['endpoint', 'status_code', 'path'],
+          },
+        },
+        new_endpoints: { type: 'array', items: { type: 'string' } },
+        extracted_patterns: { type: 'object', additionalProperties: true },
+      },
+      required: ['findings', 'new_endpoints', 'total_tested'],
+    }
     for (const ft of fuzz_targets_zc) {
       const fuzz_out_zc = "/tmp/zc_smart_fuzz_" + resolvedProject.replace(/[^a-zA-Z0-9]/g,'_') + "_" + ft.replace(/[^a-zA-Z0-9]/g,'_') + ".json"
       const fuzz_cmd_zc = `python3 ${SKILL_SCRIPTS}/smart_fuzz.py "${ft}" --dict ${P2_DICT_PATH_ZC} --output ${fuzz_out_zc} --ua "${REAL_UA}" --interface tun0`
-      
+
       let fuzz_raw_zc
       try {
         fuzz_raw_zc = await agent(
-        `执行fuzz(VPN):
+        `执行 fuzz(VPN) 并返回【结构化结果】（不要输出散文总结，不要添加前言/分析/结论）。
+
+步骤（必须全部执行）:
+1. 运行命令（执行智能路径枚举）:
 ${fuzz_cmd_zc}
-echo "---RESULT_JSON---"
-cat ${fuzz_out_zc}`,
-        { label: `🤖 fuzz: ${ft}`, phase: '深度分析' }
+
+2. 运行命令（读取结果JSON全文）:
+cat ${fuzz_out_zc}
+
+3. 把结果JSON文件的内容【原样完整】结构化返回:
+- findings: 数组，逐条包含 endpoint / path / status_code / source（与JSON文件一致，不要截断）
+- new_endpoints: 数组（完整保留）
+- extracted_patterns: 对象或数组（完整保留）
+- total_tested: 整数（与JSON一致）
+
+⚠️ 若结果JSON读取失败，findings 返回空数组，不要编造数据。`,
+        { label: `🤖 fuzz: ${ft}`, phase: '深度分析', schema: FUZZ_SCHEMA_ZC }
       )
       } catch(e) {
         log(`  ⚠️ fuzz ${ft} 失败: ${e.message}`)
@@ -935,13 +970,24 @@ cat ${fuzz_out_zc}`,
       }
 
       try {
-        const jsonPart = (fuzz_raw_zc || '').split('---RESULT_JSON---').pop()
-        const fuzzData = JSON.parse(jsonPart.trim())
-        const findings = fuzzData.findings || []
+        let fuzzData = null
+        if (fuzz_raw_zc && typeof fuzz_raw_zc === 'object' && Array.isArray(fuzz_raw_zc.findings)) {
+          fuzzData = fuzz_raw_zc   // schema 强制结构化返回
+        } else {
+          // 兜底：旧文本格式解析
+          const jsonPart = (fuzz_raw_zc || '').split('---RESULT_JSON---').pop()
+          try {
+            fuzzData = JSON.parse(jsonPart.trim())
+          } catch(e_parse) {
+            const m = (fuzz_raw_zc || '').match(/\{[\s\S]*\}/)
+            fuzzData = m ? JSON.parse(m[0]) : null
+          }
+        }
+        const findings = (fuzzData && fuzzData.findings) || []
         if (!globalThis.__zc_fuzz_findings) globalThis.__zc_fuzz_findings = []
         globalThis.__zc_fuzz_findings.push(...findings.map(f => ({...f, source_target: ft})))
         if (findings.length > 0) log(`  ${ft}: 发现 ${findings.length} 个端点`)
-        if (fuzzData.extracted_patterns || (fuzzData.new_endpoints && fuzzData.new_endpoints.length > 0)) {
+        if (fuzzData && (fuzzData.extracted_patterns || (fuzzData.new_endpoints && fuzzData.new_endpoints.length > 0))) {
           await agent(
             `python3 ${SKILL_SCRIPTS}/update_dict.py ${P2_DICT_PATH_ZC} --add ${fuzz_out_zc}`,
             { label: '📚 更新字典', phase: '深度分析' }

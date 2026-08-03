@@ -1,5 +1,5 @@
 // SRC_SKILLS_V1 - 八阶段全流程 Workflow 编排
-// 使用: Workflow({scriptPath: '...', args: {company: '货讯通科技', mode: 'full'}})
+// 使用: Workflow({scriptPath: '...', args: {company: '抖音', mode: 'full'}})
 // mode: 'full' | 'phase3' (跳过资产发现和深度分析，直接挖洞) | 'phase5' (直接出报告) | 'url' (指定单个URL)
 
 export const meta = {
@@ -366,7 +366,7 @@ if (mode.startsWith('phase5')) {
   log(listing || '（无法列出）')
   log('')
   log('使用方式: 在 Workflow args 中指定 company 参数')
-  log('  例: Workflow({scriptPath: "...", args: {company: "理想汽车", mode: "full"}})')
+  log('  例: Workflow({scriptPath: "...", args: {company: "抖音", mode: "full"}})')
   throw new Error('need_company: 请指定目标公司名')
   } else {
 
@@ -1265,7 +1265,7 @@ dirsearch -u "<target_url>" \
                 status_code: { type: 'number' },
                 source: { type: 'string', enum: ['dirsearch内置', '积累字典', '混合', '通用路径'] },
                 response_preview: { type: 'string', description: '响应体前100字符' },
-                severity: { type: 'string', enum: ['高危', '中危', '低危', '信息'] },
+                severity: { type: 'string', enum: ['重大', '严重', '高危', '中危', '低危'] },
               },
               required: ['target', 'endpoint', 'status_code', 'source'],
             },
@@ -2267,7 +2267,7 @@ if (progress.findings_count === 0) {
 1. 只对【确认有效】的漏洞写报告，不要虚构
 2. 同类漏洞合并为一个综合报告
 3. 文件名以中文开头：{严重等级}_{漏洞类型}_{公司简称}_{简述}.md
-   例：高危_信息泄露_货讯通_DWR接口.md
+   例：高危_信息泄露_抖音_未授权接口.md
 4. 默认过滤规则（可被 user_request 覆盖）：
    - **低危漏洞默认不生成报告**（除非用户明确要求包含低危）
    - **CORS同源配置缺陷默认不生成报告**（CORS Access-Control-Allow-Origin: * 或任意源反射，除非用户明确要求）
@@ -2294,7 +2294,7 @@ ${existingReports}` : ''}
           items: {
             type: 'object',
             properties: {
-              file_name: { type: 'string', description: '文件名，如 高危_信息泄露_浙旅院_XXX.md' },
+              file_name: { type: 'string', description: '文件名，如 高危_信息泄露_飞书_XXX.md' },
               severity: { type: 'string', enum: ['重大', '严重', '高危', '中危', '低危'] },
               title: { type: 'string', description: '报告标题' },
               finding_indices: { type: 'array', items: { type: 'number' }, description: '该报告包含哪些发现的索引（从0开始，对应allFindingsData数组）' },
@@ -2426,10 +2426,9 @@ if (progress.reports_count === 0) {
    — 包含严重等级判定参考表
    — 包含 401/403 处理规则
 
-2.  ${BSRC_BASE}/${companyName}/VulnType.html
-   — 如果不存在则读取 ${BSRC_BASE}/${companyName}/*_Information.html
-   — 如果都不存在，读取 references/vulntype-matrix.md 中该厂商的条目
-   — 提取接受的漏洞类型和忽略清单
+2.  ${BSRC_RULES_MD}（ByteSRC安全报告处置规则V6.0）
+   — 如存在 HTML 则同时读取 ${BSRC_RULES_HTML}
+   — 提取: 业务系数表（高/中/低系数类业务域）、六等级定义（重大/严重/高危/中危/低危/忽略）、收录范围与忽略清单、测试规则红线
 
 输出读取结果摘要。`,
     { label: '📖 读取判定规则 + VulnType', phase: '自审' }

@@ -25,7 +25,7 @@ description: >
 
 # ByteSRC 专属SRC漏洞挖掘技能
 
-**注意：挖掘过程不能实行删除、修改、覆盖操作，仅可根据说明此功能存在。** 不可仅说，需实际达。
+**注意：挖掘过程不能实行删除、修改、覆盖操作，仅可说明有此功能存在。**
 
 > **ByteSRC 测试红线（必须遵守，违反将被取消奖励/封号）：**
 > 1. 仅允许**手工测试**，禁止用扫描器或其他自动化工具、禁止产生大量数据流量
@@ -48,7 +48,7 @@ BSRC_SKILLS_V1/
 │   ├── enumerate_chunks.py     # Webpack chunk枚举补下载
 │   ├── extract_creds.py        # 从JS提取鉴权凭证
 │   ├── find_js_dumps.py        # 查找JS缓存/还原目录
-│   ├── smart_fuzz.py           # 智能化解析接口
+│   ├── smart_fuzz.py           # 基于系统特征的智能路径枚举
 │   ├── merge_assets.py         # 程序化合并asset文件
 │   ├── update_dict.py          # 更新API模式字典(LRU裁剪)
 │   ├── generate_html.py        # MD→HTML 批量转换
@@ -88,7 +88,7 @@ python3 -c "import requests, bs4, lxml" 2>/dev/null || echo "pip install request
 ```
 阶段1: 资产发现与目标识别  →  目标清单 + 范围确认（对照ByteSRC业务系数表）
 阶段2: 深度分析           →  隐藏端点 + 开源系统识别 + 攻击面清单
-阶段3: 漏洞挖掘           →  原始发现列表 + 本地获取分叉实现 + 源码审计发现
+阶段3: 漏洞挖掘           →  原始发现列表 + 本地部署实现 + 源码审计发现
 阶段4: 验证与证据         →  可复现POC/EXP（真实数据≤5组）
 阶段5: 资产标记           →  已测资产状态存储（避免重复测试）
 阶段6: 报告编写           →  .md + .html 双格式报告
@@ -119,7 +119,7 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
 
 **JS源码本地审计**（下载到本地→再审计，靠近F12完整度）：
 1. **下载JS到本地**：`curl -s` 获取HTML → 提取 `<script src>` → `curl -s -o` 逐个下载到 `js_dumps/<target>/`
-2. **Source Map 还原源码**：下载 `.js.map` → `python3` 解析 `sourcesContent` 字段 → 写出原始源码 → 对未混淆的源码做有RCE/路由/鉴权审计
+2. **Source Map 还原源码**：下载 `.js.map` → `python3` 解析 `sourcesContent` 字段 → 写出原始源码 → 对未混淆的源码做API/路由/鉴权审计
 3. **敏感信息提取**：`grep -ohP` 提取 AccessKey/SecretKey/JWT/数据库连接串/内网IP/硬编码凭证
 4. **路径模式提取**：`grep -ohP` 提取所有 `"/xxx/yyy"` 路径，按一级目录分组统计
 5. **Webpack chunk 枚举**：提取 `chunk-`、`assets/`、`_nuxt/` 等引用 → 补下载lazy JS
@@ -131,7 +131,7 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
 
 **【开源系统识别】**（字节业务常见技术栈：自研Go/Rust高并发网关 + Vue/React前端 + 大量开源组件）：
 1. **指纹采集**：响应头、Cookie特征名、页面版权声明、静态资源路径特征
-2. **快速开发框架识别**：So（JeecgBoot / RuoYi / JeeSite / Guns / BladeX / Spring Boot Actuator / 0代码平台等）
+2. **快速开发框架识别**：JeecgBoot / RuoYi / JeeSite / Guns / BladeX / Spring Boot Actuator / 低代码平台等
 3. **自主识别（不依赖预定义）**：路径结构（/vendor/ /node_modules/ /plugins/ /install/）、响应特征（错误页泄露文件路径）、资源特征（favicon哈希/CSS类/JS全局变量）、Cookie模式（XSRF-TOKEN/laravel_session）、管理层前缀等
 4. **分析结论**：汇总线索 → `高度疑似开源系统 / 部分疑似 / 大概率自研 / 无法判断`；「疑似开源」本身值得深入
 
@@ -140,7 +140,7 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
 - 对每个组合执行 curl 探测（200/401/403 即发现）
 - **注意 ByteSRC 红线：使用轻量 curl 探测而非 dirsearch 全量爆破，避免大流量**
 
-**API模式本积累：**
+**API模式字典积累：**
 - 每次运行后自动追加新发现的API前缀/路径段/端点到 `api_patterns.json`（跨SRC积累，越用越准）
 
 详细命令 → `references/phase-cmd-reference.md#阶段2-js逆向命令`
@@ -149,7 +149,7 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
 
 ## 阶段3：漏洞挖掘
 
-以**反射为主、跃迁为辅、分析为底、扩展为路**的原则执行。详细方法论（含思维模型、第一性原理、扩散链示例） → `references/deep-mining-methodology.md`
+以**反思为主、迁跃为辅、分析为底、扩展为路**的原则执行。详细方法论（含思维模型、第一性原理、扩散链示例） → `references/deep-mining-methodology.md`
 
 | 类型 | 测试要点 |
 |------|---------|
@@ -161,8 +161,8 @@ Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}
 | SSRF | URL参数 → 内网地址 + 云元数据；**回显即止，禁止深入内网** |
 | 逻辑漏洞 | 金额修改/优惠券叠加/流程绕过/支付绕过（抖音支付/月付/放心借等财经业务重点） |
 | 弱口令 | 通用字典 + JS发现的默认凭证（仅少量尝试） |
-| **本地获取实现** | 对已识别的开源框架下载对应版本源码 → Docker/本地复原 → 验证默认口令/触发条件/绕过 → 将本地POC适配迁移到目标验证差异 |
-| **源码审计** | ①**权限审计** — 过滤链 `/anon` 端点遗漏、`@RequiresPermissions`/`@PreAuthorize` 注解缺失、无Token可调用接口、Swagger设备一一测鉴权 ②**控制审计** — 上传后缀绕过/下载路径穿越/命令执行函数可控/HTTP请求拼接（尤其orderBy）/反序列化/MIME/模板注入/XXE。③**零凭据获取Token路径** — 无认证仅IP白名单/仅Referer/时间戳签名；硬编码 adminKey/secret 派生Token；密码重置验证码/OAuth回调逻辑缺陷 |
+| **本地部署实现** | 对已识别的开源框架下载对应版本源码 → Docker/本地搭建复现 → 验证默认口令/触发条件/绕过 → 将本地POC适配迁移到目标验证差异 |
+| **源码审计** | ①**权限审计** — 过滤链 `/anon` 端点遗漏、`@RequiresPermissions`/`@PreAuthorize` 注解缺失、无Token可调用接口、Swagger暴露接口逐一测试鉴权 ②**控制审计** — 上传后缀绕过/下载路径穿越/命令执行函数可控/SQL参数拼接（尤其orderBy）/反序列化/MIME/模板注入/XXE。③**零凭据获取Token路径** — 无认证仅IP白名单/仅Referer/时间戳签名；硬编码 adminKey/secret 派生Token；密码重置验证码/OAuth回调逻辑缺陷 |
 
 **ByteSRC 高价值方向（高系数资产优先）：**
 - 抖音：账号接管、无交互获取用户手机号/身份证、内容/订单越权
@@ -227,7 +227,7 @@ Phase 5 同时将发现写回 `asset_findings.json`（title/type/severity/target
 |------|------|---------|
 | HTTP探活 | `http_probe` | curl 返回 HTTP 响应 |
 | 未授权测试 | `unauth_test` | 无 Cookie/Token 探测至少 5 个API路径 |
-| 路径枚举 | `dir_enuber` | 基于框架特征+JS路径泛化fuzz |
+| 智能路径枚举 | `dir_enum` | 基于框架特征+JS路径泛化fuzz |
 | 组件审计 | `component_audit` | 指纹识别 + 源码审计 |
 | JS/API分析 | `js_analysis` | JS 下载到本地后审计（含Source Map还原） |
 | 逻辑测试 | `logic_test` | 支付/流程/越权逻辑验证 |

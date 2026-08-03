@@ -379,33 +379,39 @@ p1_assets = await agent(
 
   请依次执行:
 
-  1. 读取厂商信息
-     - 目录: ${BSRC_BASE}/${companyName}/
-     - 查找并读取 *_Information.html（提取SRC范围、赏金规则、域名列表、禁止事项）
-     - 查找并读取 VulnType.html（提取接受的漏洞类型和忽略清单）
+  1. 读取 ByteSRC 统一规则（重要 — 决定收录范围/业务系数/等级/忽略清单）
+     目标业务线: ${companyName}
+     - 用 Read 读取 ${BSRC_RULES_MD}（如 HTML 在则读取 ${BSRC_RULES_HTML}）
+     - 提取要点:
+       · 业务系数表（高系数类/中系数类/低系数类业务域清单 — 判目标是否收录 & 计分档位）
+       · 六等级定义（重大/严重/高危/中危/低危/忽略）与各等级判定标准
+       · 收录范围与忽略清单（非中国区业务、第三方供应商、用户名遍历/SPF/Self-XSS/简单DNS SSRF 不收等）
+       · 测试规则红线（仅手工测试禁扫描器/禁DoS/禁内网渗透/越权读取≤5组/重要敏感操作先报备/AK·SK 直接提交平台不深入验证）
+     - 业务线数据目录: ${BSRC_BASE}/${companyName}/
 
   2. 解析Hunter资产数据
      - 目录: ${BSRC_BASE}/${companyName}/hunter_info/
      - 读取所有CSV文件，CSV格式: IP,端口,域名,IP标签,url,网站标题,高危协议,协议,通讯协议,网站状态码,操作系统,备案单位,备案号,备案异常,国家,省份,市区,Web资产,运营商,注册机构,应用/组件,资产标签,探查时间
      - 按以下维度给资产打标签:
-       · [范围内] — 域名在 Information.html 收录范围内
+       · [范围内] — 域名或产品归属 ByteSRC 规则业务系数表声明的字节跳动（中国区）业务
        · [新发现] — Hunter发现但不在已知列表的子域名
        · [非常见端口] — 非80/443
        · [管理后台] — 标题含"登录/管理/后台/admin/dashboard/运维/控制台"
        · [组件指纹] — 应用/组件列识别到具体版本
        · [境外资产] — 备案异常/境外IP/无备案号
-     - 同一域名多端口做URL聚合去重
+     - 同一域名多域名做URL聚合去重
 
-  3. **严格域名合法性过滤（必须执行，不可跳过）**
-     ⚠️ 只保留**主域后缀在 Information.html 定义的 SRC 范围内**的资产。参考示例：
-       合法主域: *.lixiang.com / *.chehejia.com / *.lixiangoa.com
+  3. **严格域名合法性过滤（必须执行，不可省略）**
+     ⚠️ 只保留**归属 ByteSRC 规则业务系数表声明的字节跳动（中国区）业务域**的资产。参考示例：
+       合法主域: douyin.com / jinritemai.com / ixigua.com / toutiao.com / bytedance.com / feishu.cn / larkoffice.com / volcengine.com / coze.cn / oceanengine.com / trae.cn / dongchedi.com / fanqienovel.com / jianying.com / aigc_*.com 及规则文档业务系数表中列出的其它业务域
        非法示例（必须全部剔除）:
-       - 第三方镜像/代理: *.xxx.domain.name, *.xxx.internet.com, *.xxx.com.com, *.xxx.itotolink.com, *.xxx.783.com, *.xxx.ht.com
-       - CDN/云代理: *.xxx.baidu-itm.com, *.xxx.hz.ali.com, *.xxx.www.router.cmiot.cn, *.xxx.www.xshotel.com
-       - 仿冒/抢注域名: ah-lixiang.com, gz-lixiang.com.cn, lixiang.com.cn, cn-lixiang.com, lixiang.com.uz, *.khcc.site, *.ixem.ru
-       - 扫描陷阱/蜜罐: www_lixiang_com.*（下划线格式域名）, lixiang_com_cn.*
-       - 其它公司域名: *.wucai.com, *.chehejia.com.cn, *.gxjmxy.com, *.gfxy.com, *.anti-spam.org.cn
-     - 过滤方法: 取 url 的域名，提取最后两级主域（如 lixiang.com, baidu-itm.com），不在 Information.html 声明的 SRC 主域内的全部剔除
+       - 第三方供应商/外包/ISV: *.xxx-tmall.com, *.xxx-jd.com, 电商ISV接入方, 第三方维护的小程序/API站点
+       - CDN/云代理/域名代理: *.xxx.cdn.myhuaweicloud.com, *.xxx.aliyuncs.com, *.xxx.volccdn.com（非字节自有业务）、域名代解析/中转
+       - 仿冒/抢注域名: 含 bytedance/douyin 字样的仿冒域（如 bytedance.com.evil.cn）
+       - 扫描陷阱/蜜罐: 下划线格式域名 *.xxx_xxx.* 、蜜罐特征域名
+       - 其它公司域名: 备案单位为其他主体的域名
+       - 非中区产品（属字节但为海外/BytePlus 外部客户域）: 未在业务系数表中的 bytedance 海外业务、火山引擎/BytePlus 外部客户域
+     - 过滤方法: 取资产 url 域名，判定其归属字节跳动（中国区）业务而非第三方/外部客户；不在 ByteSRC 业务系数表范围内的全部剔除
      - 结合备案单位（"备案单位"列）交叉验证：备案单位为其他公司的资产剔除
      - 有疑问的资产标记到 reason 字段中说明判断依据
 

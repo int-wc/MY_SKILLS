@@ -4,7 +4,7 @@
 从鹰图(Hunter) API 查询目标公司的 Web 资产并保存为 CSV。
 
 依赖: pip install requests
-使用: HUNTER_API_KEY=xxx python3 scripts/fetch_hunter.py "理想汽车"
+使用: HUNTER_API_KEY=xxx python3 scripts/fetch_hunter.py "抖音"
 """
 import argparse, csv, os, sys, time
 from datetime import datetime

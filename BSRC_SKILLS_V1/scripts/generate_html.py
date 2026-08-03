@@ -10,7 +10,7 @@ import markdown
 import re
 from pathlib import Path
 
-DEFAULT_BASE_DIR = "/home/my/butiansrc/Exclusive_SRC"
+DEFAULT_BASE_DIR = "/home/my/SRC/BSRC"
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>

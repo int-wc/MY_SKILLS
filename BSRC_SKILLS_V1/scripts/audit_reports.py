@@ -7,7 +7,7 @@ import os
 import re
 import json
 
-BASE_DIR = "/home/my/butiansrc/Exclusive_SRC"
+BASE_DIR = "/home/my/SRC/BSRC"
 
 # VulnType requirements for each company
 VULN_TYPES = {

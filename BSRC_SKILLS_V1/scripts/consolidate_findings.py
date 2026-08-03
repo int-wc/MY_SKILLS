@@ -10,7 +10,7 @@ import re
 import shutil
 from datetime import datetime
 
-BASE_DIR = "/home/my/butiansrc/Exclusive_SRC"
+BASE_DIR = "/home/my/SRC/BSRC"
 
 # Reports flagged as invalid by agents - update this as agents complete
 INVALID_REPORTS = {

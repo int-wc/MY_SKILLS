@@ -1495,7 +1495,7 @@ Phase 2 的 JS 分析已经提取了每个 API 端点的调用现场参数结构
               properties: {
                 title: { type: 'string' },
                 type: { type: 'string' },
-                severity: { type: 'string', enum: ['严重', '高危', '中危', '低危', '信息'] },
+                severity: { type: 'string', enum: ['重大', '严重', '高危', '中危', '低危'] },
                 business_attr: { type: 'string', description: '本质业务原语: read_file/write_file/exec_code/modify_state/query_data/transfer/auth' },
                 target: { type: 'string' },
                 endpoint: { type: 'string' },
@@ -1673,7 +1673,7 @@ ${_t2urls}\t第2阶段提取的结构化凭证:
                 properties: {
                   title: { type: 'string' },
                   type: { type: 'string' },
-                  severity: { type: 'string', enum: ['严重', '高危', '中危', '低危', '信息'] },
+                  severity: { type: 'string', enum: ['重大', '严重', '高危', '中危', '低危'] },
                   target: { type: 'string' },
                   endpoint: { type: 'string' },
                   description: { type: 'string' },
@@ -1876,7 +1876,7 @@ JSON → Form-URLEncoded（参数解析差异）
               properties: {
                 title: { type: 'string' },
                 type: { type: 'string' },
-                severity: { type: 'string', enum: ['严重', '高危', '中危', '低危', '信息'] },
+                severity: { type: 'string', enum: ['重大', '严重', '高危', '中危', '低危'] },
                 target: { type: 'string' },
                 endpoint: { type: 'string' },
                 http_status: { type: 'number', description: 'curl测试返回的HTTP状态码' },
@@ -1906,7 +1906,7 @@ JSON → Form-URLEncoded（参数解析差异）
               properties: {
                 title: { type: 'string' },
                 type: { type: 'string' },
-                severity: { type: 'string', enum: ['严重', '高危', '中危', '低危', '信息'] },
+                severity: { type: 'string', enum: ['重大', '严重', '高危', '中危', '低危'] },
                 target: { type: 'string' },
                 endpoint: { type: 'string' },
                 http_status: { type: 'number' },
@@ -2295,7 +2295,7 @@ ${existingReports}` : ''}
             type: 'object',
             properties: {
               file_name: { type: 'string', description: '文件名，如 高危_信息泄露_浙旅院_XXX.md' },
-              severity: { type: 'string', enum: ['严重', '高危', '中危', '低危', '信息'] },
+              severity: { type: 'string', enum: ['重大', '严重', '高危', '中危', '低危'] },
               title: { type: 'string', description: '报告标题' },
               finding_indices: { type: 'array', items: { type: 'number' }, description: '该报告包含哪些发现的索引（从0开始，对应allFindingsData数组）' },
             },
@@ -2314,7 +2314,7 @@ ${existingReports}` : ''}
     progress.reports_count = p5_plan.reports.length
 
     // 按严重等级分批注入，让writer知道上下文
-    const severityOrder = { '严重': 0, '高危': 1, '中危': 2, '低危': 3, '信息': 4 }
+    const severityOrder = { '重大': 0, '严重': 1, '高危': 2, '中危': 3, '低危': 4 }
 
     const writeResults = []
     const _REPORT_BATCH = 2
@@ -2443,7 +2443,7 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
 ======================================================
 
 报告目录: ${BSRC_BASE}/${companyName}/submittable_reports/
-先用 ReadFile 读取完整的 judgment-rules.md 和 VulnType.html
+先用 ReadFile 读取完整的 judgment-rules.md 和 ${BSRC_RULES_MD}（ByteSRC规则）
 运行审计脚本检查格式: python3 ${SKILL_SCRIPTS}/audit_reports.py 2>&1 | tail -30
 
 你的任务 — 对每份报告逐项判定：
@@ -2455,15 +2455,19 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
 - 敏感数据已脱敏
 
 ### 2. 等级准确性判定
-对照 judgment-rules.md 的等级判定表:
-- 报告标注的严重等级是否与发现的实际危害匹配？
-- 是否过高/过低？
+对照 ByteSRC 六级体系（重大/严重/高危/中危/低危/忽略）+ judgment-rules.md 的等级判定表:
+- 报告标注的等级是否与发现的实际危害匹配？
+- 是否过高/过低？（自评虚高会被扣分，须客观）
+- 业务系数档位（高/中/低系数类业务）是否判定准确？
 
-### 3. 厂商接受度判定
-对照厂商 VulnType:
-- 漏洞类型是否在厂商接受范围内？
-- 是否在忽略清单中？
-- 如短信轰炸/Self-XSS/Swagger不可利用/HTTP头配置等
+### 3. ByteSRC 收录范围与接受度判定
+对照 ByteSRC V6.0 业务系数表与忽略清单:
+- 漏洞是否落在字节跳动（中国区）业务收录范围内？（是否非中区业务/第三方供应商/外包/ISV/电商ISV等）
+- 业务系数档位（高/中/低系数）判定是否正确？（影响赏金）
+- 是否在忽略清单中? 重点核对下列不收项:
+  用户名遍历 / SPF邮件伪造 / Self-XSS / 简单DNS日志型SSRF / 恶作剧CSRF / 无法影响他人的本地DoS /
+  与模型提示和响应内容相关的问题 / 非信息安全的内容安全风险 / 隐私合规类问题 / 火山引擎·BytePlus外部客户 /
+  纯理论未验证(如仅dnslog的log4j2) / 无法稳定复现(应降级) / 电商子主账号越权 / 内部已知或专项在排查中
 
 ### 4. 重复检测（重要 — 提交前必须检查）
 比较所有报告之间的端点重叠情况:
@@ -2474,7 +2478,7 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
 ### 5. 最终判定 (F/R/T)
 - **F (不符)** — 资产不符/无复现细节/漏洞不成立/明确不收 → 移入 _invalid/
 - **R (保留)** — 非敏感泄露/利用门槛高/暴露未深入 → 需进一步观察
-- **T (属实)** — 可提交补天
+- **T (属实)** — 可提交 ByteSRC
 
 输出JSON格式，每份报告一个判定结果。`,
     { label: '🔍 最终判定 (F/R/T)', schema: {
@@ -2564,9 +2568,9 @@ const p7_final = await agent(
    ls "${BSRC_BASE}/${companyName}/submittable_reports/reports_html/"*.html
    确认每份.md都有对应的.html
 
-5. 厂商合规检查:
-   Read ${BSRC_BASE}/${companyName}/VulnType.html 或 ${BSRC_BASE}/${companyName}/*_Information.html
-   确认漏洞类型在厂商接受范围内 + 不在忽略清单中
+5. ByteSRC 合规检查:
+   Read ${BSRC_RULES_MD}（ByteSRC安全报告处置规则V6.0）
+   确认漏洞在字节跳动（中国区）业务收录范围内 + 业务系数档位判定正确 + 不在忽略清单中（重点核对用户名遍历/SPF/Self-XSS/简单DNS SSRF/模型提示相关/隐私合规等不收项）
 
 6. 敏感数据脱敏确认:
    对每份报告Read内容，检查是否包含未脱敏的:
@@ -2576,7 +2580,7 @@ const p7_final = await agent(
 
 **输出要求：**
 - 列出每份报告及其6项检查结果（✅/❌）
-- 按 严重→高危→中危→低危 排序
+- 按 重大→严重→高危→中危→低危 排序
 - 给出最终提交建议`,
   { label: '✅ 最终检查', phase: '提交准备' }
 )

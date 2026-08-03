@@ -21,6 +21,8 @@ export const meta = {
 // 解析参数
 // ============================================================
 const BSRC_BASE = '/home/my/SRC/BSRC'
+const BSRC_RULES_MD = '/home/my/SRC/BSRC/markdown/ByteSRC安全报告处置规则V6.0.md'
+const BSRC_RULES_HTML = '/home/my/SRC/BSRC/html/ByteSRC安全报告处置规则V6.0.html'
 
 // P2: 共享字典 — SRC↔ZC 互相复制积累的API模式
 try {
@@ -2511,7 +2513,7 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
         `执行以下命令处理F判定的报告（${fCount} 份）:
 
 1. 将以下报告移入 _invalid/ 目录:
-${fNames.map(function(n) { return '   mv "' + BBSRC_BASE + '/' + companyName + '/submittable_reports/' + n + '" "' + BBSRC_BASE + '/' + companyName + '/submittable_reports/_invalid/' + n + '"' }).join('\\n')}
+${fNames.map(function(n) { return '   mv "' + BSRC_BASE + '/' + companyName + '/submittable_reports/' + n + '" "' + BSRC_BASE + '/' + companyName + '/submittable_reports/_invalid/' + n + '"' }).join('\\n')}
 
 2. 运行整合脚本:
    python3 ${SKILL_SCRIPTS}/consolidate_findings.py ${BSRC_BASE}/${companyName}/submittable_reports/

@@ -96,7 +96,7 @@ const vulnTypes = {
   "北京地平线信息科技": "严重(核心权限/10W+信息泄露/支付) 高危(系统权限/1W+信息/逻辑/存储XSS/弱口令/越权) 中危(存储XSS/越权/弱口令/SSRF/信息泄露) 低危(SQL注入/逻辑缺陷) 忽略(反射XSS/Self-XSS)",
   "北京金山云网络技术有限公司": "严重(RCE/严重信息泄露3字段/核心逻辑) 高危(逻辑/代码执行/SQL注入/SSRF/越权) 中危(CSRF/存储XSS/弱口令/信息泄露) 低危(反射XSS/短信轰炸/URL跳转)",
   "杭州恒业网络": "高危(RCE/WebShell/严重信息泄露/SQL注入/越权) 中危(信息泄露/CSRF/存储XSS/弱口令) 低危(轻微信息泄露/短信轰炸/URL跳转) 不接收(所有XSS)",
-  "货讯通科技": "高危(RCE/WebShell/信息泄露/SQL注入/逻辑/越权) 中危(信息泄露/CSRF/存储XSS/弱口令) 低危(轻微信息泄露/反射XSS/短信轰炸/URL跳转)",
+  "抖音": "高危(RCE/WebShell/信息泄露/SQL注入/逻辑/越权) 中危(信息泄露/CSRF/存储XSS/弱口令) 低危(轻微信息泄露/反射XSS/短信轰炸/URL跳转)",
   "乐信": "超危(大量信息泄露/批量盗账户/SQL注入) 高危(金钱逻辑/支付/越权/存储XSS) 中低危(存储XSS/越权/信息泄露) 忽略(无敏感CSRF/SSRF/内网IP)",
   "飞书": "严重(核心权限/10W+信息泄露/支付) 高危(逻辑/存储XSS/弱口令/10W+信息/越权) 中危(500-10W/存储XSS/文件包含/SSRF) 低危(少量信息泄露) 忽略(短信轰炸/Self-XSS/大模型)",
   "上海亘岩网络科技有限公司": "高危(RCE/WebShell/信息泄露/SQL注入/越权) 中危(信息泄露/CSRF/存储XSS/逻辑缺陷) 低危(轻微信息泄露/反射XSS/短信轰炸/URL跳转)",
@@ -124,7 +124,7 @@ function loadData() {
   const companyList = [
     { name: "追觅", dir: "追觅", valid: 20, removed: 0 },
     { name: "安徽省刀锋网络科技有限公司", dir: "安徽省刀锋网络科技有限公司", valid: 18, removed: 1 },
-    { name: "货讯通科技", dir: "货讯通科技", valid: 18, removed: 2 },
+    { name: "抖音", dir: "抖音", valid: 18, removed: 2 },
     { name: "北京金山云网络技术有限公司", dir: "北京金山云网络技术有限公司", valid: 16, removed: 0 },
     { name: "上海亘岩网络科技有限公司", dir: "上海亘岩网络科技有限公司", valid: 13, removed: 1 },
     { name: "乐信", dir: "乐信", valid: 12, removed: 1 },
@@ -179,7 +179,7 @@ function loadData() {
       "刀锋网络_zhwclient_vip客户端API网关未授权访问与路由泄露",
       "整体安全态势总结报告"
     ],
-    "货讯通科技": [
+    "抖音": [
       "高危_越权访问_薪酬系统API端点非授权访问",
       "高危_越权访问_OOCLDigital系统SpringBootActuator暴露",
       "高危_重要信息泄露_KeycloakOIDC认证服务器配置泄露",
@@ -197,7 +197,7 @@ function loadData() {
       "低危_轻微信息泄露_DigitalFlowUATEIR系统暴露",
       "低危_轻微信息泄露_OCC隐藏API与密码重置无频率限制",
       "低危_轻微信息泄露_TMSPreprod环境暴露",
-      "货讯通科技_多区域F5BIGIP负载均衡器暴露与新资产测绘"
+      "抖音_多区域F5BIGIP负载均衡器暴露与新资产测绘"
     ],
     "北京金山云网络技术有限公司": [
       "高危_严重级别的敏感信息泄露_金山云_Nexus仓库深度利用与制品分析",
@@ -310,7 +310,7 @@ function loadData() {
   const removedReports = {
     "安徽省刀锋网络科技有限公司": ["中危_普通信息泄露_V2Board节点面板暴露"],
     "北京地平线信息科技": ["中危-一定程度的信息泄露_call-center-test-spring-boot-actuator-swagger-druid暴露"],
-    "货讯通科技": ["中危_普通信息泄露_ESG系统SpringBootActuator暴露", "中危_普通信息泄露_ShuttleBusQAActuator未授权访问"],
+    "抖音": ["中危_普通信息泄露_ESG系统SpringBootActuator暴露", "中危_普通信息泄露_ShuttleBusQAActuator未授权访问"],
     "乐信": ["中低危_比较严重信息泄漏_鼎盛CRM系统Actuator未授权访问"],
     "上海亘岩网络科技有限公司": ["中危-普通的信息泄露_2-Verify-Express-Path-Disclosure"],
     "台州市数据局": ["中危-普通的信息泄露_漏洞报告_网上信访系统SpringBootActuator未授权访问"],

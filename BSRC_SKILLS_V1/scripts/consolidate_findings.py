@@ -32,7 +32,7 @@ INVALID_REPORTS = {
     "上海亘岩网络科技有限公司": [
         "中危-普通的信息泄露_2-Verify-Express-Path-Disclosure.md"
     ],
-    "货讯通科技": [
+    "抖音": [
         "中危_普通信息泄露_ESG系统SpringBootActuator暴露.md",
         "中危_普通信息泄露_ShuttleBusQAActuator未授权访问.md"
     ]

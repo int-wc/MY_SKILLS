@@ -2417,7 +2417,7 @@ if (progress.reports_count === 0) {
   markPhase(7, '🔄')
   log('[7/8] 报告自审')
 
-  // 读取判定规则和厂商VulnType
+  // 读取判定规则和 ByteSRC 统一规则
   const p6_rules = await agent(
     `读取以下两个文件的内容（用Read工具）:
 

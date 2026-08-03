@@ -4,7 +4,7 @@
 
 export const meta = {
   name: 'bsrc-full-scan',
-  description: '字节跳动(SRC).   全流程：资产发现→深度分析→漏洞挖掘→验证→资产标记→报告→自审→提交',
+  description: '字节跳动ByteSRC全流程：资产发现→深度分析→漏洞挖掘→验证→资产标记→报告→自审→提交',
   phases: [
     { title: '资产发现', detail: '读取厂商信息 + 解析Hunter资产 + 目标分类标记' },
     { title: '深度分析', detail: 'JS逆向 + API枚举 + 组件审计 + 开源系统识别' },
@@ -27,7 +27,8 @@ try {
   const fs = require('fs')
   const skillsRoot = '/home/my/.claude/skills'
   const pairs = [
-    ['SRC_SKILLS_V1', 'ZC_SKILLS_V1'],
+    ['SRC_SKILLS_V1', 'BSRC_SKILLS_V1'],
+    ['BSRC_SKILLS_V1', 'SRC_SKILLS_V1'],
     ['ZC_SKILLS_V1', 'SRC_SKILLS_V1'],
   ]
   for (const [from, to] of pairs) {

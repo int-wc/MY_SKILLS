@@ -3,8 +3,8 @@
 // mode: 'full' | 'phase3' (跳过资产发现和深度分析，直接挖洞) | 'phase5' (直接出报告) | 'url' (指定单个URL)
 
 export const meta = {
-  name: 'src-full-scan',
-  description: '补天SRC全流程：资产发现→深度分析→漏洞挖掘→验证→资产标记→报告→自审→提交',
+  name: 'bsrc-full-scan',
+  description: '字节跳动(SRC).   全流程：资产发现→深度分析→漏洞挖掘→验证→资产标记→报告→自审→提交',
   phases: [
     { title: '资产发现', detail: '读取厂商信息 + 解析Hunter资产 + 目标分类标记' },
     { title: '深度分析', detail: 'JS逆向 + API枚举 + 组件审计 + 开源系统识别' },
@@ -20,7 +20,7 @@ export const meta = {
 // ============================================================
 // 解析参数
 // ============================================================
-const SRC_BASE = '/home/my/butiansrc/Exclusive_SRC'
+const BSRC_BASE = '/home/my/SRC/BSRC'
 
 // P2: 共享字典 — SRC↔ZC 互相复制积累的API模式
 try {
@@ -39,7 +39,7 @@ try {
     }
   }
 } catch(e) { /* 字典共享非关键，失败不影响主流程 */ }
-const SKILL_SCRIPTS = '/home/my/.claude/skills/SRC_SKILLS_V1/scripts'
+const SKILL_SCRIPTS = '/home/my/.claude/skills/BSRC_SKILLS_V1/scripts'
 
 // ============================================================
 // 真实 User-Agent 配置 — 所有 curl 请求使用浏览器UA
@@ -191,8 +191,8 @@ function markPhase(n, status) {
 // ============================================================
 // 资产测试状态加载（避免重复测试）
 // ============================================================
-const trackerPath = `${SRC_BASE}/${companyName || 'unknown'}/asset_test_status.json`
-const findingsPath = `${SRC_BASE}/${companyName || 'unknown'}/asset_findings.json`
+const trackerPath = `${BSRC_BASE}/${companyName || 'unknown'}/asset_test_status.json`
+const findingsPath = `${BSRC_BASE}/${companyName || 'unknown'}/asset_findings.json`
 let p0_tracker = null
 
 if (companyName && !mode.startsWith('phase5')) {
@@ -355,7 +355,7 @@ if (mode.startsWith('phase5')) {
 } else if (!companyName) {
   // 无参数：列出公司并退出
   const listing = await agent(
-    `列出 ${SRC_BASE}/ 目录下的所有公司目录（排除 .html/.json/.js 文件和隐藏目录），
+    `列出 ${BSRC_BASE}/ 目录下的所有公司目录（排除 .html/.json/.js 文件和隐藏目录），
     输出格式为每行一个 "N. 公司名"，最后统计总数。`,
     { label: '📋 列出可用厂商', phase: '资产发现' }
   )
@@ -377,12 +377,12 @@ p1_assets = await agent(
   请依次执行:
 
   1. 读取厂商信息
-     - 目录: ${SRC_BASE}/${companyName}/
+     - 目录: ${BSRC_BASE}/${companyName}/
      - 查找并读取 *_Information.html（提取SRC范围、赏金规则、域名列表、禁止事项）
      - 查找并读取 VulnType.html（提取接受的漏洞类型和忽略清单）
 
   2. 解析Hunter资产数据
-     - 目录: ${SRC_BASE}/${companyName}/hunter_info/
+     - 目录: ${BSRC_BASE}/${companyName}/hunter_info/
      - 读取所有CSV文件，CSV格式: IP,端口,域名,IP标签,url,网站标题,高危协议,协议,通讯协议,网站状态码,操作系统,备案单位,备案号,备案异常,国家,省份,市区,Web资产,运营商,注册机构,应用/组件,资产标签,探查时间
      - 按以下维度给资产打标签:
        · [范围内] — 域名在 Information.html 收录范围内
@@ -581,7 +581,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
         // === Step A+B+Creds: 合并机械操作（含自动重试） ===
         // 失败自动重试1次
         // 声明在for循环外部（let块作用域：内部声明外部不可访问）
-        let dl_dump_dir = "${SRC_BASE}/${companyName}/js_dumps"
+        let dl_dump_dir = "${BSRC_BASE}/${companyName}/js_dumps"
         let dl_file_count = 0
         let target_hash = ""
 
@@ -589,7 +589,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
           var mechResult = await agent(
           `执行以下命令串行:
 # 1. 下载JS
-python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/js_dumps" --ua "${REAL_UA}"
+python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${BSRC_BASE}/${companyName}/js_dumps" --ua "${REAL_UA}"
 # 2. 枚举chunk补下
 python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "<从下载结果提取的dump_dir>" "${target}" --ua "${REAL_UA}"
 # 3. 提取凭证
@@ -748,7 +748,7 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     // Fix A+C: 提取鉴权凭证(结构化) + JS缓存目录捕获 → 供Phase3使用
     // ============================================================
     log('  🔐 提取JS中的鉴权凭证...')
-    const p2_js_dump_base = "${SRC_BASE}/${companyName}/js_dumps"
+    const p2_js_dump_base = "${BSRC_BASE}/${companyName}/js_dumps"
     let p2_js_dirs = []
     let p2_credentials = []
 
@@ -2203,15 +2203,15 @@ if (progress.findings_count === 0) {
   // 准备输出目录
   await agent(
     `执行以下命令创建报告输出目录:
-    mkdir -p ${SRC_BASE}/${companyName}/submittable_reports/
-    mkdir -p ${SRC_BASE}/${companyName}/submittable_reports/reports_html/
+    mkdir -p ${BSRC_BASE}/${companyName}/submittable_reports/
+    mkdir -p ${BSRC_BASE}/${companyName}/submittable_reports/reports_html/
     确认目录已创建成功。`,
     { label: '📁 准备输出目录', phase: '报告编写' }
   )
 
   // 列出已有报告避免重复
   const existingReports = await agent(
-    `列出 ${SRC_BASE}/${companyName}/submittable_reports/ 下所有 .md 文件的文件名（不含路径），
+    `列出 ${BSRC_BASE}/${companyName}/submittable_reports/ 下所有 .md 文件的文件名（不含路径），
     每行一个。如果没有文件则返回空。`,
     { label: '📋 检查已有报告', phase: '报告编写' }
   )
@@ -2267,7 +2267,7 @@ if (progress.findings_count === 0) {
 ${findingsJSON}
 ================================================================
 
-先检查 ${SRC_BASE}/${companyName}/submittable_reports/ 下已有报告避免重复。
+先检查 ${BSRC_BASE}/${companyName}/submittable_reports/ 下已有报告避免重复。
 
 ${existingReports ? `已有报告：
 ${existingReports}` : ''}
@@ -2317,7 +2317,7 @@ ${existingReports}` : ''}
         // 只取出该报告分到的发现数据（按finding_indices过滤）
         const myFindings = (rpt.finding_indices || []).map(i => allFindingsData[i])
         const myFindingsJSON = JSON.stringify(myFindings, null, 2)
-        const filePath = `${SRC_BASE}/${companyName}/submittable_reports/${rpt.file_name}`
+        const filePath = `${BSRC_BASE}/${companyName}/submittable_reports/${rpt.file_name}`
 
         // 用闭包包裹重试逻辑
         const tryWrite = async (attempt = 1) => {
@@ -2330,7 +2330,7 @@ ${existingReports}` : ''}
 - 标题: ${rpt.title}
 - 严重等级: ${rpt.severity}
 - 厂商: ${companyName}
-- 目录: ${SRC_BASE}/${companyName}/submittable_reports/
+- 目录: ${BSRC_BASE}/${companyName}/submittable_reports/
 
 ====== 该报告包含的结构化发现（仅该报告所属的${myFindings.length}个发现）======
 ${myFindingsJSON}
@@ -2384,9 +2384,9 @@ ${myFindingsJSON}
   // 生成HTML版本
   const p5_html = await agent(
     `运行HTML报告生成脚本:
-    python3 ${SKILL_SCRIPTS}/generate_html.py ${SRC_BASE}/${companyName}/submittable_reports/
+    python3 ${SKILL_SCRIPTS}/generate_html.py ${BSRC_BASE}/${companyName}/submittable_reports/
 
-    检查输出目录 ${SRC_BASE}/${companyName}/submittable_reports/reports_html/ 是否生成了对应的 .html 文件。
+    检查输出目录 ${BSRC_BASE}/${companyName}/submittable_reports/reports_html/ 是否生成了对应的 .html 文件。
 
     如果脚本不可用或报错，说明原因。`,
     { label: '🎨 生成HTML版本', phase: '报告编写' }
@@ -2417,8 +2417,8 @@ if (progress.reports_count === 0) {
    — 包含严重等级判定参考表
    — 包含 401/403 处理规则
 
-2.  ${SRC_BASE}/${companyName}/VulnType.html
-   — 如果不存在则读取 ${SRC_BASE}/${companyName}/*_Information.html
+2.  ${BSRC_BASE}/${companyName}/VulnType.html
+   — 如果不存在则读取 ${BSRC_BASE}/${companyName}/*_Information.html
    — 如果都不存在，读取 references/vulntype-matrix.md 中该厂商的条目
    — 提取接受的漏洞类型和忽略清单
 
@@ -2433,7 +2433,7 @@ if (progress.reports_count === 0) {
 ${(p6_rules || '(读取失败)').substring(0, 2500)}
 ======================================================
 
-报告目录: ${SRC_BASE}/${companyName}/submittable_reports/
+报告目录: ${BSRC_BASE}/${companyName}/submittable_reports/
 先用 ReadFile 读取完整的 judgment-rules.md 和 VulnType.html
 运行审计脚本检查格式: python3 ${SKILL_SCRIPTS}/audit_reports.py 2>&1 | tail -30
 
@@ -2510,13 +2510,13 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
         `执行以下命令处理F判定的报告（${fCount} 份）:
 
 1. 将以下报告移入 _invalid/ 目录:
-${fNames.map(function(n) { return '   mv "' + SRC_BASE + '/' + companyName + '/submittable_reports/' + n + '" "' + SRC_BASE + '/' + companyName + '/submittable_reports/_invalid/' + n + '"' }).join('\\n')}
+${fNames.map(function(n) { return '   mv "' + BBSRC_BASE + '/' + companyName + '/submittable_reports/' + n + '" "' + BBSRC_BASE + '/' + companyName + '/submittable_reports/_invalid/' + n + '"' }).join('\\n')}
 
 2. 运行整合脚本:
-   python3 ${SKILL_SCRIPTS}/consolidate_findings.py ${SRC_BASE}/${companyName}/submittable_reports/
+   python3 ${SKILL_SCRIPTS}/consolidate_findings.py ${BSRC_BASE}/${companyName}/submittable_reports/
 
 3. 确认文件已移动:
-   ls -la "${SRC_BASE}/${companyName}/submittable_reports/_invalid/"`,
+   ls -la "${BSRC_BASE}/${companyName}/submittable_reports/_invalid/"`,
         { label: '🗑️ 处理F判定报告', phase: '自审' }
       )
     }
@@ -2539,7 +2539,7 @@ const p7_final = await agent(
 **检查清单：**
 
 1. 文件名规范检查:
-   ls "${SRC_BASE}/${companyName}/submittable_reports/"*.md
+   ls "${BSRC_BASE}/${companyName}/submittable_reports/"*.md
    确认文件名格式: {等级}_{类型}_{公司}_{简述}.md
 
 2. 完整HTTP请求/响应包确认:
@@ -2552,11 +2552,11 @@ const p7_final = await agent(
    提取每份报告中的漏洞URL，用 curl -sI -H 'User-Agent: Mozilla/5.0 ...' 确认当前仍可访问且返回200（必须带浏览器UA）
 
 4. HTML版本确认:
-   ls "${SRC_BASE}/${companyName}/submittable_reports/reports_html/"*.html
+   ls "${BSRC_BASE}/${companyName}/submittable_reports/reports_html/"*.html
    确认每份.md都有对应的.html
 
 5. 厂商合规检查:
-   Read ${SRC_BASE}/${companyName}/VulnType.html 或 ${SRC_BASE}/${companyName}/*_Information.html
+   Read ${BSRC_BASE}/${companyName}/VulnType.html 或 ${BSRC_BASE}/${companyName}/*_Information.html
    确认漏洞类型在厂商接受范围内 + 不在忽略清单中
 
 6. 敏感数据脱敏确认:

@@ -133,4 +133,4 @@ if __name__ == "__main__":
         sys.exit(1)
     assets = fetch(args.company, key)
     if assets:
-        save_csv(assets, args.output or f"hunter_info/{args.company}_assert.csv")
+        save_csv(assets, args.output or f"assets_info/{args.company}_assert.csv")

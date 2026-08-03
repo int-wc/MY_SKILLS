@@ -382,7 +382,7 @@ p1_assets = await agent(
      - 查找并读取 VulnType.html（提取接受的漏洞类型和忽略清单）
 
   2. 解析Hunter资产数据
-     - 目录: ${SRC_BASE}/${companyName}/hunter_info/
+     - 目录: ${SRC_BASE}/${companyName}/assets_info/
      - 读取所有CSV文件，CSV格式: IP,端口,域名,IP标签,url,网站标题,高危协议,协议,通讯协议,网站状态码,操作系统,备案单位,备案号,备案异常,国家,省份,市区,Web资产,运营商,注册机构,应用/组件,资产标签,探查时间
      - 按以下维度给资产打标签:
        · [范围内] — 域名在 Information.html 收录范围内

@@ -305,7 +305,7 @@ Phase 5 同时将发现写回 `asset_findings.json`（title/type/severity/target
 | 业务线报告目录 | `{业务线}/submittable_reports/` |
 | HTML报告 | `{业务线}/submittable_reports/reports_html/` |
 | 无效报告归档 | `{业务线}/submittable_reports/_invalid/` |
-| Hunter资产数据 | `{业务线}/hunter_info/` |
+| Hunter资产数据 | `{业务线}/assets_info/` |
 | 阶段命令参考 | `references/phase-cmd-reference.md` |
 | 报告模板 | `references/report-templates.md` |
 | 判定规则 | `references/judgment-rules.md` |

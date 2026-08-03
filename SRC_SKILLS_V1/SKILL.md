@@ -18,7 +18,7 @@ description: >
   **触发关键词：**
   补天、butian、SRC、漏洞挖掘、渗透测试、众测、Hunter、资产分析、JS逆向、API发现、
   组件审计、报告生成、漏洞验证、复测、自审、利用链、专属SRC、赏金、漏洞报告、
-  Information.html、VulnType、hunter_info、hunter_assets、submittable_reports、
+  Information.html、VulnType、assets_info、hunter_assets、submittable_reports、
   深度挖掘、扩散思维链、第一性原理、多链路API漏洞联动、隐藏API、长利用链
 ---
 
@@ -381,7 +381,7 @@ Phase 5 在 AI 标记前先执行**程序化读-合并-写**，不依赖 AI 自�
 | 可提交报告 | `{公司}/submittable_reports/` |
 | HTML报告 | `{公司}/submittable_reports/reports_html/` |
 | 无效报告归档 | `{公司}/submittable_reports/_invalid/` |
-| Hunter资产数据 | `{公司}/hunter_info/` |
+| Hunter资产数据 | `{公司}/assets_info/` |
 | 报告导航面板 | `/home/my/butiansrc/Exclusive_SRC/报告导航.html` |
 | 阶段命令参考 | `references/phase-cmd-reference.md` |
 | 报告模板 | `references/report-templates.md` |

@@ -84,7 +84,7 @@ domain="target.com" && body="swagger"
 ```bash
 # === CDN/WAF 绕过 ===
 
-# 使用Googlebot UA（核心技巧 — 货讯通/理想汽车等案例均用此绕过Cloudflare）
+# 使用Googlebot UA（核心技巧 — 抖音/飞书/火山引擎等字节业务案例均用此绕过Cloudflare）
 curl -s -H "User-Agent: Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" "https://target/path"
 
 # 直接使用IP绕过CDN

@@ -1,6 +1,6 @@
-# 补天 SRC 漏洞挖掘自动化框架
+# ByteSRC（字节跳动）漏洞挖掘自动化框架
 
-基于 Claude Code Workflow 的七+阶段补天专属 SRC 自动化漏洞挖掘框架。
+基于 Claude Code Workflow 的八阶段 ByteSRC（字节跳动安全响应中心）自动化漏洞挖掘框架。
 
 ## 快速开始
 
@@ -16,13 +16,13 @@ pip install requests bs4 lxml
 
 ```bash
 # 完整模式：资产发现 → 深度分析 → 挖洞 → 验证 → 报告 → 自审 → 提交
-claude Workflow --script workflow_runner.js --args '{"company":"理想汽车","mode":"full"}'
+claude Workflow --script workflow_runner.js --args '{"company":"抖音","mode":"full"}'
 
 # 跳过早的资产发现阶段，直接挖洞
-claude Workflow --script workflow_runner.js --args '{"company":"理想汽车","mode":"phase3"}'
+claude Workflow --script workflow_runner.js --args '{"company":"抖音","mode":"phase3"}'
 
 # 仅报告编写模式（已有数据）
-claude Workflow --script workflow_runner.js --args '{"company":"理想汽车","mode":"phase5"}'
+claude Workflow --script workflow_runner.js --args '{"company":"抖音","mode":"phase5"}'
 ```
 
 ## 8 阶段工作流
@@ -68,6 +68,6 @@ claude Workflow --script workflow_runner.js --args '{"company":"理想汽车","m
 
 ## 注意事项
 
-- 该框架自动读取 `Exclusive_SRC/{公司}/` 下的 Hunter CSV 数据和厂商信息
+- 该框架自动读取 `/home/my/SRC/BSRC/{业务线}/` 下的 Hunter CSV 数据和中的 ByteSRC 规则信息
 - 资产测试状态自动存于 `asset_test_status.json`，避免重复测试
 - 发现的线索/漏洞自动存于 `asset_findings.json`

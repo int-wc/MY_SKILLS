@@ -172,7 +172,7 @@ if (submittable.length > 0) {
   const report = await agent(
     `按 ByteSRC/补天 报告规范，为以下【可提交】发现生成汇总报告（.md，含请求/响应证据、原语链标注）:
 ${JSON.stringify(submittable, null, 2)}
-写入 ${SKILL_DIR}/reports/cs_${companyName}_${new Date().toISOString ? 'report' : 'report'}.md 或用户指定位置。`,
+写入 ${SKILL_DIR}/reports/cs_${companyName}_report.md 或用户指定位置。`,
     { label: '📄 生成汇总报告', phase: '汇总上报' }
   )
   log(report || '报告已生成')

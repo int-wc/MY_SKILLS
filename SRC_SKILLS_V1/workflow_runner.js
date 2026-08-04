@@ -392,7 +392,6 @@ if (mode.startsWith('phase5')) {
   }
   progress.findings_count = domTargets.length
   showProgress()
-}
 } else if (!companyName) {
   // 无参数：列出公司并退出
   const listing = await agent(

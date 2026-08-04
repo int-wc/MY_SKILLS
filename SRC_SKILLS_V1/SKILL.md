@@ -106,15 +106,26 @@ python3 -c "import requests, bs4, lxml" 2>/dev/null || echo "pip install request
 Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}})
 ```
 
-**C/S 并行挖掘（按域粒度）：** `domain_server.js` 是 C/S 架构服务端编排器——派发 N 个**单域 Client workflow**（每批 ≤10 并行，每 Client 独立工作区 `{业务线}/works/{域名}/`，避免共享文件冲突与上下文溃散），收集各 Client 产出后做**聚焦分析**（原语合理性 / 跨域原语链可串联性 / 可利用性），只输出可提交链与汇总报告。
+**C/S 并行挖掘（按域粒度，引擎约束适配）：** 引擎**嵌套 workflow() 无法向子脚本传 args**（子 `args` 为 undefined），因此派发必须由编排器（主循环）发**独立顶层 workflow**，每域一个 Client，并行度 ≤10。`domain_server.js` 充当**分析服务端**（工作区登记→产出收集→聚焦分析→汇总上报），只输出可提交链。
 
+**三步法：**
+1. **域清单解析**（可选，或直接用域）
 ```
-Workflow({scriptPath: ".../domain_server.js", args: {company: "理想汽车", maxParallel: 10}})
-# 指定目标域: args: {company: "理想汽车", domains: ["www.douyin.com", "xxx.jinritemai.com"]}
-# 底层单域 Client 等价于: Workflow({scriptPath: ".../workflow_runner.js", args: {mode: "domain", company: "理想汽车", domain: "www.douyin.com", work_dir: ".../works/www.douyin.com/"}})
+Workflow({scriptPath: ".../domain_server.js", args: {company: "理想汽车", resolveOnly: true}})   # → {domains:[...]}
+```
+2. **并行派发 Client**（编排器→每个域名一个独立顶层 workflow，≤10 并行，各自独立工作区 `{业务线}/works/{域名}/`，避免共享文件冲突与上下文溃散）
+```
+Workflow({scriptPath: ".../workflow_runner.js", args: {mode: "domain", company: "理想汽车", domain: "www.douyin.com", work_dir: ".../works/www.douyin.com/"}})
+```
+3. **收集 + 聚焦分析**（分析服务端）
+```
+Workflow({scriptPath: ".../domain_server.js", args: {company: "理想汽车", domains: ["www.douyin.com", "xxx.jinritemai.com"]}})
+# 或按工作区: args: {company: "理想汽车", work_dirs: [".../works/www.douyin.com/"]}
 ```
 
 ---
+
+## 阶段2：深度分析
 
 ## 阶段2：深度分析
 

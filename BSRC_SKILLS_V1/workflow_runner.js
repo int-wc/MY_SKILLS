@@ -54,7 +54,7 @@ const REAL_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (K
 const UA_FLAG = `-H 'User-Agent: ${REAL_UA}'`
 const UA_INSTR = `⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: ${REAL_UA}'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**`
 
-let companyName, mode, singleUrl, workflowOptions
+let companyName, mode, singleUrl, domainParam, workflowOptions
 if (typeof args === 'string') {
   // 修复：Workflow 工具传递的对象 args 可能被序列化为 JSON 字符串
   // 先尝试 JSON 解析，成功则作为对象处理，否则当做公司名
@@ -65,6 +65,7 @@ if (typeof args === 'string') {
     companyName = parsed.company || null
     mode = parsed.mode || 'full'
     singleUrl = parsed.url || null
+    domainParam = parsed.domain || null
   } else {
     workflowOptions = {}
     companyName = args
@@ -75,9 +76,14 @@ if (typeof args === 'string') {
   companyName = args.company || null
   mode = args.mode || 'full'
   singleUrl = args.url || null
+  domainParam = args.domain || null
   if (mode === 'url' && !singleUrl) {
     log('⚠️ 单URL模式需指定 url 参数，如: {mode: "url", url: "https://target:8080"}')
     return { error: 'need_url', message: '请指定url参数' }
+  }
+  if (mode === 'domain' && !domainParam) {
+    log('⚠️ 单域模式需指定 domain 参数，如: {mode: "domain", company: "抖音", domain: "saos-mall-admin-ui.chehejia.com"}')
+    return { error: 'need_domain', message: '请指定domain参数' }
   }
 } else {
   workflowOptions = {}
@@ -357,6 +363,33 @@ if (mode.startsWith('phase5')) {
   // 记录基础维度
   dimTracker.record(singleUrl, 'http_probe', 'done', { title: '' })
   progress.findings_count = 1
+  showProgress()
+} else if (mode === 'domain' && domainParam) {
+  log(`[1/8] 🌐 单域模式 — 聚焦 ${domainParam}`)
+  markPhase(1, '🔄')
+  let domRows = ''
+  try {
+    domRows = (await agent(
+      `你是资产分析师。用 Read 读取 ${BSRC_BASE}/${companyName}/assets_info/ 目录下所有 CSV，
+      筛选出 host 或 url 属于主域 ${domainParam}（含其所有子域）的资产行。
+      按 CSV 逐行判断域名列或 url 列是否以 ${domainParam} 结尾。
+      输出每行: url | 域名 | ip | 端口 | 标题（去重，去 HTML 冗余）。
+      若没有匹配资产，只输出"无匹配"。`,
+      { label: `🌐 提取单域资产: ${domainParam}`, phase: '资产发现' }
+    )) || ''
+  } catch(e) { domRows = '' }
+  const _rows = String(domRows||'').split('\n').map(l => l.trim()).filter(l => l && l.includes('|'))
+  const _urls = _rows.map(l => l.split('|')[0].trim()).filter(u => u.startsWith('http'))
+  const domTargets = _urls.length > 0
+    ? _urls.map(u => ({ url: u, tags: ['[单域]'], priority: '高', reason: `用户指定单域 ${domainParam}` }))
+    : [{ url: `https://${domainParam}`, tags: ['[单域]'], priority: '高', reason: '主域回退' }]
+  p1_assets = {
+    company_name: companyName,
+    src_scope_summary: `单域聚焦: ${domainParam}`,
+    priority_targets: domTargets,
+    all_urls: domTargets.map(t => t.url),
+  }
+  progress.findings_count = domTargets.length
   showProgress()
 } else if (!companyName) {
   // 无参数：列出公司并退出

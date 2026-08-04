@@ -47,6 +47,7 @@ SRC_SKILLS_V1/
 │   ├── probe.sh                # 路径探测脚本
 │   ├── probe2.sh               # 批量API路径探测
 │   ├── attack_surface_match.py  # 攻击面前匹配（Phase2→3）
+│   └── chain_linking.py        # 原语链联动推理（Phase3→4）
 │   └── probe_actuator.sh       # Actuator端点探测
 ├── references/                 ← 详细参考文档
 │   ├── judgment-rules.md       # F/R/T 三级判定规则 ⬅ 必读
@@ -56,7 +57,8 @@ SRC_SKILLS_V1/
 │   ├── phase-cmd-reference.md  # 各阶段bash命令/字典/CVE表
 │   ├── report-templates.md     # 报告模板(标准+利用链)
 │   ├── api_patterns.json       # 跨厂商API模式积累字典（自动增长）
-│   └── attack_surfaces.json     # 攻击面模式库（signals前匹配 + 实例积累）
+│   ├── attack_surfaces.json     # 攻击面模式库（signals前匹配 + 实例积累）
+│   └── primitive-chains.json     # 业务原语链库（原语组合→有效危害 + 实例积累）
 └── assets/
     ├── report-template.html    # 报告HTML样式模板
     └── 报告导航.html           # 报告导航面板

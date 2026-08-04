@@ -33,7 +33,7 @@ try {
     ['BSRC_SKILLS_V1', 'SRC_SKILLS_V1'],
     ['ZC_SKILLS_V1', 'SRC_SKILLS_V1'],
   ]
-  const DICT_FILES = ['api_patterns.json', 'attack_surfaces.json']
+  const DICT_FILES = ['api_patterns.json', 'attack_surfaces.json', 'primitive-chains.json']
   for (const [from, to] of pairs) {
     for (const df of DICT_FILES) {
       const src = `${skillsRoot}/${from}/references/${df}`
@@ -1752,6 +1752,30 @@ ${_t2urls}\t第2阶段提取的结构化凭证:
     }))
   }
 
+  // 🔗 业务原语链联动推理：Phase2 端点原语 → 匹配链库 → 生成候选链
+  let p3_chain_candidates_text = ''
+  try {
+    const _ch2txt = '/tmp/phase2_analysis_dump.txt'
+    const _chainOut = '/tmp/primitive_chain_candidates.json'
+    require('fs').writeFileSync(_ch2txt, p2_discoveries_text || '')
+    await agent(
+      `运行原语链联动推理脚本，把 Phase2 分析文本对照原语链库生成候选链:
+      python3 ${SKILL_SCRIPTS}/chain_linking.py -e ${_ch2txt} -c ${SKILL_SCRIPTS}/../references/primitive-chains.json -o ${_chainOut} 2>&1 | tail -5`,
+      { label: '🔗 原语链联动推理', phase: '漏洞挖掘' }
+    )
+    const chj = JSON.parse(require('fs').readFileSync(_chainOut, 'utf-8'))
+    const cands = chj.candidates || []
+    if (cands.length > 0) {
+      p3_chain_candidates_text = cands.map(c =>
+        '- [' + c.chain_id + '] ' + c.name + ': ' + c.primitives.join('+') + ' -> ' + c.gain + '\n  · 原语端点: ' +
+        Object.entries(c.matched_endpoints).map(([a,eps]) => a+'='+eps.join(',')).join('; ')
+      ).join('\n')
+      log(`  🔗 原语链联动命中 ${cands.length} 条候选链`)
+    } else {
+      log('  🔗 原语链联动无候选（端点原语不全）')
+    }
+  } catch(e) { p3_chain_candidates_text = '' }
+
   markPhase(3, '✅')
   showProgress()
 }
@@ -1782,6 +1806,10 @@ if (progress.findings_count === 0) {
 ====== Phase 3 传入的发现列表 ======
 ${p4_findings_json.substring(0, 6000)}
 ==================================
+
+**【业务原语链候选 — 组成原语在目标端点齐备，请用只读方式验证实际可串联性，能否组合达成有效危害】**
+${p3_chain_candidates_text ? p3_chain_candidates_text : '（无候选链）'}
+对每条候选链: 用 curl 只读确认组成端点的可达性与鉴权状态，判断各原语能否串成有效危害（如 SSRF端点+登录端点组合）。只记录可串联性判断与组合危害评估，不做破坏性利用。若某条链组成端点不可达或都需高权限，标记该链不可用。
 
 ### 验证规则
 
@@ -2121,6 +2149,19 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
       { label: '🔁 攻击面实例回写', phase: '验证取证' }
     )
   } catch(e) { /* 回写非关键 */ }
+
+  // 🔗 原语链实例回写：验证成功的候选链追加到 primitive-chains.json
+  try {
+    const chainLib = `${SKILL_SCRIPTS}/../references/primitive-chains.json`
+    await agent(
+      `Read ${chainLib} 原语链库 + /tmp/primitive_chain_candidates.json + 本次 Phase4 验证结果。
+      对验证中【确认可串联成有效危害】的候选链，向对应 chain_id 的 instances 追加:
+      {"endpoints": "...", "found": "链生效说明", "company": "${companyName}", "date": "2026-08-04"}
+      规则: 只在已有 chain_id 下追加；同 endpoints+found 去重；instances 超 20 删最旧；Write 写回合法 JSON。
+      无成功链则不修改。完成后 python3 -c "import json;json.load(open('${chainLib}'))" 校验 JSON。`,
+      { label: '🔗 原语链实例回写', phase: '验证取证' }
+    )
+  } catch(e) { /* 链回写非关键 */ }
 
   markPhase(4, '✅')
   showProgress()

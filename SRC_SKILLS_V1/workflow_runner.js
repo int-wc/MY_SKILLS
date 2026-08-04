@@ -30,12 +30,15 @@ try {
     ['SRC_SKILLS_V1', 'ZC_SKILLS_V1'],
     ['ZC_SKILLS_V1', 'SRC_SKILLS_V1'],
   ]
+  const DICT_FILES = ['api_patterns.json', 'attack_surfaces.json']
   for (const [from, to] of pairs) {
-    const src = `${skillsRoot}/${from}/references/api_patterns.json`
-    const dst = `${skillsRoot}/${to}/references/api_patterns.json`
-    if (fs.existsSync(src)) {
-      fs.copyFileSync(src, dst)
-      log(`  📚 字典共享: ${from} → ${to}`)
+    for (const df of DICT_FILES) {
+      const src = `${skillsRoot}/${from}/references/${df}`
+      const dst = `${skillsRoot}/${to}/references/${df}`
+      if (fs.existsSync(src)) {
+        fs.copyFileSync(src, dst)
+        log(`  📚 字典共享: ${from} → ${to} (${df})`)
+      }
     }
   }
 } catch(e) { /* 字典共享非关键，失败不影响主流程 */ }
@@ -545,6 +548,8 @@ phase('深度分析')
 
 // 声明全局变量承载 Phase 2 JS分析结果，供 Phase 3 使用
 let p2_discoveries_text = ''
+// 攻击面前匹配结果文本（Phase2 生成，注入 Phase3）
+let p2_attack_hints_text = ''
 // Phase 3/4 的发现结果也在外层声明，供后续阶段使用
 let p3_unauth, p3_other, p3_quick, p4_dirscan, p4_verify
 // 聚合发现数据，供 Phase 5 写入线索文件
@@ -1134,6 +1139,29 @@ cat ${fuzz_out}
     require('fs').writeFileSync('/tmp/workflow_phase2_state.json', JSON.stringify(stateToSave))
   } catch(e) {}
 
+  // 🎯 攻击面前匹配（程序化）：Phase2 分析文本 → 匹配攻击面库 → 生成 hints 注入 Phase3
+  try {
+    const _ph2txt = '/tmp/phase2_analysis_dump.txt'
+    const _hintsOut = '/tmp/attack_hints.json'
+    require('fs').writeFileSync(_ph2txt, p2_discoveries_text || '')
+    await agent(
+      `运行攻击面前匹配脚本，把 Phase2 分析文本对照攻击面库生成 hints:
+      python3 ${SKILL_SCRIPTS}/attack_surface_match.py -a ${_ph2txt} -s ${SKILL_SCRIPTS}/../references/attack_surfaces.json -o ${_hintsOut} 2>&1 | tail -5`,
+      { label: '🎯 攻击面前匹配', phase: '深度分析' }
+    )
+    const hj = JSON.parse(require('fs').readFileSync(_hintsOut, 'utf-8'))
+    const matched = (hj.hints || []).filter(h => h.surfaces && h.surfaces.length)
+    if (matched.length > 0) {
+      p2_attack_hints_text = matched.map(h =>
+        '- ' + h.method + ' ' + h.endpoint + ' [attr=' + h.business_attr + '] -> ' +
+        h.surfaces.map(x => x.id + '(' + x.base_primitives.join('/') + ')').join(' | ')
+      ).join('\n')
+      log(`  🎯 攻击面前匹配命中 ${matched.length} 个端点`)
+    } else {
+      log('  🎯 攻击面前匹配无命中')
+    }
+  } catch(e) { p2_attack_hints_text = '' }
+
   markPhase(2, '✅')
   showProgress()
   }
@@ -1327,6 +1355,9 @@ ${allUrls.map(function(u) { return '  ' + u }).join('\\n')}
 
 第2阶段JS逆向发现的隐藏端点/API路径:
 ${p2_discoveries_text ? p2_discoveries_text : '（无 JS 分析数据）'}
+
+**【攻击面前匹配结果 — 已命中攻击面库的端点按 base_primitives 优先测试；未列出的端点请 Read ${SKILL_SCRIPTS}/../references/attack_surfaces.json 对照 signals 自行补充攻击面】**
+${p2_attack_hints_text ? p2_attack_hints_text : '（本次前匹配无命中，请自行对照 references/attack_surfaces.json）'}
 
 **【Phase 2 提取的结构化凭证（优先级高 — 结构化数据优先于下方文本描述）】**
 ${typeof globalThis.__p2_creds_json !== 'undefined' ? '以下凭证可直接用于越权/认证测试:\n' + JSON.stringify(JSON.parse(globalThis.__p2_creds_json).slice(0, 15), null, 2).substring(0, 2000) : '（无结构化凭证提取）'}
@@ -2063,6 +2094,24 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
       }
     }
   }
+
+  // 🔁 攻击面实例回写：把本次 confirmed 且命中攻击面库的发现追加到 attack_surfaces.json
+  try {
+    const surfLib = `${SKILL_SCRIPTS}/../references/attack_surfaces.json`
+    await agent(
+      `Read ${surfLib} 攻击面库。将本次测试中【确认有效且命中攻击面】的发现追加为实例。
+      对每个命中某 surface 的 confirmed 端点，向对应 surface.instances 追加:
+      {"endpoint": "...", "found": "漏洞类型", "company": "${companyName}", "date": "2026-08-04"}
+      规则:
+      1. 先 Read 攻击面库 + 本次 findings（${SRC_BASE}/${companyName}/asset_findings.json 或本阶段输出）
+      2. 只在已有 surface.id 下追加，不新建 surface
+      3. instances 去重（同 endpoint+found 不重复），超过 20 条删最旧
+      4. 用 Write 写回 JSON，保证合法可解析
+      5. 只对 confirmed（非 suspected/false_positive）追加；无命中则不修改
+      完成后用 python3 -c "import json;json.load(open('${surfLib}'))" 校验 JSON 合法。`,
+      { label: '🔁 攻击面实例回写', phase: '验证取证' }
+    )
+  } catch(e) { /* 回写非关键 */ }
 
   markPhase(4, '✅')
   showProgress()

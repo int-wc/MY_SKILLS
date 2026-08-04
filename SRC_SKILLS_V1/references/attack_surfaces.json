@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "updated": "2026-08-04",
+  "description": "攻击面模式库：可前匹配、可积累。Phase2 判定端点原语后，按 signals 匹配此处攻击面，将其 base_primitives 注入 Phase3；挖洞后在 instances 追加真实案例。跨SRC共享（同 api_patterns.json）。",
+  "surfaces": [
+    {
+      "id": "sf_url_fetch_echo",
+      "name": "数据型URL拉取(网页/文档/截图)",
+      "signals": ["url=", "translate_url", "fetch_url", "web_url", "document_url", "file_url", "page_url", "link=", "href=", "snapshot", "screenshot", "preview", "spider", "crawl"],
+      "primitives": ["transfer", "read_file"],
+      "targets": ["remote_url", "local_fs"],
+      "base_primitives": ["SSRF(回显)", "remote→local白名单绕过(读 /proc/self/environ、源码路径)", "路径遍历读", "开放重定向"],
+      "risk": "回显SSRF统一高系数",
+      "instances": []
+    },
+    {
+      "id": "sf_upload_import_parse",
+      "name": "上传/导入解析(文件/文档/CSV)",
+      "signals": ["upload", "import", "parse", "load", "import_file", "upload_file", "file=", "fileupload", "导入", "上传", "excel", "csv", "docx", "pdf"],
+      "primitives": ["write_file", "exec_code"],
+      "targets": ["local_fs", "template"],
+      "base_primitives": ["上传后缀绕过/双扩展名", "文件内容解析RCE(文档引擎/反序列化)", "路径穿越写入", "XXE"],
+      "risk": "写原语受护栏限制，只记录不验证",
+      "instances": []
+    },
+    {
+      "id": "sf_template_render",
+      "name": "模板/表达式/配置渲染",
+      "signals": ["render", "template", "tpl", "expression", "formula", "preview", "report", "compile", "evaluate", "生成模板", "渲染", "报告"],
+      "primitives": ["exec_code", "read_file"],
+      "targets": ["template", "local_fs"],
+      "base_primitives": ["SSTI({{7*7}}/#{7*7}/${7*7})", "表达式注入", "模板字段注入→对象链→exec", "读文件回显"],
+      "risk": "",
+      "instances": []
+    },
+    {
+      "id": "sf_export_generate_file",
+      "name": "导出/生成文件名可控",
+      "signals": ["export", "download", "generate", "filename=", "file_name", "output", "batch", "导出", "生成", "下载"],
+      "primitives": ["write_file", "query_data"],
+      "targets": ["local_fs"],
+      "base_primitives": ["文件名路径穿越写入", "覆盖配置文件→提权", "导出内容含未授权数据"],
+      "risk": "写原语受护栏限制，只记录不验证",
+      "instances": []
+    },
+    {
+      "id": "sf_id_query",
+      "name": "ID序列查询/详情",
+      "signals": ["id=", "detail", "info", "get", "byId", "item_id", "user_id", "order_id", "company_id", "doc_id"],
+      "primitives": ["query_data"],
+      "targets": ["db", "user_input"],
+      "base_primitives": ["IDOR越权读取", "遍历泄露", "换ID看他人"],
+      "risk": "越权读取证明≤5组，严禁批量",
+      "instances": []
+    },
+    {
+      "id": "sf_state_flow",
+      "name": "状态/流程/配置修改",
+      "signals": ["status", "state", "config", "approve", "reject", "submit", "pay", "order", "flow", "审批", "下单", "支付", "流程"],
+      "primitives": ["modify_state"],
+      "targets": ["db", "user_input"],
+      "base_primitives": ["逻辑缺陷(负数/状态翻转)", "审批绕过", "未授权增删改", "支付金额篡改/零元"],
+      "risk": "写原语受护栏限制，只记录不验证",
+      "instances": []
+    },
+    {
+      "id": "sf_auth_token",
+      "name": "登录/token签发",
+      "signals": ["login", "auth", "token", "oauth", "password", "verify", "register", "验证码", "登录", "登录"],
+      "primitives": ["auth"],
+      "targets": ["user_input", "db"],
+      "base_primitives": ["认证绕过", "JWT伪造", "弱口令", "验证码逻辑缺陷"],
+      "risk": "",
+      "instances": []
+    },
+    {
+      "id": "sf_pagination_bulk",
+      "name": "分页/批量列表",
+      "signals": ["page", "pageSize", "limit", "offset", "list", "search", "keyword", "分页", "列表"],
+      "primitives": ["query_data"],
+      "targets": ["db"],
+      "base_primitives": ["分页遍历泄露", "无鉴权列表", "越权过滤缺失"],
+      "risk": "越权读取证明≤5个，严禁批量",
+      "instances": []
+    }
+  ]
+}

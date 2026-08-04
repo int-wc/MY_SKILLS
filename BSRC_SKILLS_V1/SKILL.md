@@ -56,7 +56,8 @@ BSRC_SKILLS_V1/
 │   ├── consolidate_findings.py # 报告整合/无效归档
 │   ├── fetch_hunter.py         # Hunter API 资产采集
 │   ├── probe.sh                # 路径探测脚本
-│   └── probe2.sh               # 批量API路径探测
+│   ├── probe2.sh               # 批量API路径探测
+│   └── attack_surface_match.py  # 攻击面前匹配（Phase2→3）
 ├── references/                 # 详细参考文档
 │   ├── judgment-rules.md      # ByteSRC F/R/T判定 + 六级等级 + 业务系数 ⬅ 必读
 │   ├── vulntype-matrix.md     # ByteSRC等级/业务系数速查矩阵
@@ -64,7 +65,8 @@ BSRC_SKILLS_V1/
 │   ├── hunter-reference.md    # Hunter语法与探测命令
 │   ├── phase-cmd-reference.md # 各阶段bash命令/字典/CVE表
 │   ├── report-templates.md    # 报告模板(标准+利用链)
-│   └── api_patterns.json      # 跨SRC积累的API模式字典（自动增长）
+│   ├── api_patterns.json      # 跨SRC积累的API模式字典（自动增长）
+│   └── attack_surfaces.json    # 攻击面模式库（signals前匹配 + 实例积累）
 └── assets/
     ├── report-template.html    # 报告HTML样式模板
     └── 报告导航.html           # 报告导航面板

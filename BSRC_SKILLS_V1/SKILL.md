@@ -117,6 +117,14 @@ python3 -c "import requests, bs4, lxml" 2>/dev/null || echo "pip install request
 Workflow({scriptPath: "...", args: {mode: "url", url: "https://target.com:8080"}})
 ```
 
+**C/S 并行挖掘（按域粒度）：** `domain_server.js` 是 C/S 架构服务端编排器——派发 N 个**单域 Client workflow**（每批 ≤10 并行，每 Client 独立工作区 `{业务线}/works/{域名}/`，避免共享文件冲突与上下文溃散），收集各 Client 产出后做**聚焦分析**（原语合理性 / 跨域原语链可串联性 / 可利用性），只输出可提交链与汇总报告。
+
+```
+Workflow({scriptPath: ".../domain_server.js", args: {company: "抖音", maxParallel: 10}})
+# 指定目标域: args: {company: "抖音", domains: ["www.douyin.com", "xxx.jinritemai.com"]}
+# 底层单域 Client 等价于: Workflow({scriptPath: ".../workflow_runner.js", args: {mode: "domain", company: "抖音", domain: "www.douyin.com", work_dir: ".../works/www.douyin.com/"}})
+```
+
 ---
 
 ## 阶段2：深度分析

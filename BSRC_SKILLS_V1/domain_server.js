@@ -23,7 +23,7 @@ export const meta = {
 }
 
 const BSRC_BASE = '/home/my/SRC/BSRC'
-const SKILL_DIR = __dirname || '/home/my/.claude/skills/BSRC_SKILLS_V1'
+const SKILL_DIR = '/home/my/.claude/skills/BSRC_SKILLS_V1'
 const CLIENT_SCRIPT = `${SKILL_DIR}/workflow_runner.js`
 
 // ============================================================

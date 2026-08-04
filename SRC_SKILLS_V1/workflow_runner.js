@@ -588,7 +588,7 @@ let p2_discoveries_text = ''
 // 攻击面前匹配结果文本（Phase2 生成，注入 Phase3）
 let p2_attack_hints_text = ''
 // Phase 3/4 的发现结果也在外层声明，供后续阶段使用
-let p3_unauth, p3_other, p3_quick, p4_dirscan, p4_verify
+let p3_unauth, p3_other, p3_quick, p4_dirscan, p4_verify, p3_chain_candidates_text
 // 聚合发现数据，供 Phase 5 写入线索文件
 let p3_findings_data = []
 
@@ -1781,7 +1781,6 @@ ${_t2urls}\t第2阶段提取的结构化凭证:
   }
 
   // 🔗 业务原语链联动推理：Phase2 端点原语 -> 匹配链库 -> 生成候选链
-  let p3_chain_candidates_text = ''
   try {
     const _ch2txt = '/tmp/phase2_analysis_dump.txt'
     const _chainOut = '/tmp/primitive_chain_candidates.json'

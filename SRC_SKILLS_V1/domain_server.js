@@ -1,21 +1,28 @@
 // ============================================================
-// Domain Server — C/S 架构服务端
-// 派发单域 Client workflow(并行,每批≤maxParallel) → 收集产出 →
-// 聚焦分析(原语合理性/跨域链路/可利用性) → 只输出可提交链报告
+// Domain Server — C/S 架构分析服务端
+// 职责: 工作区登记 → 产出收集 → 聚焦分析(原语合理性/跨域链路/可利用性) → 只输出可提交链报告
 //
-// 使用: Workflow({scriptPath: '.../domain_server.js', args: {company:'理想汽车'}})
-//   args: {company, domains?:[], maxParallel?:10, skipReport?:bool}
+// ⚠️ 引擎硬约束: 嵌套 workflow() 向子脚本传 args 会被丢弃（子 args 为 undefined）。
+//   因此 **Client 派发由编排器(主循环)发起独立顶层 workflow**（见下第2步），
+//   本服务端只负责收集各 Client 工作区产出并做聚焦分析。
 //
-// 依赖: 同目录 workflow_runner.js 作为 Client(支持 mode:'domain' + work_dir)
-// 每 Client 独立工作区: {SRC_BASE}/{company}/works/{domain}/
+// 用法（C/S 三步）:
+//   1. [编排器] 域清单: Workflow({scriptPath:'.../domain_server.js', args:{company:'理想汽车', resolveOnly:true}})
+//                       → 返回 {domains:[...]}
+//   2. [编排器] 并行派发: 每域一个【独立顶层】Workflow({scriptPath:'.../workflow_runner.js',
+//                       args:{mode:'domain', company:'理想汽车', domain:X, work_dir:'.../works/X/'}})
+//                       并行度 ≤ maxParallel；每 Client 独立工作区，产出写 {work_dir}/asset_findings.json
+//   3. [分析服务端] 本脚本: Workflow({scriptPath:'.../domain_server.js',
+//                       args:{company:'理想汽车', domains:[...] 或 work_dirs:[...]}})
+//                       → 收集 → 聚焦分析 → 汇总报告
 // ============================================================
 
 export const meta = {
   name: 'src-domain-server',
-  description: 'C/S架构服务端：单域Client派发→收集产出→聚焦分析(原语/链路/可利用性)→汇总报告',
+  description: 'C/S架构分析服务端：登记工作区→收集产出→聚焦分析(原语/链路/可利用性)→汇总报告',
   phases: [
-    { title: '域清单', detail: '解析/提取待掘主域（用户传入或从 assets_info 提取）' },
-    { title: 'Client派发', detail: '并行派发单域 Client workflow（每批≤maxParallel）' },
+    { title: '域清单', detail: '解析待掘主域（用户传入或从 assets_info 提取）' },
+    { title: '工作区登记', detail: '计算各域 Client 工作区（派发由编排器以独立顶层 workflow 并行发起）' },
     { title: '产出收集', detail: '收集各 Client 工作区 findings' },
     { title: '聚焦分析', detail: '原语合理性 + 跨域链路 + 可利用性判定' },
     { title: '汇总上报', detail: '只输出可提交链报告' },
@@ -24,7 +31,6 @@ export const meta = {
 
 const SRC_BASE = '/home/my/butiansrc/Exclusive_SRC'
 const SKILL_DIR = '/home/my/.claude/skills/SRC_SKILLS_V1'
-const CLIENT_SCRIPT = `${SKILL_DIR}/workflow_runner.js`
 
 // ============================================================
 // 解析参数
@@ -32,7 +38,8 @@ const CLIENT_SCRIPT = `${SKILL_DIR}/workflow_runner.js`
 let opts = null
 let companyName = null
 let domains = []
-let maxParallel = 0
+let workDirs = []
+let resolveOnly = false
 if (typeof args === 'string') {
   try { opts = JSON.parse(args) } catch (_) { /* treat as company */ }
   if (!opts || typeof opts !== 'object') { opts = {}; companyName = args }
@@ -41,7 +48,8 @@ if (typeof args === 'string') {
 }
 companyName = companyName || opts.company || null
 domains = (opts.domains || []).map(d => String(d).trim().toLowerCase()).filter(Boolean)
-maxParallel = Number(opts.maxParallel) > 0 ? Number(opts.maxParallel) : 10
+workDirs = (opts.work_dirs || []).map(String).filter(Boolean)
+resolveOnly = !!opts.resolveOnly
 
 if (!companyName) {
   log('⚠️ 需指定 company 参数，如: {company:"理想汽车"}')
@@ -52,9 +60,8 @@ if (!companyName) {
 // Phase 1: 域清单
 // ============================================================
 phase('域清单')
-let resolved_domains = []
+let resolved_domains = domains
 if (domains.length > 0) {
-  resolved_domains = domains
   log(`[1/5] 使用用户指定 ${domains.length} 个域`)
 } else {
   log('[1/5] 从 assets_info 提取主域清单...')
@@ -72,43 +79,41 @@ if (domains.length > 0) {
   log(`  → 提取 ${resolved_domains.length} 个主域`)
 }
 
-if (resolved_domains.length === 0) {
+if (resolved_domains.length === 0 && workDirs.length === 0) {
   log('⚠️ 无可用域')
   return { error: 'no_domains', domains: 0 }
 }
 
-// ============================================================
-// Phase 2: 派发 Client（并行，每批 maxParallel；每 Client 独立工作区）
-// ============================================================
-phase('Client派发')
-log(`[2/5] 派发 ${resolved_domains.length} 个域名，单批 ${maxParallel} 并行`)
-const results = []
-for (let i = 0; i < resolved_domains.length; i += maxParallel) {
-  const batch = resolved_domains.slice(i, i + maxParallel)
-  log(`  ▶ 批次 ${Math.floor(i / maxParallel) + 1}/${Math.ceil(resolved_domains.length / maxParallel)}（${batch.length} 个域）`)
-  const batchRes = await parallel(
-    batch.map((d) => () => {
-      const workDir = `${SRC_BASE}/${companyName}/works/${d.replace(/[^\w.-]/g, '_')}`
-      return workflow({
-        scriptPath: CLIENT_SCRIPT,
-        args: { mode: 'domain', company: companyName, domain: d, work_dir: workDir },
-      }).then((rv) => ({ domain: d, work_dir: workDir, client: rv || null }))
-    })
-  )
-  const ok = batchRes.filter(Boolean)
-  results.push(...ok)
-  log(`  ✔ 批次完成 ${ok.length} 个 client`)
+// resolveOnly: 只返回域清单（供编排器发起顶层 client 派发）
+if (resolveOnly) {
+  log(`[resolve] 返回 ${resolved_domains.length} 个域，供编排器并行派发顶层 Client`)
+  return { company: companyName, domains: resolved_domains }
 }
-log(`  ✅ 全部 ${results.length} 个 client 派发完成`)
+
+// ============================================================
+// Phase 2: 工作区登记（派发由编排器以独立顶层 workflow 并行发起）
+// ============================================================
+phase('工作区登记')
+// 优先用显式 work_dirs；否则由 domains 推导 {SRC_BASE}/{company}/works/{domain}/
+let workers = []
+if (workDirs.length > 0) {
+  workers = workDirs.map(wd => ({ work_dir: wd, domain: wd.split('/').filter(Boolean).pop() || '?' }))
+} else {
+  workers = resolved_domains.map(d => ({
+    domain: d,
+    work_dir: `${SRC_BASE}/${companyName}/works/${d.replace(/[^\w.-]/g, '_')}`,
+  }))
+}
+log(`[2/5] 登记 ${workers.length} 个 Client 工作区（派发由编排器发起独立顶层 workflow，并行度≤maxParallel）`)
+for (const w of workers) log(`  · ${w.domain} → ${w.work_dir}`)
 
 // ============================================================
 // Phase 3: 产出收集（读各 work_dir 的 asset_findings.json）
 // ============================================================
 phase('产出收集')
-const producer_doms = []
 const collect = await agent(
-  `读取以下 ${results.length} 个 Client 工作区的 asset_findings.json，汇总有产出的：
-${results.map(r => `  ${r.domain}: ${r.work_dir}/asset_findings.json`).join('\n')}
+  `读取以下 ${workers.length} 个 Client 工作区的 asset_findings.json，汇总有产出的：
+${workers.map(w => `  ${w.domain}: ${w.work_dir}/asset_findings.json`).join('\n')}
 对每个文件：若 findings 数组非空，列出每条的 {endpoint, type, severity, confidence, status}。
 只输出【有 findings 的域】，每域一行: 域 | findings条数 | 各条摘要.
 若全部为空输出"全部无产出"。`,
@@ -182,8 +187,7 @@ ${JSON.stringify(submittable, null, 2)}
 
 return {
   company: companyName,
-  domains_total: resolved_domains.length,
-  clients: results.length,
+  workers: workers.length,
   submittable: submittable.map(f => ({ domain: f.domain, endpoint: f.endpoint, chain: f.chain })),
   need_account: needAcct.map(f => ({ domain: f.domain, endpoint: f.endpoint })),
   all_verdicts: (focusAnalysis && focusAnalysis.findings || []).length,

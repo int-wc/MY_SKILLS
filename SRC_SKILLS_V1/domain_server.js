@@ -3,7 +3,7 @@
 // 派发单域 Client workflow(并行,每批≤maxParallel) → 收集产出 →
 // 聚焦分析(原语合理性/跨域链路/可利用性) → 只输出可提交链报告
 //
-// 使用: Workflow({scriptPath: '.../domain_server.js', args: {company:'抖音'}})
+// 使用: Workflow({scriptPath: '.../domain_server.js', args: {company:'理想汽车'}})
 //   args: {company, domains?:[], maxParallel?:10, skipReport?:bool}
 //
 // 依赖: 同目录 workflow_runner.js 作为 Client(支持 mode:'domain' + work_dir)
@@ -44,7 +44,7 @@ domains = (opts.domains || []).map(d => String(d).trim().toLowerCase()).filter(B
 maxParallel = Number(opts.maxParallel) > 0 ? Number(opts.maxParallel) : 10
 
 if (!companyName) {
-  log('⚠️ 需指定 company 参数，如: {company:"抖音"}')
+  log('⚠️ 需指定 company 参数，如: {company:"理想汽车"}')
   return { error: 'need_company', message: '请指定company' }
 }
 

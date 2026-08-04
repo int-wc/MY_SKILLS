@@ -51,7 +51,8 @@ const REAL_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (K
 const UA_FLAG = `-H 'User-Agent: ${REAL_UA}'`
 const UA_INSTR = `⚠️ **User-Agent 硬性规则：所有 curl 命令必须添加 -H 'User-Agent: ${REAL_UA}'（或等效的浏览器UA），禁止使用默认 curl User-Agent，否则会被WAF/反爬识别拦截。同时添加 Accept-Language: zh-CN,zh;q=0.9 和 Accept: */* 头。**`
 
-let companyName, mode, singleUrl, workflowOptions
+let companyName, mode, singleUrl, domainParam, workflowOptions
+let workDir = ''
 if (typeof args === 'string') {
   // 修复：Workflow 工具传递的对象 args 可能被序列化为 JSON 字符串
   // 先尝试 JSON 解析，成功则作为对象处理，否则当做公司名
@@ -62,6 +63,8 @@ if (typeof args === 'string') {
     companyName = parsed.company || null
     mode = parsed.mode || 'full'
     singleUrl = parsed.url || null
+    domainParam = parsed.domain || null
+    workDir = parsed.work_dir || ''
   } else {
     workflowOptions = {}
     companyName = args
@@ -72,6 +75,12 @@ if (typeof args === 'string') {
   companyName = args.company || null
   mode = args.mode || 'full'
   singleUrl = args.url || null
+  domainParam = args.domain || null
+  workDir = args.work_dir || ''
+  if (mode === 'domain' && !domainParam) {
+    log('⚠️ 单域模式需指定 domain 参数，如: {mode: "domain", company: "理想汽车", domain: "saos-mall-admin-ui.chehejia.com"}')
+    return { error: 'need_domain', message: '请指定domain参数' }
+  }
   if (mode === 'url' && !singleUrl) {
     log('⚠️ 单URL模式需指定 url 参数，如: {mode: "url", url: "https://target:8080"}')
     return { error: 'need_url', message: '请指定url参数' }
@@ -194,8 +203,10 @@ function markPhase(n, status) {
 // ============================================================
 // 资产测试状态加载（避免重复测试）
 // ============================================================
-const trackerPath = `${SRC_BASE}/${companyName || 'unknown'}/asset_test_status.json`
-const findingsPath = `${SRC_BASE}/${companyName || 'unknown'}/asset_findings.json`
+// C/S 工作区隔离：workDir 存在时所有输出写到独立工作区（10 client 并行不冲突）
+const _outBase = workDir || `${SRC_BASE}/${companyName || 'unknown'}`
+const trackerPath = `${_outBase}/asset_test_status.json`
+const findingsPath = `${_outBase}/asset_findings.json`
 let p0_tracker = null
 
 if (companyName && !mode.startsWith('phase5')) {
@@ -354,7 +365,34 @@ if (mode.startsWith('phase5')) {
   // 记录基础维度
   dimTracker.record(singleUrl, 'http_probe', 'done', { title: '' })
   progress.findings_count = 1
+  } else if (mode === 'domain' && domainParam) {
+  log('[1/8] 🌐 单域模式 — 聚焦 ' + domainParam)
+  markPhase(1, '🔄')
+  let domRows = ''
+  try {
+    domRows = (await agent(
+      `你是资产分析师。用 Read 读取 ${SRC_BASE}/${companyName}/assets_info/ 目录下所有 CSV，
+      筛选出 host 或 url 属于主域 ${domainParam}（含其所有子域）的资产行。
+      按 CSV 逐行判断域名列或 url 列是否以 ${domainParam} 结尾。
+      输出每行: url | 域名 | ip | 端口 | 标题（去重，去 HTML 冗余）。
+      若没有匹配资产，只输出"无匹配"。`,
+      { label: '🌐 提取单域资产: ' + domainParam, phase: '资产发现' }
+    )) || ''
+  } catch(e) { domRows = '' }
+  const _rows = String(domRows||'').split('\n').map(l => l.trim()).filter(l => l && l.includes('|'))
+  const _urls = _rows.map(l => l.split('|')[0].trim()).filter(u => u.startsWith('http'))
+  const domTargets = _urls.length > 0
+    ? _urls.map(u => ({ url: u, tags: ['[单域]'], priority: '高', reason: '用户指定单域 ' + domainParam }))
+    : [{ url: 'https://' + domainParam, tags: ['[单域]'], priority: '高', reason: '主域回退' }]
+  p1_assets = {
+    company_name: companyName,
+    src_scope_summary: '单域聚焦: ' + domainParam,
+    priority_targets: domTargets,
+    all_urls: domTargets.map(t => t.url),
+  }
+  progress.findings_count = domTargets.length
   showProgress()
+}
 } else if (!companyName) {
   // 无参数：列出公司并退出
   const listing = await agent(
@@ -586,7 +624,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
         // === Step A+B+Creds: 合并机械操作（含自动重试） ===
         // 失败自动重试1次
         // 声明在for循环外部（let块作用域：内部声明外部不可访问）
-        let dl_dump_dir = "${SRC_BASE}/${companyName}/js_dumps"
+        let dl_dump_dir = "${_outBase}/js_dumps"
         let dl_file_count = 0
         let target_hash = ""
 
@@ -594,7 +632,7 @@ if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
           var mechResult = await agent(
           `执行以下命令串行:
 # 1. 下载JS
-python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${SRC_BASE}/${companyName}/js_dumps" --ua "${REAL_UA}"
+python3 ${SKILL_SCRIPTS}/download_js.py "${target}" "${_outBase}/js_dumps" --ua "${REAL_UA}"
 # 2. 枚举chunk补下
 python3 ${SKILL_SCRIPTS}/enumerate_chunks.py "<从下载结果提取的dump_dir>" "${target}" --ua "${REAL_UA}"
 # 3. 提取凭证
@@ -753,7 +791,7 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     // Fix A+C: 提取鉴权凭证(结构化) + JS缓存目录捕获 → 供Phase3使用
     // ============================================================
     log('  🔐 提取JS中的鉴权凭证...')
-    const p2_js_dump_base = "${SRC_BASE}/${companyName}/js_dumps"
+    const p2_js_dump_base = "${_outBase}/js_dumps"
     let p2_js_dirs = []
     let p2_credentials = []
 
@@ -2131,7 +2169,7 @@ log(`  复测完成: ${p4_verify.confirmed_findings.length} 个确认有效${fp_
       对每个命中某 surface 的 confirmed 端点，向对应 surface.instances 追加:
       {"endpoint": "...", "found": "漏洞类型", "company": "${companyName}", "date": "2026-08-04"}
       规则:
-      1. 先 Read 攻击面库 + 本次 findings（${SRC_BASE}/${companyName}/asset_findings.json 或本阶段输出）
+      1. 先 Read 攻击面库 + 本次 findings（${_outBase}/asset_findings.json 或本阶段输出）
       2. 只在已有 surface.id 下追加，不新建 surface
       3. instances 去重（同 endpoint+found 不重复），超过 20 条删最旧
       4. 用 Write 写回 JSON，保证合法可解析
@@ -2293,15 +2331,15 @@ if (progress.findings_count === 0) {
   // 准备输出目录
   await agent(
     `执行以下命令创建报告输出目录:
-    mkdir -p ${SRC_BASE}/${companyName}/submittable_reports/
-    mkdir -p ${SRC_BASE}/${companyName}/submittable_reports/reports_html/
+    mkdir -p ${_outBase}/submittable_reports/
+    mkdir -p ${_outBase}/submittable_reports/reports_html/
     确认目录已创建成功。`,
     { label: '📁 准备输出目录', phase: '报告编写' }
   )
 
   // 列出已有报告避免重复
   const existingReports = await agent(
-    `列出 ${SRC_BASE}/${companyName}/submittable_reports/ 下所有 .md 文件的文件名（不含路径），
+    `列出 ${_outBase}/submittable_reports/ 下所有 .md 文件的文件名（不含路径），
     每行一个。如果没有文件则返回空。`,
     { label: '📋 检查已有报告', phase: '报告编写' }
   )
@@ -2357,7 +2395,7 @@ if (progress.findings_count === 0) {
 ${findingsJSON}
 ================================================================
 
-先检查 ${SRC_BASE}/${companyName}/submittable_reports/ 下已有报告避免重复。
+先检查 ${_outBase}/submittable_reports/ 下已有报告避免重复。
 
 ${existingReports ? `已有报告：
 ${existingReports}` : ''}
@@ -2407,7 +2445,7 @@ ${existingReports}` : ''}
         // 只取出该报告分到的发现数据（按finding_indices过滤）
         const myFindings = (rpt.finding_indices || []).map(i => allFindingsData[i])
         const myFindingsJSON = JSON.stringify(myFindings, null, 2)
-        const filePath = `${SRC_BASE}/${companyName}/submittable_reports/${rpt.file_name}`
+        const filePath = `${_outBase}/submittable_reports/${rpt.file_name}`
 
         // 用闭包包裹重试逻辑
         const tryWrite = async (attempt = 1) => {
@@ -2420,7 +2458,7 @@ ${existingReports}` : ''}
 - 标题: ${rpt.title}
 - 严重等级: ${rpt.severity}
 - 厂商: ${companyName}
-- 目录: ${SRC_BASE}/${companyName}/submittable_reports/
+- 目录: ${_outBase}/submittable_reports/
 
 ====== 该报告包含的结构化发现（仅该报告所属的${myFindings.length}个发现）======
 ${myFindingsJSON}
@@ -2474,9 +2512,9 @@ ${myFindingsJSON}
   // 生成HTML版本
   const p5_html = await agent(
     `运行HTML报告生成脚本:
-    python3 ${SKILL_SCRIPTS}/generate_html.py ${SRC_BASE}/${companyName}/submittable_reports/
+    python3 ${SKILL_SCRIPTS}/generate_html.py ${_outBase}/submittable_reports/
 
-    检查输出目录 ${SRC_BASE}/${companyName}/submittable_reports/reports_html/ 是否生成了对应的 .html 文件。
+    检查输出目录 ${_outBase}/submittable_reports/reports_html/ 是否生成了对应的 .html 文件。
 
     如果脚本不可用或报错，说明原因。`,
     { label: '🎨 生成HTML版本', phase: '报告编写' }
@@ -2523,7 +2561,7 @@ if (progress.reports_count === 0) {
 ${(p6_rules || '(读取失败)').substring(0, 2500)}
 ======================================================
 
-报告目录: ${SRC_BASE}/${companyName}/submittable_reports/
+报告目录: ${_outBase}/submittable_reports/
 先用 ReadFile 读取完整的 judgment-rules.md 和 VulnType.html
 运行审计脚本检查格式: python3 ${SKILL_SCRIPTS}/audit_reports.py 2>&1 | tail -30
 
@@ -2600,13 +2638,13 @@ ${(p6_rules || '(读取失败)').substring(0, 2500)}
         `执行以下命令处理F判定的报告（${fCount} 份）:
 
 1. 将以下报告移入 _invalid/ 目录:
-${fNames.map(function(n) { return '   mv "' + SRC_BASE + '/' + companyName + '/submittable_reports/' + n + '" "' + SRC_BASE + '/' + companyName + '/submittable_reports/_invalid/' + n + '"' }).join('\\n')}
+${fNames.map(function(n) { return '   mv "' + _outBase + '/submittable_reports/' + n + '" "' + SRC_BASE + '/' + companyName + '/submittable_reports/_invalid/' + n + '"' }).join('\\n')}
 
 2. 运行整合脚本:
-   python3 ${SKILL_SCRIPTS}/consolidate_findings.py ${SRC_BASE}/${companyName}/submittable_reports/
+   python3 ${SKILL_SCRIPTS}/consolidate_findings.py ${_outBase}/submittable_reports/
 
 3. 确认文件已移动:
-   ls -la "${SRC_BASE}/${companyName}/submittable_reports/_invalid/"`,
+   ls -la "${_outBase}/submittable_reports/_invalid/"`,
         { label: '🗑️ 处理F判定报告', phase: '自审' }
       )
     }
@@ -2629,7 +2667,7 @@ const p7_final = await agent(
 **检查清单：**
 
 1. 文件名规范检查:
-   ls "${SRC_BASE}/${companyName}/submittable_reports/"*.md
+   ls "${_outBase}/submittable_reports/"*.md
    确认文件名格式: {等级}_{类型}_{公司}_{简述}.md
 
 2. 完整HTTP请求/响应包确认:
@@ -2642,7 +2680,7 @@ const p7_final = await agent(
    提取每份报告中的漏洞URL，用 curl -sI -H 'User-Agent: Mozilla/5.0 ...' 确认当前仍可访问且返回200（必须带浏览器UA）
 
 4. HTML版本确认:
-   ls "${SRC_BASE}/${companyName}/submittable_reports/reports_html/"*.html
+   ls "${_outBase}/submittable_reports/reports_html/"*.html
    确认每份.md都有对应的.html
 
 5. 厂商合规检查:

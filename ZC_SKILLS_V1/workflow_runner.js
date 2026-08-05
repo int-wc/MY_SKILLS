@@ -690,6 +690,14 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     - 发挥第一性原理和创造性思维，不要局限于固定模式
     - 注意看Source Map还原出的文件: 检查是否有 reconstructed/ 目录（包含原始TS/Vue/React源码）
 
+    **Step 4: 参数加密/签名/编码逆向（从 JS 构造正确请求体的关键）**
+    当某接口的请求参数是**加密/编码后的不透明值**（data 字段是 hex/base64/长字符串而非明文 JSON），必须逆向出加密流程才能构造正确请求：
+    1. 定位加密调用：搜 CryptoJS/AES/RSA/JSEncrypt/encrypt/decrypt/`.encrypt(`，找到包裹参数的加密函数（如 `data: enc({...})`）
+    2. 追踪 key/IV：来自函数调用（`pa()`/`ha()`）、模块导入（`import {g as key} from './store'`）、构建配置对象（`VITE_APP_*`）、字符串变换（shift-char/atob/base64/charCodeAt/join）——先还原原始串再解码
+    3. 复现：确认算法（AES-CBC/ECB、key/iv 长度、零填充还是 PKCS7、输出 hex/base64）后，用 Python(pycryptodome) 或 openssl 写脚本生成正确请求体
+    4. 验证：用生成的密文发一次请求，若返回**业务错误**（非"密文非法/解密失败"）即证明加密还原正确
+    5. **注意**：前端加密密钥必然可从前端恢复（只是混淆），"加密=安全"是假象。能复现加密 = 能构造任意正确请求。
+
     **Step 5: 本质业务属性判定（最高优先级思维 — 从数据流推断原语，不要看API名字）**
     对每个端点输出 business_attr（核心业务原语）∈ {read_file, write_file, exec_code, modify_state, query_data, transfer, auth}、attr_target（原语作用对象 ∈ {local_fs, remote_url, db, template, user_input, worker}）、attr_reason（推导依据）。
     - 参照 OpenAI Agent 攻破 HuggingFace 案例: 数据集 loader 名字看似"数据加载"，本质原语是"把数据集配置变成文件读取"（read_file），又能被 Jinja2 模板注入改成"执行本地代码"（exec_code）——同一表面既是 read 原语又是 exec 原语。

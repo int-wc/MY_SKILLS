@@ -482,11 +482,11 @@ p1_assets = await agent(
     "prohibited_items": "禁止事项",
     "category_breakdown": {
       "management": N, "new_discovery": N, "uncommon_port": N,
-      "overseas": N, "component_fingerprint": N, "in_scope": N
+      "overseas": N, "component_fingerprint": N, "in_scope": N, "privileged": N
     },
     "priority_targets": [
       {"url": "https://xxx", "ip": "x.x.x.x", "port": 443, "title": "xxx",
-       "tags": ["[管理后台]"], "priority": "最高", "reason": "标题含"管理""}
+       "tags": ["[特权资产]", "[管理后台]"], "priority": "最高", "reason": "付费/认证门槛, 别人挖不到"}
     ],
     "all_urls": ["url1", "url2", ...]
   }`,

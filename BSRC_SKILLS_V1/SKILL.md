@@ -106,11 +106,12 @@ python3 -c "import requests, bs4, lxml" 2>/dev/null || echo "pip install request
 
 1. **读取 ByteSRC 统一规则**：`/home/my/SRC/BSRC/markdown/ByteSRC安全报告处置规则V6.0.md`（业务系数表/六级等级/收录范围/忽略清单/测试红线）
 2. **解析Hunter资产**：CSV列—IP,端口,域名,url,标题,状态码,组件,备案。按维度打标签：
-   - `[管理后台]` High | `[范围内][新发现]` Med | `[非常见端口][组件指纹]` Low
+   - `[特权资产]` 最高 | `[管理后台]` High | `[范围内][新发现]` Med | `[非常见端口][组件指纹]` Low
 3. **URL聚合去重**：同域名多端口→保留HTTP+HTTPS各一；同IP不同域名→独立保留
 4. **严格域名过滤**：只保留字节跳动（中国区）业务域（douyin.com/jinritemai.com/ixigua.com/toutiao.com/bytedance.com/feishu.cn/volcengine.com/coze.cn/oceanengine.com/trae.cn 等系数表内业务）；第三方供应商/外包/ISV/非中区产品/火山·BytePlus外部客户域名全部剔除
-5. **目标优先级**: 高危RCE> 大量敏感数据> 文件读写> SSRF(统一高系数) > 越权> 信息泄露> XSS > 弱口令
-6. 详细命令 → `references/phase-cmd-reference.md#阶段1-资产发现命令`
+5. **特权资产识别（核心策略）**：SRC 太多人挖，真正的洞在**别人挖不了的特权资产**里。逐个资产识别付费/企业版/认证白名单/开放平台AppKey/管理运营内部/新业务冷门/敏感数据等特权信号，命中即标 `[特权资产]` priority=最高，reason 注明"为什么别人挖不到"。category_breakdown 统计 privileged。
+6. **目标优先级**: [特权资产] 优先 → 高危RCE> 大量敏感数据> 文件读写> SSRF(统一高系数) > 越权> 信息泄露> XSS > 弱口令
+7. 详细命令 → `references/phase-cmd-reference.md#阶段1-资产发现命令`
 
 **单URL模式：** 指定 `mode: "url"` 跳过资产发现和深度分析，直接对单个URL执行漏洞挖掘全流程。
 ```

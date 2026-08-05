@@ -148,6 +148,7 @@ Workflow({scriptPath: ".../domain_server.js", args: {company: "抖音", domains:
 4. **路径模式提取**：`grep -ohP` 提取所有 `"/xxx/yyy"` 路径，按一级目录分组统计
 5. **Webpack chunk 枚举**：提取 `chunk-`、`assets/`、`_nuxt/` 等引用 → 补下载lazy JS
 6. **登录态补下载**：找到登录API后尝试获取Cookie → 下载需要认证的页面JS
+7. **参数加密/签名/编码逆向（关键能力）**：请求参数是加密/编码后的不透明值（data=hex/base64 长串）时，必须逆向出加密流程才能构造正确请求体：定位加密函数（CryptoJS/AES/RSA/`.encrypt(`）→ 追踪 key/IV 来源（函数调用/模块导入/构建配置对象 `VITE_APP_*`/字符串变换 shift-char·atob·base64）→ Python(pycryptodome)/openssl 复现算法 → 发请求验证（返回业务错误而非"解密失败"即成功）。前端加密密钥必然可从前端恢复，"加密=安全"是假象。
 
 **鉴权方式识别**：先找鉴权再测试（Authorization: Bearer/Basic/X-TOKEN/Cookie/localStorage）
 

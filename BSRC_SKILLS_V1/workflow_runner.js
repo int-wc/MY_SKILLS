@@ -769,7 +769,7 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     3. 找到JWT → 解码看user/role
     4. 鉴权方式 — Authorization: Bearer/Basic/X-TOKEN/Cookie
 
-    **Step 4: 输出结构化数据**
+    **Step 5: 输出结构化数据**
     按以下 JSON 格式输出每个端点的参数结构（供 Phase 3 直接使用）:
 
     \`\`\`json

@@ -742,11 +742,11 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
 
     **Step 3: 参数加密/签名/编码逆向（从 JS 构造正确请求体的关键 — 零到一）**
     当某接口的请求参数是**加密/编码后的不透明值**（如 data 字段是 hex/base64/长字符串，而非明文 JSON），必须逆向出加密流程才能构造正确请求：
-    1. 定位加密调用：在 JS 中搜索 CryptoJS / AES / RSA / JSEncrypt / encrypt / decrypt / `.encrypt(` 等，找到包裹请求参数的加密函数调用点（如 `data: sv({...})`、`x = enc({...})`）
+    1. 定位加密调用：在 JS 中搜索 CryptoJS / AES / RSA / JSEncrypt / encrypt / decrypt / \`.encrypt(\` 等，找到包裹请求参数的加密函数调用点（如 \`data: sv({...})\`、\`x = enc({...})\`）
     2. 追踪密钥/IV 来源（关键 — 很少是明文字符串）：
-       - 加密函数内的 key/iv 来自函数调用（如 `pa()`/`ha()`）→ 找到该函数定义
-       - 来自模块导入（如 `import {g as key} from './store'`）→ 去该 store 模块找
-       - 来自构建配置对象（如 `VITE_APP_*`、`$1[V]` 读配置）→ 找到配置对象里的具体值
+       - 加密函数内的 key/iv 来自函数调用（如 \`pa()\`/\`ha()\`）→ 找到该函数定义
+       - 来自模块导入（如 \`import {g as key} from './store'\`）→ 去该 store 模块找
+       - 来自构建配置对象（如 \`VITE_APP_*\`、\`$1[V]\` 读配置）→ 找到配置对象里的具体值
        - 字符串变换：shift-char / atob / base64 / charCodeAt 运算 / join 拼接 → 先还原原始串再解码
     3. 复现加密：确认算法（AES-CBC/ECB? key/iv 长度? 零填充还是 PKCS7? 输出 hex 还是 base64?）后用 Python(pycryptodome) 或 openssl 写脚本，对构造的 payload 加密生成正确请求体
     4. 验证：用生成的密文发一次请求，若服务端返回**业务错误**（如"手机号不在允许范围/参数错误"而非"密文非法/解密失败"），即证明加密流程还原正确

@@ -605,6 +605,22 @@ let p3_findings_data = []
 
 if (mode.startsWith('phase3') || mode.startsWith('phase5')) {
   log('[2/8] ⏭️ 跳过（用户指定模式）')
+  // FIX 2026-08-09: phase3 模式从文件恢复 phase2 分析结果（否则挖洞阶段无 JS 线索）
+  // phase2 结束会写 /tmp/phase2_analysis_dump.txt；这里若存在则读回填入 p2_discoveries_text
+  if (mode.startsWith('phase3')) {
+    try {
+      const fs = require('fs')
+      const _ph2file = '/tmp/phase2_analysis_dump.txt'
+      if (fs.existsSync(_ph2file)) {
+        p2_discoveries_text = fs.readFileSync(_ph2file, 'utf-8').trim()
+        log(`  📂 已从 ${_ph2file} 恢复 phase2 分析结果 (${p2_discoveries_text.length} 字符)`)
+      } else {
+        log('  ⚠️ 未找到 /tmp/phase2_analysis_dump.txt，挖洞将无 phase2 JS 线索')
+      }
+    } catch(e) {
+      log('  ⚠️ 恢复 phase2 结果失败: ' + e.message)
+    }
+  }
   markPhase(2, '⏭️')
 } else {
   markPhase(2, '🔄')

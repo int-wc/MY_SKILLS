@@ -121,7 +121,7 @@ def download_js(target_url, output_dir, ua='', iface='', cookie=''):
                 map_url = urllib.parse.urljoin(js_url, map_match.group(1))
                 map_name = js_name + '.map'
                 map_path = os.path.join(dump_dir, map_name)
-                map_content, _ = run(f"{curl_base} '{map_url}'")
+                map_content, _ = fetch(curl_base, map_url)
                 if map_content:
                     with open(map_path, 'w', encoding='utf-8', errors='replace') as f:
                         f.write(map_content)

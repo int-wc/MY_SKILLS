@@ -3,7 +3,7 @@
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
-      "count": 17,
+      "count": 18,
       "first_seen": "2026-07-09",
       "last_seen": "2026-08-10"
     },
@@ -203,17 +203,6 @@
     "classes"
   ],
   "common_endpoints": [
-    "https://vrdos-dc.chehejia.com/api/v1/file",
-    "https://vrdos-dc.chehejia.com/api/v1/import",
-    "https://vrdos-dc.chehejia.com/api/v1/log",
-    "https://vrdos-dc.chehejia.com/api/v1/login",
-    "https://vrdos-dc.chehejia.com/api/v1/manage",
-    "https://vrdos-dc.chehejia.com/api/v1/order",
-    "https://vrdos-dc.chehejia.com/api/v1/payment",
-    "https://vrdos-dc.chehejia.com/api/v1/report",
-    "https://vrdos-dc.chehejia.com/api/v1/system",
-    "https://vrdos-dc.chehejia.com/api/v1/token",
-    "https://vrdos-dc.chehejia.com/api/v1/upload",
     "https://vrdos-dc.chehejia.com/api/v1/user",
     "https://vrdos-dc.chehejia.com/api/v2",
     "https://vrdos-dc.chehejia.com/api/v2/admin",
@@ -1202,7 +1191,18 @@
     "http://ops-kibana.jtexpress.com:5678/v3/token",
     "http://ops-kibana.jtexpress.com:5678/v3/upload",
     "http://ops-kibana.jtexpress.com:5678/v3/user",
-    "http://ops-kibana.jtexpress.com:5678/webjars/"
+    "http://ops-kibana.jtexpress.com:5678/webjars/",
+    "/api",
+    "http://ops-grafana.jtexpress.com:5678/api",
+    "http://ops-grafana.jtexpress.com:5678/api/v1",
+    "http://ops-grafana.jtexpress.com:5678/api/v2",
+    "http://ops-grafana.jtexpress.com:5678/api/v3",
+    "http://ops-grafana.jtexpress.com:5678/crm",
+    "http://ops-grafana.jtexpress.com:5678/dwr",
+    "http://ops-grafana.jtexpress.com:5678/erp",
+    "http://ops-grafana.jtexpress.com:5678/gateway",
+    "http://ops-grafana.jtexpress.com:5678/manage",
+    "http://ops-grafana.jtexpress.com:5678/sys"
   ],
   "framework_patterns": {
     "JeecgBoot": [

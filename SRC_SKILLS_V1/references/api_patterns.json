@@ -3,7 +3,7 @@
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
-      "count": 19,
+      "count": 20,
       "first_seen": "2026-07-09",
       "last_seen": "2026-08-10"
     },
@@ -203,16 +203,6 @@
     "classes"
   ],
   "common_endpoints": [
-    "http://ops-kibana.jtexpress.com:5678/api/v2/api",
-    "http://ops-kibana.jtexpress.com:5678/api/v2/auth",
-    "http://ops-kibana.jtexpress.com:5678/api/v2/backup",
-    "http://ops-kibana.jtexpress.com:5678/api/v2/config",
-    "http://ops-kibana.jtexpress.com:5678/api/v2/data",
-    "http://ops-kibana.jtexpress.com:5678/api/v2/download",
-    "http://ops-kibana.jtexpress.com:5678/api/v2/export",
-    "http://ops-kibana.jtexpress.com:5678/api/v2/file",
-    "http://ops-kibana.jtexpress.com:5678/api/v2/import",
-    "http://ops-kibana.jtexpress.com:5678/api/v2/log",
     "http://ops-kibana.jtexpress.com:5678/api/v2/login",
     "http://ops-kibana.jtexpress.com:5678/api/v2/manage",
     "http://ops-kibana.jtexpress.com:5678/api/v2/order",
@@ -1202,7 +1192,17 @@
     "http://ops-n9e.jtexpress.com:5678/erp",
     "http://ops-n9e.jtexpress.com:5678/gateway",
     "http://ops-n9e.jtexpress.com:5678/manage",
-    "http://ops-n9e.jtexpress.com:5678/sys"
+    "http://ops-n9e.jtexpress.com:5678/sys",
+    "http://ops-prome.jtexpress.com:5678/api",
+    "http://ops-prome.jtexpress.com:5678/api/v1",
+    "http://ops-prome.jtexpress.com:5678/api/v2",
+    "http://ops-prome.jtexpress.com:5678/api/v3",
+    "http://ops-prome.jtexpress.com:5678/crm",
+    "http://ops-prome.jtexpress.com:5678/dwr",
+    "http://ops-prome.jtexpress.com:5678/erp",
+    "http://ops-prome.jtexpress.com:5678/gateway",
+    "http://ops-prome.jtexpress.com:5678/manage",
+    "http://ops-prome.jtexpress.com:5678/sys"
   ],
   "framework_patterns": {
     "JeecgBoot": [

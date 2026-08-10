@@ -25,6 +25,16 @@ def run(cmd, timeout=15):
     except subprocess.TimeoutExpired:
         return "", -1
 
+def fetch(curl_base, test_url, out_path):
+    """带TLS兜底的下载：校验失败时自动加 -k 重试"""
+    cmd = f"{curl_base} '{test_url}' -o '{out_path}' -w '%{{http_code}}'"
+    content, rc = run(cmd)
+    if rc != 0 or content == '000':
+        content2, rc2 = run(f"{curl_base} -k '{test_url}' -o '{out_path}' -w '%{{http_code}}'")
+        if rc2 == 0:
+            return content2, rc2
+    return content, rc
+
 # 需要枚举的chunk引用模式
 CHUNK_PATTERNS = [
     r'(chunk-[a-f0-9]{8,64})',                    # webpack chunk-hash

@@ -78,7 +78,7 @@ def download_js(target_url, output_dir, ua='', iface='', cookie=''):
 
     # Step 1: 获取HTML
     print(f"[*] 获取HTML: {target_url}", file=sys.stderr)
-    html, rc = run(f"{curl_base} '{target_url}'")
+    html, rc = fetch(curl_base, target_url)
     if rc != 0 or not html:
         print(f"[!] HTML获取失败 ({target_url})", file=sys.stderr)
         return {"status": "unreachable", "target": target_url, "files": [], "errors": ["HTML fetch failed"]}
@@ -109,7 +109,7 @@ def download_js(target_url, output_dir, ua='', iface='', cookie=''):
         js_name = os.path.basename(urllib.parse.urlparse(js_url).path) or f'js_{md5(js_url.encode()).hexdigest()[:8]}.js'
         js_path = os.path.join(dump_dir, js_name)
 
-        content, rc2 = run(f"{curl_base} '{js_url}'")
+        content, rc2 = fetch(curl_base, js_url)
         if rc2 == 0 and content:
             with open(js_path, 'w', encoding='utf-8', errors='replace') as f:
                 f.write(content)

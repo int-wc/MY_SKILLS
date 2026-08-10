@@ -28,6 +28,15 @@ def run(cmd, timeout=30):
     except subprocess.TimeoutExpired:
         return "", -1
 
+def fetch(curl_base, url):
+    """带TLS兜底的获取：校验失败时自动加 -k 重试（证书不合法/SNI不匹配场景）"""
+    content, rc = run(f"{curl_base} '{url}'")
+    if rc != 0 or not content:
+        content2, rc2 = run(f"{curl_base} -k '{url}'")
+        if rc2 == 0 and content2:
+            return content2, rc2
+    return content, rc
+
 def extract_script_srcs(html, base_url):
     """提取HTML中所有<script src>路径"""
     # 匹配 <script src="..."> 和 <script type="module" src="...">

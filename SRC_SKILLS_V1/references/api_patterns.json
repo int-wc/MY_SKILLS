@@ -3,7 +3,7 @@
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
-      "count": 22,
+      "count": 23,
       "first_seen": "2026-07-09",
       "last_seen": "2026-08-10"
     },
@@ -203,16 +203,6 @@
     "classes"
   ],
   "common_endpoints": [
-    "http://ops-harbor.jtexpress.com:5678/api/v2/login",
-    "http://ops-harbor.jtexpress.com:5678/api/v2/manage",
-    "http://ops-harbor.jtexpress.com:5678/api/v2/order",
-    "http://ops-harbor.jtexpress.com:5678/api/v2/payment",
-    "http://ops-harbor.jtexpress.com:5678/api/v2/report",
-    "http://ops-harbor.jtexpress.com:5678/api/v2/system",
-    "http://ops-harbor.jtexpress.com:5678/api/v2/token",
-    "http://ops-harbor.jtexpress.com:5678/api/v2/upload",
-    "http://ops-harbor.jtexpress.com:5678/api/v2/user",
-    "http://ops-harbor.jtexpress.com:5678/api/v3",
     "http://ops-harbor.jtexpress.com:5678/api/v3/admin",
     "http://ops-harbor.jtexpress.com:5678/api/v3/api",
     "http://ops-harbor.jtexpress.com:5678/api/v3/auth",
@@ -1202,7 +1192,17 @@
     "https://aistuff-mpowerboss.huazhu.com/erp",
     "https://aistuff-mpowerboss.huazhu.com/gateway",
     "https://aistuff-mpowerboss.huazhu.com/manage",
-    "https://aistuff-mpowerboss.huazhu.com/sys"
+    "https://aistuff-mpowerboss.huazhu.com/sys",
+    "https://appgw.huazhu.com/api",
+    "https://appgw.huazhu.com/api/v1",
+    "https://appgw.huazhu.com/api/v2",
+    "https://appgw.huazhu.com/api/v3",
+    "https://appgw.huazhu.com/crm",
+    "https://appgw.huazhu.com/dwr",
+    "https://appgw.huazhu.com/erp",
+    "https://appgw.huazhu.com/gateway",
+    "https://appgw.huazhu.com/manage",
+    "https://appgw.huazhu.com/sys"
   ],
   "framework_patterns": {
     "JeecgBoot": [

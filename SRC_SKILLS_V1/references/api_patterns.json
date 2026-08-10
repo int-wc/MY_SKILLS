@@ -203,15 +203,6 @@
     "classes"
   ],
   "common_endpoints": [
-    "https://b2b-h5.huazhu.com/api/file",
-    "https://b2b-h5.huazhu.com/api/import",
-    "https://b2b-h5.huazhu.com/api/log",
-    "https://b2b-h5.huazhu.com/api/login",
-    "https://b2b-h5.huazhu.com/api/manage",
-    "https://b2b-h5.huazhu.com/api/order",
-    "https://b2b-h5.huazhu.com/api/payment",
-    "https://b2b-h5.huazhu.com/api/report",
-    "https://b2b-h5.huazhu.com/api/swagger.json",
     "https://b2b-h5.huazhu.com/api/system",
     "https://b2b-h5.huazhu.com/api/token",
     "https://b2b-h5.huazhu.com/api/upload",
@@ -1202,7 +1193,16 @@
     "https://b2b.huazhu.com/v3/token",
     "https://b2b.huazhu.com/v3/upload",
     "https://b2b.huazhu.com/v3/user",
-    "https://b2b.huazhu.com/webjars/"
+    "https://b2b.huazhu.com/webjars/",
+    "/api/login",
+    "/api/order",
+    "/api/report",
+    "/api/user",
+    "https://zu.zuhaowan.com/api/download",
+    "https://zu.zuhaowan.com/api/login",
+    "https://zu.zuhaowan.com/api/order",
+    "https://zu.zuhaowan.com/api/report",
+    "https://zu.zuhaowan.com/api/user"
   ],
   "framework_patterns": {
     "JeecgBoot": [

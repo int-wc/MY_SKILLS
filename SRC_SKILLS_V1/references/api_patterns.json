@@ -3,7 +3,7 @@
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
-      "count": 15,
+      "count": 16,
       "first_seen": "2026-07-09",
       "last_seen": "2026-08-10"
     },
@@ -203,22 +203,6 @@
     "classes"
   ],
   "common_endpoints": [
-    "http://smp-ontest.lixiang.com/v3/backup",
-    "http://smp-ontest.lixiang.com/v3/config",
-    "http://smp-ontest.lixiang.com/v3/data",
-    "http://smp-ontest.lixiang.com/v3/download",
-    "http://smp-ontest.lixiang.com/v3/export",
-    "http://smp-ontest.lixiang.com/v3/file",
-    "http://smp-ontest.lixiang.com/v3/import",
-    "http://smp-ontest.lixiang.com/v3/log",
-    "http://smp-ontest.lixiang.com/v3/login",
-    "http://smp-ontest.lixiang.com/v3/manage",
-    "http://smp-ontest.lixiang.com/v3/order",
-    "http://smp-ontest.lixiang.com/v3/payment",
-    "http://smp-ontest.lixiang.com/v3/report",
-    "http://smp-ontest.lixiang.com/v3/system",
-    "http://smp-ontest.lixiang.com/v3/token",
-    "http://smp-ontest.lixiang.com/v3/upload",
     "http://smp-ontest.lixiang.com/v3/user",
     "http://smp-ontest.lixiang.com/webjars/",
     "/.well-known",
@@ -1202,7 +1186,23 @@
     "/api/v3",
     "https://srm.jtexpress.com/api/v1",
     "https://srm.jtexpress.com/api/v2",
-    "https://srm.jtexpress.com/api/v3"
+    "https://srm.jtexpress.com/api/v3",
+    "/crm",
+    "/dwr",
+    "/erp",
+    "/gateway",
+    "/manage",
+    "/sys",
+    "http://ops-gitlab.jtexpress.com:5678/api",
+    "http://ops-gitlab.jtexpress.com:5678/api/v1",
+    "http://ops-gitlab.jtexpress.com:5678/api/v2",
+    "http://ops-gitlab.jtexpress.com:5678/api/v3",
+    "http://ops-gitlab.jtexpress.com:5678/crm",
+    "http://ops-gitlab.jtexpress.com:5678/dwr",
+    "http://ops-gitlab.jtexpress.com:5678/erp",
+    "http://ops-gitlab.jtexpress.com:5678/gateway",
+    "http://ops-gitlab.jtexpress.com:5678/manage",
+    "http://ops-gitlab.jtexpress.com:5678/sys"
   ],
   "framework_patterns": {
     "JeecgBoot": [

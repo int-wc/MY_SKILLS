@@ -129,7 +129,7 @@ def enumerate_chunks(js_dump_dir, base_url, ua='', iface=''):
             test_url = f"{base_url_clean}/{prefix}{ref_name}"
             out_path = os.path.join(js_dump_dir, f"lazy_{ref_name}")
 
-            content, rc = run(f"{curl_base} '{test_url}' -o '{out_path}' -w '%{{http_code}}'")
+            content, rc = fetch(curl_base, test_url, out_path)
             if rc == 0:
                 # 检查是否成功下载（非404/非空）
                 try:
@@ -148,7 +148,7 @@ def enumerate_chunks(js_dump_dir, base_url, ua='', iface=''):
             # 尝试直接从base_url取
             test_url = f"{base_url_clean}/{ref}"
             out_path = os.path.join(js_dump_dir, f"lazy_{os.path.basename(ref)}")
-            content, rc = run(f"{curl_base} '{test_url}' -o '{out_path}' -w '%{{http_code}}'")
+            content, rc = fetch(curl_base, test_url, out_path)
             if rc == 0:
                 try:
                     file_size = os.path.getsize(out_path)

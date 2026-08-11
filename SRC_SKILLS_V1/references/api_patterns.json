@@ -203,10 +203,6 @@
     "classes"
   ],
   "common_endpoints": [
-    "https://global-aimomp.agibot.com/blade-auth/oauth/token",
-    "https://global-aimomp.agibot.com/blade-develop/",
-    "https://global-aimomp.agibot.com/blade-log/",
-    "https://global-aimomp.agibot.com/blade-log/api",
     "https://global-aimomp.agibot.com/blade-resource/",
     "https://global-aimomp.agibot.com/blade-system/",
     "https://global-aimomp.agibot.com/blade-system/menu",
@@ -1202,7 +1198,11 @@
     "POST https://dservice-portal.huazhu.com/portalapi/api_index_page_info",
     "POST /goods/searchGoodsList",
     "POST /goods/searchGoodsList (pageSize=100)",
-    "POST /v2/api/wifi/ismember"
+    "POST /v2/api/wifi/ismember",
+    "/apix/image-colors",
+    "/api/get-email-and-phone",
+    "/admin/member/exist",
+    "/api/auth-center/auth/validate-login-by-user-name"
   ],
   "framework_patterns": {
     "JeecgBoot": [

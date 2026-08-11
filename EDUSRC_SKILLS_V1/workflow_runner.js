@@ -1,9 +1,3 @@
-// EDUSRC_SKILLS_V1 - 八阶段全流程 Workflow 编排
-// 教育漏洞报告平台(EDUSRC)专属 — 依据补天SRC_SKILLS_V1模型改造
-// 使用: Workflow({scriptPath: '...', args: {company: '北京大学', mode: 'full'}})
-// mode: 'full' | 'phase3' (跳过资产发现和深度分析，直接挖洞) | 'phase5' (直接出报告) | 'url' (指定单个URL)
-// 可选: proxy: 'http://127.0.0.1:8080' 强制所有阶段网络请求走代理；skipDirsearch: true 直接跳过 Phase 3 dirsearch
-
 export const meta = {
   name: 'edusrc-full-scan',
   description: 'EDUSRC全流程：教育资产发现→深度分析→漏洞挖掘→验证→资产标记→报告→自审→提交',
@@ -18,6 +12,12 @@ export const meta = {
     { title: '提交准备', detail: '最终清单 + 提交排序' },
   ],
 }
+
+// EDUSRC_SKILLS_V1 - 八阶段全流程 Workflow 编排
+// 教育漏洞报告平台(EDUSRC)专属 — 依据补天SRC_SKILLS_V1模型改造
+// 使用: Workflow({scriptPath: '...', args: {company: '北京大学', mode: 'full'}})
+// mode: 'full' | 'phase3' (跳过资产发现和深度分析，直接挖洞) | 'phase5' (直接出报告) | 'url' (指定单个URL)
+// 可选: proxy: 'http://127.0.0.1:8080' 强制所有阶段网络请求走代理；skipDirsearch: true 直接跳过 Phase 3 dirsearch
 
 // ============================================================
 // 解析参数

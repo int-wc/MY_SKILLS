@@ -203,13 +203,6 @@
     "classes"
   ],
   "common_endpoints": [
-    "https://global-aimomp.agibot.com/actuator/upload",
-    "https://global-aimomp.agibot.com/actuator/user",
-    "https://global-aimomp.agibot.com/anon",
-    "https://global-aimomp.agibot.com/api-docs",
-    "https://global-aimomp.agibot.com/apix",
-    "https://global-aimomp.agibot.com/blade-",
-    "https://global-aimomp.agibot.com/blade-auth/",
     "https://global-aimomp.agibot.com/blade-auth/oauth/token",
     "https://global-aimomp.agibot.com/blade-develop/",
     "https://global-aimomp.agibot.com/blade-log/",
@@ -1202,7 +1195,14 @@
     "https://aistuff-mpowerboss.huazhu.com/erp",
     "https://aistuff-mpowerboss.huazhu.com/gateway",
     "https://aistuff-mpowerboss.huazhu.com/manage",
-    "https://aistuff-mpowerboss.huazhu.com/sys"
+    "https://aistuff-mpowerboss.huazhu.com/sys",
+    "GET https://dservice-portal.huazhu.com/portalapi/api_ismember?mac=&mobile=&countryCode=&hotelId=&sign=",
+    "GET /portalapi/api_ismember（V24）对比 POST /v2/api/wifi/ismember（V22）",
+    "POST https://dservice-portal.huazhu.com/portalapi/api_sendsms",
+    "POST https://dservice-portal.huazhu.com/portalapi/api_index_page_info",
+    "POST /goods/searchGoodsList",
+    "POST /goods/searchGoodsList (pageSize=100)",
+    "POST /v2/api/wifi/ismember"
   ],
   "framework_patterns": {
     "JeecgBoot": [

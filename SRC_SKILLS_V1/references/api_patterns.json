@@ -203,8 +203,6 @@
     "classes"
   ],
   "common_endpoints": [
-    "http://zz-qkassist.zuhaowan.com:9006/.svn/log",
-    "http://zz-qkassist.zuhaowan.com:9006/.svn/login",
     "http://zz-qkassist.zuhaowan.com:9006/.svn/manage",
     "http://zz-qkassist.zuhaowan.com:9006/.svn/order",
     "http://zz-qkassist.zuhaowan.com:9006/.svn/payment",
@@ -1202,7 +1200,9 @@
     "https://global-aimomp.agibot.com/v3/token",
     "https://global-aimomp.agibot.com/v3/upload",
     "https://global-aimomp.agibot.com/v3/user",
-    "https://global-aimomp.agibot.com/webjars/"
+    "https://global-aimomp.agibot.com/webjars/",
+    "/login",
+    "https://open-us-east.agibot.com/login"
   ],
   "framework_patterns": {
     "JeecgBoot": [

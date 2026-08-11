@@ -11,7 +11,10 @@
       "targets": ["remote_url", "local_fs"],
       "base_primitives": ["SSRF(回显)", "remote→local白名单绕过(读 /proc/self/environ、源码路径)", "路径遍历读", "开放重定向"],
       "risk": "回显SSRF统一高系数",
-      "instances": []
+      "instances": [
+        {"endpoint": "https://b2b-h5-api.huazhu.com/saml/login?redirectUrl=", "found": "开放重定向(SAML RelayState注入，可信域登录流凭证钓鱼)", "company": "华住酒店", "date": "2026-08-04"},
+        {"endpoint": "https://aistuff-mpowerboss.huazhu.com/jyfx/saml/login?entry=", "found": "开放重定向(SAML RelayState回显)", "company": "华住酒店", "date": "2026-08-04"}
+      ]
     },
     {
       "id": "sf_upload_import_parse",
@@ -51,7 +54,9 @@
       "targets": ["db", "user_input"],
       "base_primitives": ["IDOR越权读取", "遍历泄露", "换ID看他人"],
       "risk": "越权读取证明≤5组，严禁批量",
-      "instances": []
+      "instances": [
+        {"endpoint": "https://b2b-h5-api.huazhu.com/goods/searchGoodsDetail?goodsId=", "found": "IDOR越权/未授权读取(无token遍历商品/门店配送数据)", "company": "华住酒店", "date": "2026-08-04"}
+      ]
     },
     {
       "id": "sf_state_flow",
@@ -75,7 +80,8 @@
         {"endpoint": "http://clm.huazhu.com/api/oauth/login", "found": "信息泄露(OAuth2登录页公钥/内部信息泄露)", "company": "华住酒店", "date": "2026-08-04"},
         {"endpoint": "http://clm.huazhu.com/api/oauth/login", "found": "信息泄露(HZERO IAM内部API端点)", "company": "华住酒店", "date": "2026-08-04"},
         {"endpoint": "https://signin.hworld.com/login", "found": "配置错误(CORS任意来源)", "company": "华住酒店", "date": "2026-08-04"},
-        {"endpoint": "https://sec.huazhu.com/index.php?c=login&a=index", "found": "信息泄露(ThinkPHP框架/PHP版本)", "company": "华住酒店", "date": "2026-08-04"}
+        {"endpoint": "https://sec.huazhu.com/index.php?c=login&a=index", "found": "信息泄露(ThinkPHP框架/PHP版本)", "company": "华住酒店", "date": "2026-08-04"},
+        {"endpoint": "https://aistuff-mpowerboss.huazhu.com/asr/auth/v1/token", "found": "未授权访问(空body默认签发生产ak JWT，可无限滥用付费ASR服务)", "company": "华住酒店", "date": "2026-08-04"}
       ]
     },
     {

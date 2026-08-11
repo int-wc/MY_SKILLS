@@ -203,7 +203,6 @@
     "classes"
   ],
   "common_endpoints": [
-    "https://global-aimomp.agibot.com/actuator/data",
     "https://global-aimomp.agibot.com/actuator/download",
     "https://global-aimomp.agibot.com/actuator/env",
     "https://global-aimomp.agibot.com/actuator/export",
@@ -1202,7 +1201,8 @@
     "https://casdoor.infra.agibot.com/v3/token",
     "https://casdoor.infra.agibot.com/v3/upload",
     "https://casdoor.infra.agibot.com/v3/user",
-    "https://casdoor.infra.agibot.com/webjars/"
+    "https://casdoor.infra.agibot.com/webjars/",
+    "https://aimomp.agibot.com/login"
   ],
   "framework_patterns": {
     "JeecgBoot": [

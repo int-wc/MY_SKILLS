@@ -146,6 +146,14 @@ echo "[✓] 众测: HTTP $ZC_CHECK | 外网: HTTP $BAIDU_CHECK"
 **去重规则（NOTICE 规定）：**
 同一漏洞源产生的多个漏洞算同一个漏洞：全局函数/配置导致的问题、同一配置影响的多个文件、同一漏洞的不同利用方式、同一函数导致的漏洞、同一功能模块下的不同接口、同一文件的不同参数、同一参数出现在不同文件、同一文件在不同目录、不同版本的同一漏洞、泛域名解析产生的多个安全漏洞。
 
+
+**split-horizon DNS / hosts 碰撞（目标不可达处理）:** 目标域名 curl 超时/连接失败时，**先判断 split-horizon DNS 再 hosts 碰撞**，禁止因 DNS 超时直接放弃资产。
+- 本地解析出内网IP（10.x/172.16-31.x/192.168.x/100.64.x/169.254.x）→ split-horizon → 用 FOFA资产CSV / 同域其他主机名（minio.xx.com/xx-dev.xx.com）溯源公网IP → curl 加 `--resolve <host>:<port>:<公网IP>` 直连（保持Host头），验证 HTTP 200 后该域名后续所有 curl 一律带 `--resolve`
+- hosts 碰撞：对资产CSV全部公网IP批量 `timeout 2 nc -zv -w 2 <ip> <port>` 探测目标端口，找到同端口开放的其他IP后用目标Host头请求验证服务指纹（S3 XML/MinIO/应用标题）
+- 判定 IP 白名单门禁（TCP 可连但发数据即 RST，`write:errno=104`）→ 服务公网暴露但 IP 受限，改走平台侧可达面（API/导出/SSRF）间接验证，报告中如实标注网络边界
+- zsh 注意：`--resolve` 参数必须内联写在 curl 命令里，不能放变量（未引号变量不 word-split）
+- 详细命令 → `references/dns-hosts-collision.md`
+
 ---
 
 ## 阶段2：深度分析

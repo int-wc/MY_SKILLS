@@ -192,6 +192,12 @@
           "found": "未授权访问/信息泄露(任意手机号会员状态/会员号枚举，签名不校验)",
           "company": "华住酒店",
           "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://service.cjia.com/svr/store/store/searchStoreSimpleInfo/0",
+          "found": "未授权访问/IDOR(按storeId枚举门店地址/房间数/联系电话/合同期)",
+          "company": "华住酒店",
+          "date": "2026-08-04"
         }
       ]
     },
@@ -358,6 +364,24 @@
         {
           "endpoint": "https://dservice-portal.huazhu.com/portalapi/api_sendsms",
           "found": "短信轰炸(签名纯客户端MD5可伪造无服务端密钥+无验证码/频率限制)",
+          "company": "华住酒店",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://vpn.cjia.com:9443/js/crypto.js",
+          "found": "认证逻辑缺陷(AES密码加密密钥随密文明文传输，可离线解密全部登录口令)",
+          "company": "华住酒店",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://idp.huazhu.com/login/checkMobile",
+          "found": "短信轰炸/账号枚举前置面(任意手机号返回可发短信guid且无频率限制)",
+          "company": "华住酒店",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://ztna2.huazhu.com/oauth/getOriReqUrl",
+          "found": "信息泄露(未授权DACS登录流程路径/SSO配置泄露)",
           "company": "华住酒店",
           "date": "2026-08-04"
         }

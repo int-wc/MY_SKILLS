@@ -212,18 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/api/v2/data",
-    "https://casdoor.infra.agibot.com/api/v2/download",
-    "https://casdoor.infra.agibot.com/api/v2/export",
-    "https://casdoor.infra.agibot.com/api/v2/file",
-    "https://casdoor.infra.agibot.com/api/v2/import",
-    "https://casdoor.infra.agibot.com/api/v2/log",
-    "https://casdoor.infra.agibot.com/api/v2/login",
-    "https://casdoor.infra.agibot.com/api/v2/manage",
-    "https://casdoor.infra.agibot.com/api/v2/order",
-    "https://casdoor.infra.agibot.com/api/v2/payment",
-    "https://casdoor.infra.agibot.com/api/v2/report",
-    "https://casdoor.infra.agibot.com/api/v2/system",
     "https://casdoor.infra.agibot.com/api/v2/token",
     "https://casdoor.infra.agibot.com/api/v2/upload",
     "https://casdoor.infra.agibot.com/api/v2/user",
@@ -1211,7 +1199,19 @@
     "https://vpn.huazhu.com/v3/token",
     "https://vpn.huazhu.com/v3/upload",
     "https://vpn.huazhu.com/v3/user",
-    "https://vpn.huazhu.com/webjars/"
+    "https://vpn.huazhu.com/webjars/",
+    "/crm",
+    "/dwr",
+    "/erp",
+    "/gateway",
+    "/manage",
+    "/sys",
+    "https://global-aimomp.agibot.com/crm",
+    "https://global-aimomp.agibot.com/dwr",
+    "https://global-aimomp.agibot.com/erp",
+    "https://global-aimomp.agibot.com/gateway",
+    "https://global-aimomp.agibot.com/manage",
+    "https://global-aimomp.agibot.com/sys"
   ],
   "framework_patterns": {
     "JeecgBoot": [

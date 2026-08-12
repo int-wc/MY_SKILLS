@@ -186,6 +186,12 @@
           "found": "IDOR越权/未授权读取(无token遍历商品/门店配送数据)",
           "company": "华住酒店",
           "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://dservice-portal.huazhu.com/portalapi/api_ismember?mac=&mobile=&countryCode=&hotelId=&sign=",
+          "found": "未授权访问/信息泄露(任意手机号会员状态/会员号枚举，签名不校验)",
+          "company": "华住酒店",
+          "date": "2026-08-04"
         }
       ]
     },
@@ -342,6 +348,18 @@
           "found": "信息泄露(Nuxt运行时配置泄露APM监控凭证)",
           "company": "智元创新（上海）科技股份有限公司",
           "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://deadpool-yeeuu.cjia.com/api/v1/login",
+          "found": "认证缺陷/暴力破解(登录接口无验证码无锁定，可自动化爆破门锁运维平台账号)",
+          "company": "华住酒店",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://dservice-portal.huazhu.com/portalapi/api_sendsms",
+          "found": "短信轰炸(签名纯客户端MD5可伪造无服务端密钥+无验证码/频率限制)",
+          "company": "华住酒店",
+          "date": "2026-08-04"
         }
       ]
     },
@@ -406,6 +424,12 @@
           "endpoint": "https://linkcraft.agibot.com/api/v1/square/public/tags",
           "found": "未授权访问(公开标签列表泄露)",
           "company": "智元创新（上海）科技股份有限公司",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://b2b-h5-api.huazhu.com/goods/searchGoodsList",
+          "found": "未授权访问(无token返回全量商品目录含内部成本价/供应商/门店ID)",
+          "company": "华住酒店",
           "date": "2026-08-04"
         }
       ]

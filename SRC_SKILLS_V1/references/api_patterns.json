@@ -212,9 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/api/v3/token",
-    "https://casdoor.infra.agibot.com/api/v3/upload",
-    "https://casdoor.infra.agibot.com/api/v3/user",
     "https://casdoor.infra.agibot.com/apix",
     "https://casdoor.infra.agibot.com/apix/admin",
     "https://casdoor.infra.agibot.com/apix/api",
@@ -1211,7 +1208,10 @@
     "POST /svr/store/store/fetchStoreBizDate/0",
     "POST /svr/main/brand/searchBrandList/0",
     "POST /svr/store/store/searchStoreSimpleInfo/0",
-    "POST /oauth/getOriReqUrl"
+    "POST /oauth/getOriReqUrl",
+    "/admin/oauth/idp/url?callback=https://evil.com/",
+    "/admin/oauth/idp/url?callback=https://evil.com/eu",
+    "/admin/sms/send /admin/member/exist /admin/site/loginConfig"
   ],
   "framework_patterns": {
     "JeecgBoot": [

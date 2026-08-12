@@ -455,6 +455,18 @@
           "found": "未授权访问(无token返回全量商品目录含内部成本价/供应商/门店ID)",
           "company": "华住酒店",
           "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://b2b-h5-api.huazhu.com/goods/searchGoodsList",
+          "found": "未授权访问(pageSize=100批量放大泄露内部成本价/供应商)",
+          "company": "华住酒店",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://service.cjia.com/svr/store/store/searchListStore/0",
+          "found": "未授权访问(无鉴权批量泄露681条门店/66条品牌经营数据)",
+          "company": "华住酒店",
+          "date": "2026-08-04"
         }
       ]
     }

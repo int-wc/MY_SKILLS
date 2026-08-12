@@ -212,13 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/api/v2/upload",
-    "https://casdoor.infra.agibot.com/api/v2/user",
-    "https://casdoor.infra.agibot.com/api/v3",
-    "https://casdoor.infra.agibot.com/api/v3/admin",
-    "https://casdoor.infra.agibot.com/api/v3/api",
-    "https://casdoor.infra.agibot.com/api/v3/auth",
-    "https://casdoor.infra.agibot.com/api/v3/backup",
     "https://casdoor.infra.agibot.com/api/v3/config",
     "https://casdoor.infra.agibot.com/api/v3/data",
     "https://casdoor.infra.agibot.com/api/v3/download",
@@ -1211,7 +1204,14 @@
     "https://global-aimomp.agibot.com/gateway",
     "https://global-aimomp.agibot.com/manage",
     "https://global-aimomp.agibot.com/sys",
-    "/login"
+    "/login",
+    "POST https://idp.huazhu.com/login/checkMobile",
+    "GET https://qbi.huazhu.com/index.php?s=/index/index/index",
+    "POST https://ztna2.huazhu.com/getAuthType",
+    "GET https://vpn.cjia.com:9443/js/crypto.js",
+    "POST https://idp.huazhu.com/login/checkMobile (countryCode=1, userType=B)",
+    "POST https://ztna2.huazhu.com/oauth/getOriReqUrl",
+    "GET https://vpn.cjia.com:9443/js/crypto.js (encrypt实现)"
   ],
   "framework_patterns": {
     "JeecgBoot": [

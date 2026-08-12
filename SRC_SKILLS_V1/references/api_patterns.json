@@ -212,7 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/api/v3/config",
     "https://casdoor.infra.agibot.com/api/v3/data",
     "https://casdoor.infra.agibot.com/api/v3/download",
     "https://casdoor.infra.agibot.com/api/v3/export",
@@ -1211,7 +1210,8 @@
     "GET https://vpn.cjia.com:9443/js/crypto.js",
     "POST https://idp.huazhu.com/login/checkMobile (countryCode=1, userType=B)",
     "POST https://ztna2.huazhu.com/oauth/getOriReqUrl",
-    "GET https://vpn.cjia.com:9443/js/crypto.js (encrypt实现)"
+    "GET https://vpn.cjia.com:9443/js/crypto.js (encrypt实现)",
+    "https://aimomp-eu.agibot.com/login"
   ],
   "framework_patterns": {
     "JeecgBoot": [

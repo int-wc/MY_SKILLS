@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-04",
+  "updated": "2026-08-12",
   "description": "攻击面模式库：可前匹配、可积累。Phase2 判定端点原语后，按 signals 匹配此处攻击面，将其 base_primitives 注入 Phase3；挖洞后在 instances 追加真实案例。跨SRC共享（同 api_patterns.json）。",
   "surfaces": [
     {
@@ -49,6 +49,12 @@
           "found": "开放重定向(SAML RelayState回显)",
           "company": "华住酒店",
           "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://open.agibot.com/apix/image-colors",
+          "found": "SSRF(IPv6绕过黑名单，可请求外部任意URL含云元数据IP)",
+          "company": "智元创新（上海）科技股份有限公司",
+          "date": "2026-08-04"
         }
       ]
     },
@@ -86,7 +92,14 @@
         "XXE"
       ],
       "risk": "写原语受护栏限制，只记录不验证",
-      "instances": []
+      "instances": [
+        {
+          "endpoint": "https://aimdata-label.agibot.com/api/space/storage/minio/upload-url?filename=../../../../tmp/x.txt",
+          "found": "任意文件上传原语(预签名PUT路径穿越未过滤)",
+          "company": "智元创新（上海）科技股份有限公司",
+          "date": "2026-08-04"
+        }
+      ]
     },
     {
       "id": "sf_template_render",
@@ -150,7 +163,14 @@
         "导出内容含未授权数据"
       ],
       "risk": "写原语受护栏限制，只记录不验证",
-      "instances": []
+      "instances": [
+        {
+          "endpoint": "https://aimdata-label.agibot.com/api/export/export-task + /start",
+          "found": "导出内容含未授权数据(认证用户导出任意任务数据ZIP+预签名URL)",
+          "company": "智元创新（上海）科技股份有限公司",
+          "date": "2026-08-04"
+        }
+      ]
     },
     {
       "id": "sf_id_query",
@@ -197,6 +217,12 @@
           "endpoint": "https://service.cjia.com/svr/store/store/searchStoreSimpleInfo/0",
           "found": "未授权访问/IDOR(按storeId枚举门店地址/房间数/联系电话/合同期)",
           "company": "华住酒店",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://aimdata-label.agibot.com/api/export/export-task",
+          "found": "IDOR越权导出(接受任意taskId不校验归属，可导出他人任务数据)",
+          "company": "智元创新（上海）科技股份有限公司",
           "date": "2026-08-04"
         }
       ]
@@ -265,48 +291,6 @@
       ],
       "risk": "",
       "instances": [
-        {
-          "endpoint": "http://clm.huazhu.com/api/oauth/login",
-          "found": "信息泄露(OAuth2登录页公钥/内部信息泄露)",
-          "company": "华住酒店",
-          "date": "2026-08-04"
-        },
-        {
-          "endpoint": "http://clm.huazhu.com/api/oauth/login",
-          "found": "信息泄露(HZERO IAM内部API端点)",
-          "company": "华住酒店",
-          "date": "2026-08-04"
-        },
-        {
-          "endpoint": "https://signin.hworld.com/login",
-          "found": "配置错误(CORS任意来源)",
-          "company": "华住酒店",
-          "date": "2026-08-04"
-        },
-        {
-          "endpoint": "https://sec.huazhu.com/index.php?c=login&a=index",
-          "found": "信息泄露(ThinkPHP框架/PHP版本)",
-          "company": "华住酒店",
-          "date": "2026-08-04"
-        },
-        {
-          "endpoint": "https://aistuff-mpowerboss.huazhu.com/asr/auth/v1/token",
-          "found": "未授权访问(空body默认签发生产ak JWT，可无限滥用付费ASR服务)",
-          "company": "华住酒店",
-          "date": "2026-08-04"
-        },
-        {
-          "endpoint": "https://open.agibot.com/apix/V1/omp/open/oauth/idpUrl",
-          "found": "信息泄露(OAuth配置泄露且redirect_uri未校验可指向任意URL)",
-          "company": "智元创新（上海）科技股份有限公司",
-          "date": "2026-08-04"
-        },
-        {
-          "endpoint": "https://open.agibot.com/apix/V1/omp/open/oauth/idpUrl",
-          "found": "信息泄露(OAuth客户端ID暴露)",
-          "company": "智元创新（上海）科技股份有限公司",
-          "date": "2026-08-04"
-        },
         {
           "endpoint": "https://open.agibot.com/api/V1/omp/open/oauth/idpUrl",
           "found": "信息泄露(OAuth idpUrl /api/与/apix/双路径暴露)",
@@ -383,6 +367,48 @@
           "endpoint": "https://ztna2.huazhu.com/oauth/getOriReqUrl",
           "found": "信息泄露(未授权DACS登录流程路径/SSO配置泄露)",
           "company": "华住酒店",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://casdoor.infra.agibot.com/api/get-email-and-phone",
+          "found": "未授权用户枚举+掩码邮箱/手机号泄露(Casdoor SSO)",
+          "company": "智元创新（上海）科技股份有限公司",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://aimomp.agibot.com/admin/member/exist",
+          "found": "未授权用户枚举预言机(手机号+邮箱)",
+          "company": "智元创新（上海）科技股份有限公司",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://aimomp.agibot.com/admin/member/exist",
+          "found": "手机号枚举参数变种(mobile+mobilePrefix)",
+          "company": "智元创新（上海）科技股份有限公司",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://aimdata-label.agibot.com/api/auth-center/auth/validate-login-by-user-name",
+          "found": "用户名枚举+登录无频率限制/无验证码",
+          "company": "智元创新（上海）科技股份有限公司",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://em7.agibot.com/emp/passport/getsetting",
+          "found": "信息泄露(泛微E-Mobile系统配置和管理信息泄露)",
+          "company": "智元创新（上海）科技股份有限公司",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://em7-dev.agibot.com/emp/passport/getsetting",
+          "found": "信息泄露(泛微E-Mobile开发环境配置信息泄露)",
+          "company": "智元创新（上海）科技股份有限公司",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://aimdata-label.agibot.com/api/space/storage",
+          "found": "静态MinIO根凭证泄露(SigV4密码学验证有效)",
+          "company": "智元创新（上海）科技股份有限公司",
           "date": "2026-08-04"
         }
       ]

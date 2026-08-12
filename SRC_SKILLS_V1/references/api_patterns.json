@@ -3,7 +3,7 @@
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
-      "count": 35,
+      "count": 36,
       "first_seen": "2026-07-09",
       "last_seen": "2026-08-12"
     },

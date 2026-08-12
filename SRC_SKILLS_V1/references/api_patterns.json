@@ -212,14 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/api/v3/import",
-    "https://casdoor.infra.agibot.com/api/v3/log",
-    "https://casdoor.infra.agibot.com/api/v3/login",
-    "https://casdoor.infra.agibot.com/api/v3/manage",
-    "https://casdoor.infra.agibot.com/api/v3/order",
-    "https://casdoor.infra.agibot.com/api/v3/payment",
-    "https://casdoor.infra.agibot.com/api/v3/report",
-    "https://casdoor.infra.agibot.com/api/v3/system",
     "https://casdoor.infra.agibot.com/api/v3/token",
     "https://casdoor.infra.agibot.com/api/v3/upload",
     "https://casdoor.infra.agibot.com/api/v3/user",
@@ -1211,7 +1203,15 @@
     "/api",
     "/api/v1",
     "/api/v2",
-    "/api/v3"
+    "/api/v3",
+    "POST /svr/store/store/searchListStore/0",
+    "GET /passport/v1/public/authConfig",
+    "POST /getAuthType",
+    "POST /portal/confusion, /portal/loginWay, /portal/pwdcomplex, /ztpManage/v1/softLibrary/getPublishedClientList",
+    "POST /svr/store/store/fetchStoreBizDate/0",
+    "POST /svr/main/brand/searchBrandList/0",
+    "POST /svr/store/store/searchStoreSimpleInfo/0",
+    "POST /oauth/getOriReqUrl"
   ],
   "framework_patterns": {
     "JeecgBoot": [

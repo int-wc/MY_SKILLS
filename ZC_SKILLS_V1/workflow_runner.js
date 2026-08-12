@@ -67,6 +67,33 @@ const SAFETY_API_GUARDRAIL = `
    三要素判定为"写"→ 禁止发送；判定为"读"→ 可正常发送。IDOR 越权读取一律用 GET 对比响应差异。若 hook 拦截了你认为只读的请求，说明参数或路径触发了写判定，请改用 GET 对比差异或记录"需人工复核"，不要绕过 hook。
 `
 
+const DNS_HIJACK_GUIDE = `
+**【split-horizon DNS / hosts碰撞 — harness强制（目标不可达时的第一排查项）】**
+当目标域名 curl 超时 / 连接失败 / 返回异常时，**先判断是否为 split-horizon DNS（内网解析），再判断是否需要 hosts 碰撞，禁止因 DNS 超时直接放弃该资产**。
+
+**① split-horizon DNS 识别与 --resolve 绕过:**
+- 现象: 域名直连超时（HTTP 000），但 FOFA/资产CSV 显示该域名存在公网IP记录，或同IP段其他域名可访问
+- 判断: 本地解析出内网IP（10.x / 172.16-31.x / 192.168.x / 100.64.x / 169.254.x）→ split-horizon，公网访问必须绕过
+  - 本地解析: getent hosts <domain>；公网对照: dig @8.8.8.8 +short <domain>（或 @1.1.1.1）
+- 溯源公网IP: ① assets_info/*.csv（FOFA资产）中该域名/IP 记录；② 同域名不同主机名（minio.xx.com / xx-dev.xx.com / oss-test.xx.com）指向的公网IP；③ 指纹/标题相似的其他域名
+- 绕过（关键）: 所有 curl 加 --resolve <host>:<port>:<公网IP>（或 --connect-to <host>:<port>:<公网IP>:<port>），保持正确 Host 头/SNI 直连公网IP
+  - 例: curl -sk --resolve aimdata-label.agibot.com:443:14.103.74.217 https://aimdata-label.agibot.com/api/xxx
+- 验证: 加 --resolve 后返回 HTTP 200 → 目标实际可达，后续**所有**对该域名的 curl 一律带 --resolve（内网IP解析默认不可达）
+
+**② hosts 碰撞（同IP多域名 / 共享集群服务定位）:**
+- 场景: 目标服务（尤其对象存储/内网API/数据库管理面）只解析内网DNS，但其端口可能在某公网IP上开放（多业务共享集群 / NAT映射 / SLB暴露）
+- 方法: 对资产CSV收集的全部公网IP批量探测目标端口，找同端口开放的其他IP:
+  - for ip in $(grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' assets_info/*.csv | sort -u); do timeout 2 nc -zv -w 2 $ip <port> 2>/dev/null && echo "$ip <port> OPEN"; done
+- 对候选IP用目标 Host 头/SNI 发请求: curl -sk --resolve <host>:<port>:<ip> https://<host>:<port>/，看是否返回目标服务指纹
+- 命中判定: 返回目标服务特征（S3 XML / MinIO / 具体应用页面/标题）即该端口服务可经此IP到达，配合 --resolve 携带正确 Host 头即可访问
+
+**③ 常见坑（务必遵守）:**
+- zsh 未引号变量不 word-split: --resolve 参数必须内联写在 curl 命令里，不能放在变量中展开（$R 会被当单个参数）
+- --resolve 格式为 <host>:<port>:<ip>，端口必须与请求端口一致（443/20481/8080 等）；访问带端口服务时 Host 头需含端口
+- 签名类请求（S3预签名URL / 带 Authorization 签名的请求）签名绑定 Host 头: --resolve 换IP但 Host 头必须保持原样，否则签名校验失败
+- split-horizon 判定后该资产按"可达"处理，纳入后续全部阶段测试；不要因 DNS 超时误标"无法进行测试"或直接跳过
+`
+
 let projectName, mode, singleUrl
 
 if (typeof args === 'string') {
@@ -778,6 +805,7 @@ python3 ${SKILL_SCRIPTS}/extract_creds.py "\${dump_dir}" 2>&1
     const p2_oss = await agent(
       `你是快速开发框架识别专家，对 ${resolvedProject} 的以下目标执行开源系统识别。
 🔒 VPN: 所有 curl 探测必须加 --interface tun0
+${DNS_HIJACK_GUIDE}
 ${SAFETY_API_GUARDRAIL}
 重点识别：JeecgBoot、RuoYi（若依）、JeeSite、Guns、TeaWeb、BladeX、低代码平台等。
 
@@ -1116,6 +1144,7 @@ if (mode.startsWith('phase5')) {
         p3_dirsearch = await agent(
       `对 ${resolvedProject} 执行 dirsearch 目录扫描（使用 dirsearch 内置字典 + 积累字典）。
 🔒 VPN: 所有 dirsearch 和 curl 命令必须加 --interface tun0
+${DNS_HIJACK_GUIDE}
 ${SAFETY_API_GUARDRAIL}
 
 ===== 目标列表（前20个） =====
@@ -1213,6 +1242,7 @@ ${p2_discoveries_text ? p2_discoveries_text : '（无 JS 分析数据）'}\n\n\t
 
 ${BUSINESS_ATTR_GUIDE}
 
+${DNS_HIJACK_GUIDE}
 ${SAFETY_API_GUARDRAIL}
 
 **【核心策略 — 🎯 Agent 发散思维 + 靶标定制】**
@@ -1293,6 +1323,7 @@ ${p2_discoveries_text ? p2_discoveries_text : '（无 JS 分析数据）'}
 
 ${BUSINESS_ATTR_GUIDE}
 
+${DNS_HIJACK_GUIDE}
 ${SAFETY_API_GUARDRAIL}
 
 1. 越权测试:
@@ -1517,6 +1548,7 @@ ${ossText}${cacheNote}
       p3_quick = await agent(
         `对 ${resolvedProject} 的以下剩余资产做全量漏洞测试。
 
+${DNS_HIJACK_GUIDE}
 ${SAFETY_API_GUARDRAIL}
 剩余资产列表（${tier2_urls.length} 个）:
 ${tier2_urls.map(function(u) { return '  ' + u }).join('\n')}
@@ -1612,6 +1644,7 @@ if (progress.findings_count === 0) {
       `你是360众测漏洞验证专家，对 ${resolvedProject} 的发现做严格 curl 验证。
 
 🔒 VPN 强制要求: 所有 curl 命令必须加 --interface tun0（如: curl --interface tun0 -sk ...）
+${DNS_HIJACK_GUIDE}
 ${SAFETY_API_GUARDRAIL}
 
 ====== Phase 3 传入的发现列表 ======

@@ -9,7 +9,14 @@
       "primitives": ["transfer", "auth"],
       "logic": "无回显SSRF打内部认证服务/云元数据，读取或篡改token/会话 → 认证绕过",
       "gain": "transfer(单独低危) → 认证绕过/账户接管",
-      "instances": []
+      "instances": [
+        {
+          "endpoints": "/apix/V1/omp/open/oauth/idpUrl + /apix/V1/omp/open/oauth/idpLogin（aimomp /admin/oauth/idp/url 同缺陷）",
+          "found": "idpUrl未校验callback/redirect_uri，任意回调(含javascript:)注入生成OAuth授权URL劫持授权码至攻击者服务器；令牌端点支持client_secret=none无密钥交换，劫持授权码直接换取access_token并调userinfo → 认证绕过/账号接管",
+          "company": "智元创新（上海）科技股份有限公司",
+          "date": "2026-08-04"
+        }
+      ]
     },
     {
       "id": "ch_ssrf_read_internal",

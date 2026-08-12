@@ -24,7 +24,14 @@
       "primitives": ["transfer", "read_file"],
       "logic": "SSRF访问内网服务 + 路径遍历读内网文件 → 敏感数据/源码回显",
       "gain": "无回显SSRF → 内网数据泄露",
-      "instances": []
+      "instances": [
+        {
+          "endpoints": "/apix/image-colors",
+          "found": "image-colors服务端代拉任意URL，IPv4内网地址黑名单可经HTTP重定向与IPv6[::1]绕过，直读本地127.0.0.1:80 Nuxt服务HTML(422 text/html)及端口探测，阿里云元数据IP 100.100.100.200未封禁 → SSRF读内网服务/云元数据泄露",
+          "company": "智元创新（上海）科技股份有限公司",
+          "date": "2026-08-04"
+        }
+      ]
     },
     {
       "id": "ch_read_to_rce",

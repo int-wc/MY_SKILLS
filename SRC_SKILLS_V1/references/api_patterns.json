@@ -212,7 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/api/v2/token",
     "https://casdoor.infra.agibot.com/api/v2/upload",
     "https://casdoor.infra.agibot.com/api/v2/user",
     "https://casdoor.infra.agibot.com/api/v3",
@@ -1211,7 +1210,8 @@
     "https://global-aimomp.agibot.com/erp",
     "https://global-aimomp.agibot.com/gateway",
     "https://global-aimomp.agibot.com/manage",
-    "https://global-aimomp.agibot.com/sys"
+    "https://global-aimomp.agibot.com/sys",
+    "/login"
   ],
   "framework_patterns": {
     "JeecgBoot": [

@@ -3,9 +3,9 @@
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
-      "count": 37,
+      "count": 38,
       "first_seen": "2026-07-09",
-      "last_seen": "2026-08-12"
+      "last_seen": "2026-08-13"
     },
     "/actuator/": {
       "count": 1,
@@ -212,16 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/crm/file",
-    "https://casdoor.infra.agibot.com/crm/import",
-    "https://casdoor.infra.agibot.com/crm/log",
-    "https://casdoor.infra.agibot.com/crm/login",
-    "https://casdoor.infra.agibot.com/crm/manage",
-    "https://casdoor.infra.agibot.com/crm/order",
-    "https://casdoor.infra.agibot.com/crm/payment",
-    "https://casdoor.infra.agibot.com/crm/report",
-    "https://casdoor.infra.agibot.com/crm/system",
-    "https://casdoor.infra.agibot.com/crm/token",
     "https://casdoor.infra.agibot.com/crm/upload",
     "https://casdoor.infra.agibot.com/crm/user",
     "https://casdoor.infra.agibot.com/csrf",
@@ -1211,7 +1201,17 @@
     "https://i.sto.cn/.well-known/token",
     "https://i.sto.cn/.well-known/upload",
     "https://i.sto.cn/.well-known/user",
-    "https://i.sto.cn/WEB-INF"
+    "https://i.sto.cn/WEB-INF",
+    "https://wangdian.sto.cn/api",
+    "https://wangdian.sto.cn/api/v1",
+    "https://wangdian.sto.cn/api/v2",
+    "https://wangdian.sto.cn/api/v3",
+    "https://wangdian.sto.cn/crm",
+    "https://wangdian.sto.cn/dwr",
+    "https://wangdian.sto.cn/erp",
+    "https://wangdian.sto.cn/gateway",
+    "https://wangdian.sto.cn/manage",
+    "https://wangdian.sto.cn/sys"
   ],
   "framework_patterns": {
     "JeecgBoot": [

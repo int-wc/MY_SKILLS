@@ -3,7 +3,7 @@
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
-      "count": 38,
+      "count": 39,
       "first_seen": "2026-07-09",
       "last_seen": "2026-08-13"
     },
@@ -212,12 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/crm/upload",
-    "https://casdoor.infra.agibot.com/crm/user",
-    "https://casdoor.infra.agibot.com/csrf",
-    "https://casdoor.infra.agibot.com/doc.html",
-    "https://casdoor.infra.agibot.com/druid/",
-    "https://casdoor.infra.agibot.com/druid/api.json",
     "https://casdoor.infra.agibot.com/druid/index.html",
     "https://casdoor.infra.agibot.com/druid/spring.html",
     "https://casdoor.infra.agibot.com/druid/sql.html",
@@ -1211,7 +1205,13 @@
     "https://wangdian.sto.cn/erp",
     "https://wangdian.sto.cn/gateway",
     "https://wangdian.sto.cn/manage",
-    "https://wangdian.sto.cn/sys"
+    "https://wangdian.sto.cn/sys",
+    "https://safety-tsportal.sto.cn/crm",
+    "https://safety-tsportal.sto.cn/dwr",
+    "https://safety-tsportal.sto.cn/erp",
+    "https://safety-tsportal.sto.cn/gateway",
+    "https://safety-tsportal.sto.cn/manage",
+    "https://safety-tsportal.sto.cn/sys"
   ],
   "framework_patterns": {
     "JeecgBoot": [

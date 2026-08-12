@@ -212,14 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/dwr/payment",
-    "https://casdoor.infra.agibot.com/dwr/report",
-    "https://casdoor.infra.agibot.com/dwr/system",
-    "https://casdoor.infra.agibot.com/dwr/token",
-    "https://casdoor.infra.agibot.com/dwr/upload",
-    "https://casdoor.infra.agibot.com/dwr/user",
-    "https://casdoor.infra.agibot.com/emp",
-    "https://casdoor.infra.agibot.com/emp/admin",
     "https://casdoor.infra.agibot.com/emp/api",
     "https://casdoor.infra.agibot.com/emp/auth",
     "https://casdoor.infra.agibot.com/emp/backup",
@@ -1211,7 +1203,15 @@
     "http://cfo.sto.cn/erp",
     "http://cfo.sto.cn/gateway",
     "http://cfo.sto.cn/manage",
-    "http://cfo.sto.cn/sys"
+    "http://cfo.sto.cn/sys",
+    "POST /api/endUser/decryptToken",
+    "GET /api/common/concurrent/getEnterprise?code=sto",
+    "POST /api/common/getDingdingSignature",
+    "GET /cp/dataReport/data 与 /cp/dataReport/api/call/change",
+    "GET /cp/apis/tree、/cp/fgcategories、/cp/apis",
+    "GET /cp/apis",
+    "GET /cp/fgcategories",
+    "GET /api/common/concurrent/getEnterprise?code=<任意值>"
   ],
   "framework_patterns": {
     "JeecgBoot": [

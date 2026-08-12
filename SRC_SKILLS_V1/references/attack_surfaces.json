@@ -292,18 +292,6 @@
       "risk": "",
       "instances": [
         {
-          "endpoint": "https://open.agibot.com/api/V1/omp/open/oauth/idpUrl",
-          "found": "信息泄露(OAuth idpUrl /api/与/apix/双路径暴露)",
-          "company": "智元创新（上海）科技股份有限公司",
-          "date": "2026-08-04"
-        },
-        {
-          "endpoint": "https://open.agibot.com/apix/V1/omp/open/oauth/idpLogin",
-          "found": "信息泄露(OAuth授权码交换端点无认证暴露)",
-          "company": "智元创新（上海）科技股份有限公司",
-          "date": "2026-08-04"
-        },
-        {
           "endpoint": "https://account.agibot.com/.well-known/openid-configuration",
           "found": "信息泄露(OIDC配置及JWKS公钥公开泄露)",
           "company": "智元创新（上海）科技股份有限公司",
@@ -410,6 +398,18 @@
           "found": "静态MinIO根凭证泄露(SigV4密码学验证有效)",
           "company": "智元创新（上海）科技股份有限公司",
           "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://safety-tsportal.sto.cn/api/common/concurrent/getEnterprise?code=sto",
+          "found": "信息泄露(未授权返回企业登录配置含钉钉accessKey/SSO零信任架构)",
+          "company": "申通快递",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://safety-tsportal.sto.cn/api/common/getDingdingSignature",
+          "found": "信息泄露(未授权返回钉钉JSAPI签名/agentId/corpId/accessKey)",
+          "company": "申通快递",
+          "date": "2026-08-04"
         }
       ]
     },
@@ -492,6 +492,30 @@
           "endpoint": "https://service.cjia.com/svr/store/store/searchListStore/0",
           "found": "未授权访问(无鉴权批量泄露681条门店/66条品牌经营数据)",
           "company": "华住酒店",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://open-server.sto.cn/cp/apis/tree",
+          "found": "未授权访问(无鉴权API目录树泄露66个API含默认bizAppKey)",
+          "company": "申通快递",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://open-server.sto.cn/cp/apis?pageSize=5&pageNum=1",
+          "found": "未授权访问(无鉴权分页列表泄露66条API注册信息含defaultBizAppKey)",
+          "company": "申通快递",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://open-server.sto.cn/cp/dataReport/data",
+          "found": "未授权访问(运营仪表盘数据无鉴权访问含入驻/对接统计)",
+          "company": "申通快递",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://open-server.sto.cn/cp/dataReport/api/call/change",
+          "found": "未授权访问(数据报表接口无鉴权返回API调用量)",
+          "company": "申通快递",
           "date": "2026-08-04"
         }
       ]

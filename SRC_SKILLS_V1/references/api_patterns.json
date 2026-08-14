@@ -212,13 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/erp/admin",
-    "https://casdoor.infra.agibot.com/erp/api",
-    "https://casdoor.infra.agibot.com/erp/auth",
-    "https://casdoor.infra.agibot.com/erp/backup",
-    "https://casdoor.infra.agibot.com/erp/config",
-    "https://casdoor.infra.agibot.com/erp/data",
-    "https://casdoor.infra.agibot.com/erp/download",
     "https://casdoor.infra.agibot.com/erp/export",
     "https://casdoor.infra.agibot.com/erp/file",
     "https://casdoor.infra.agibot.com/erp/import",
@@ -1211,7 +1204,14 @@
     "https://auth.dxy.cn/erp",
     "https://auth.dxy.cn/gateway",
     "https://auth.dxy.cn/manage",
-    "https://auth.dxy.cn/sys"
+    "https://auth.dxy.cn/sys",
+    "https://apisimuat.dxy.cn/api",
+    "https://apisimuat.dxy.cn/crm",
+    "https://apisimuat.dxy.cn/dwr",
+    "https://apisimuat.dxy.cn/erp",
+    "https://apisimuat.dxy.cn/gateway",
+    "https://apisimuat.dxy.cn/manage",
+    "https://apisimuat.dxy.cn/sys"
   ],
   "framework_patterns": {
     "JeecgBoot": [

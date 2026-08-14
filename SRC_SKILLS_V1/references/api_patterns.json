@@ -212,9 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/emp/api",
-    "https://casdoor.infra.agibot.com/emp/auth",
-    "https://casdoor.infra.agibot.com/emp/backup",
     "https://casdoor.infra.agibot.com/emp/config",
     "https://casdoor.infra.agibot.com/emp/data",
     "https://casdoor.infra.agibot.com/emp/download",
@@ -1211,7 +1208,10 @@
     "GET /cp/apis/tree、/cp/fgcategories、/cp/apis",
     "GET /cp/apis",
     "GET /cp/fgcategories",
-    "GET /api/common/concurrent/getEnterprise?code=<任意值>"
+    "GET /api/common/concurrent/getEnterprise?code=<任意值>",
+    "/Login/Index + /Login/GetCheckCode",
+    "/Login/FormerLogin",
+    "/Login/Verification"
   ],
   "framework_patterns": {
     "JeecgBoot": [

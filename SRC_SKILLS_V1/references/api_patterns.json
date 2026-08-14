@@ -212,7 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/erp/export",
     "https://casdoor.infra.agibot.com/erp/file",
     "https://casdoor.infra.agibot.com/erp/import",
     "https://casdoor.infra.agibot.com/erp/log",
@@ -1211,7 +1210,8 @@
     "https://apisimuat.dxy.cn/erp",
     "https://apisimuat.dxy.cn/gateway",
     "https://apisimuat.dxy.cn/manage",
-    "https://apisimuat.dxy.cn/sys"
+    "https://apisimuat.dxy.cn/sys",
+    "GET https://wechat.dxy.cn/japi/js/sign/{signId}?url=&callback="
   ],
   "framework_patterns": {
     "JeecgBoot": [

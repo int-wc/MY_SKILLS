@@ -292,12 +292,6 @@
       "risk": "",
       "instances": [
         {
-          "endpoint": "https://account.agibot.com/.well-known/openid-configuration",
-          "found": "信息泄露(OIDC配置及JWKS公钥公开泄露)",
-          "company": "智元创新（上海）科技股份有限公司",
-          "date": "2026-08-04"
-        },
-        {
           "endpoint": "https://geniestudio.agibot.com/api/v1/auth/lark/doc/ticket",
           "found": "未授权访问(Lark文档票据API致Lark应用凭证泄露)",
           "company": "智元创新（上海）科技股份有限公司",
@@ -409,6 +403,12 @@
           "endpoint": "https://safety-tsportal.sto.cn/api/common/getDingdingSignature",
           "found": "信息泄露(未授权返回钉钉JSAPI签名/agentId/corpId/accessKey)",
           "company": "申通快递",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://newecargo.xiamenair.com/Login",
+          "found": "敏感信息泄露(前端硬编码静态DES密钥20191224，登录密码弱加密可离线解密)",
+          "company": "厦门航空",
           "date": "2026-08-04"
         }
       ]

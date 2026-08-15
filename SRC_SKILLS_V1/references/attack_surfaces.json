@@ -398,6 +398,30 @@
           "found": "敏感信息泄露(前端硬编码静态DES密钥20191224，登录密码弱加密可离线解密)",
           "company": "厦门航空",
           "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://jzinfosys-oauthcenter.daojia-inc.com/smsverify/sendsmartcode",
+          "found": "用户枚举(短信接口差异化报错，无验证码/无频控，公网直连绕过外层WAF)",
+          "company": "58到家",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://jzinfosys-oauthcenter.daojia-inc.com/user/encryptedlogin",
+          "found": "弱加密(AES-128-CBC密钥/IV明文随页面下发，口令加密可离线还原)",
+          "company": "58到家",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://user.daojia.com/mobile/getIdentifyCode",
+          "found": "短信轰炸(JSONP短信接口无图形验证码/无频控，GET直触发下发)",
+          "company": "58到家",
+          "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://open.daojia.com/platform/login",
+          "found": "弱加密(登录密码明文传输+AES-ECB静态密钥硬编码前端)",
+          "company": "58到家",
+          "date": "2026-08-04"
         }
       ]
     },

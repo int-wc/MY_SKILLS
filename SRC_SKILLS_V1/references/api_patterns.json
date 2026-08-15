@@ -219,13 +219,6 @@
     "Verification"
   ],
   "common_endpoints": [
-    "https://vpn.huazhu.com/jeecg-boot/online/cgform",
-    "https://vpn.huazhu.com/jeecg-boot/oss/",
-    "https://vpn.huazhu.com/jeecg-boot/sys/",
-    "https://vpn.huazhu.com/jeecg-boot/sys/dict/list",
-    "https://vpn.huazhu.com/jeecg-boot/sys/file/download",
-    "https://vpn.huazhu.com/jeecg-boot/sys/file/upload",
-    "https://vpn.huazhu.com/jeecg-boot/sys/gateway",
     "https://vpn.huazhu.com/jeecg-boot/sys/permission",
     "https://vpn.huazhu.com/jeecg-boot/sys/sysDataLog",
     "https://vpn.huazhu.com/jeecg-boot/sys/sysFillRule",
@@ -1218,7 +1211,14 @@
     "GET https://qas-intl-gapp-api-jp.ecovacs.cn/",
     "GET/POST https://smartbi-wap.ecovacs.cn/api/dash/{survey,util}/*",
     "GET /feed/api/article?page=1&pageSize=9999&type=0",
-    "OPTIONS /api/v1"
+    "OPTIONS /api/v1",
+    "/smsverify/sendsmartcode",
+    "/user/login?redirect=",
+    "/attachment/download_docstore?fileID={uuid}",
+    "/index.html",
+    "/mobile/getIdentifyCode",
+    "/platform/login",
+    "/actuator"
   ],
   "framework_patterns": {
     "JeecgBoot": [

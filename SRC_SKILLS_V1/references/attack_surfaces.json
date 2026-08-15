@@ -55,6 +55,12 @@
           "found": "SSRF(IPv6绕过黑名单，可请求外部任意URL含云元数据IP)",
           "company": "智元创新（上海）科技股份有限公司",
           "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://jzinfosys-oauthcenter.daojia-inc.com/user/login?redirect=",
+          "found": "开放重定向(redirect反射写入.daojia-inc.com通配域Cookie并回显登录表单，SSO钓鱼链)",
+          "company": "58到家",
+          "date": "2026-08-04"
         }
       ]
     },

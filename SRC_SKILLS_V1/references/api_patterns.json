@@ -219,8 +219,6 @@
     "Verification"
   ],
   "common_endpoints": [
-    "https://vpn.huazhu.com/jeecg-boot/",
-    "https://vpn.huazhu.com/jeecg-boot/online/",
     "https://vpn.huazhu.com/jeecg-boot/online/cgform",
     "https://vpn.huazhu.com/jeecg-boot/oss/",
     "https://vpn.huazhu.com/jeecg-boot/sys/",
@@ -1218,7 +1216,9 @@
     "https://analytics.51credit.com/sys",
     "GET https://gbubi.ecovacs.com:8850/api/0.5/serverInfo",
     "GET https://qas-intl-gapp-api-jp.ecovacs.cn/",
-    "GET/POST https://smartbi-wap.ecovacs.cn/api/dash/{survey,util}/*"
+    "GET/POST https://smartbi-wap.ecovacs.cn/api/dash/{survey,util}/*",
+    "GET /feed/api/article?page=1&pageSize=9999&type=0",
+    "OPTIONS /api/v1"
   ],
   "framework_patterns": {
     "JeecgBoot": [

@@ -3,7 +3,7 @@
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
-      "count": 45,
+      "count": 46,
       "first_seen": "2026-07-09",
       "last_seen": "2026-08-15"
     },
@@ -212,16 +212,6 @@
     "member"
   ],
   "common_endpoints": [
-    "https://casdoor.infra.agibot.com/factory-ems-web/admin",
-    "https://casdoor.infra.agibot.com/factory-ems-web/api",
-    "https://casdoor.infra.agibot.com/factory-ems-web/auth",
-    "https://casdoor.infra.agibot.com/factory-ems-web/backup",
-    "https://casdoor.infra.agibot.com/factory-ems-web/config",
-    "https://casdoor.infra.agibot.com/factory-ems-web/data",
-    "https://casdoor.infra.agibot.com/factory-ems-web/download",
-    "https://casdoor.infra.agibot.com/factory-ems-web/export",
-    "https://casdoor.infra.agibot.com/factory-ems-web/file",
-    "https://casdoor.infra.agibot.com/factory-ems-web/import",
     "https://casdoor.infra.agibot.com/factory-ems-web/log",
     "https://casdoor.infra.agibot.com/factory-ems-web/login",
     "https://casdoor.infra.agibot.com/factory-ems-web/manage",
@@ -1211,7 +1201,17 @@
     "https://sa-data-mgr-na.ecovacs.com/erp",
     "https://sa-data-mgr-na.ecovacs.com/gateway",
     "https://sa-data-mgr-na.ecovacs.com/manage",
-    "https://sa-data-mgr-na.ecovacs.com/sys"
+    "https://sa-data-mgr-na.ecovacs.com/sys",
+    "https://www.xiaolanben.com/api",
+    "https://www.xiaolanben.com/api/v1",
+    "https://www.xiaolanben.com/api/v2",
+    "https://www.xiaolanben.com/api/v3",
+    "https://www.xiaolanben.com/crm",
+    "https://www.xiaolanben.com/dwr",
+    "https://www.xiaolanben.com/erp",
+    "https://www.xiaolanben.com/gateway",
+    "https://www.xiaolanben.com/manage",
+    "https://www.xiaolanben.com/sys"
   ],
   "framework_patterns": {
     "JeecgBoot": [

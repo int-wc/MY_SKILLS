@@ -47,7 +47,14 @@
       "primitives": ["read_file", "auth"],
       "logic": "路径遍历读配置/源码含硬编码凭据(账号/key/secret) → 用于登录/签发token",
       "gain": "任意文件读 → 认证绕过",
-      "instances": []
+      "instances": [
+        {
+          "endpoints": "sou/oem.xiaolanben.com /api.xiaolanben.com/blue-user/api/v1/open/superuser/login?accessToken=&accessChannelId=&accessTimestamp= + 前端 bundle chunks/logger-c153d6f4.js 硬编码 xlbak 特权头",
+          "found": "前端JS明文硬编码xlbak内部特权头(4cd07c25cb5f431aa901d8a41e74be87)并自动注入superuser登录端点，内部凭据跨oem/sou/oldfcopenapi多站点共享泄露；open/superuser/login端点无siren验签(对照端点无签名403，该端点空token返回400、非法token返回401直达认证层)，仅凭URL accessToken即可换超管会话 → 硬编码内部凭据泄露+无验签超管登录端点组合成认证链，任一渠道accessToken泄露即升级为超管会话接管，认证绕过链确认成立",
+          "company": "58到家",
+          "date": "2026-08-04"
+        }
+      ]
     },
     {
       "id": "ch_idor_to_modify",
@@ -63,7 +70,14 @@
       "primitives": ["auth", "query_data"],
       "logic": "弱口令/测试账号登录 → 配合IDOR/分页批量读他人数据",
       "gain": "低危弱口令 → 批量敏感数据",
-      "instances": []
+      "instances": [
+        {
+          "endpoints": "www.xiaolanben.com /feed/api/article?page=1&pageSize=9999&type=0（未授权泄露内部CMS员工账号） + api.u51.com /usercenter-gateway/api/v2/web/login?plat=4&channel=xlb-pc-none&app_id=2026&big_app_id=35&md=AAAA（无验证码统一登录）",
+          "found": "feed CMS文章接口无鉴权且pageSize无上限，一次请求即泄露394+39篇全文及creator/modifier内部员工登录账号(3个实名)；统一登录接口无图形验证码、无频率限制，RSA-1024 rsalite前端加密离线完整复现、md反爬指纹参数可任意伪造 → 用泄露内部账号+常见弱口令自动化撞库/账号喷洒，错误码(1014账号存在口令错/1009账号被锁24h)可枚举账号存在性与锁定态 → 命中即登录内部员工账号进小蓝本/51信用卡管理后台，高危利用链确认成立",
+          "company": "58到家",
+          "date": "2026-08-04"
+        }
+      ]
     },
     {
       "id": "ch_upload_to_exec",

@@ -230,6 +230,12 @@
           "found": "IDOR越权导出(接受任意taskId不校验归属，可导出他人任务数据)",
           "company": "智元创新（上海）科技股份有限公司",
           "date": "2026-08-04"
+        },
+        {
+          "endpoint": "https://mail.daojia.com/attachment/download_docstore?fileID={uuid}",
+          "found": "IDOR越权读取(未授权按fileID下载任意邮件附件对象存储文件)",
+          "company": "58到家",
+          "date": "2026-08-04"
         }
       ]
     },
@@ -297,30 +303,6 @@
       ],
       "risk": "",
       "instances": [
-        {
-          "endpoint": "https://geniestudio.agibot.com/api/v1/auth/lark/doc/ticket",
-          "found": "未授权访问(Lark文档票据API致Lark应用凭证泄露)",
-          "company": "智元创新（上海）科技股份有限公司",
-          "date": "2026-08-04"
-        },
-        {
-          "endpoint": "https://oa-dev.agibot.com/api/hrm/login/checkLogin",
-          "found": "设计缺陷(登录接口无验证码无锁定可暴力破解)",
-          "company": "智元创新（上海）科技股份有限公司",
-          "date": "2026-08-04"
-        },
-        {
-          "endpoint": "https://em7.agibot.com/emp/passport/login",
-          "found": "设计缺陷(生产E-Mobile登录接口无验证码)",
-          "company": "智元创新（上海）科技股份有限公司",
-          "date": "2026-08-04"
-        },
-        {
-          "endpoint": "https://oa.agibot.com/api/ec/dev/auth/regist",
-          "found": "未授权访问(开发环境未授权注册接口暴露)",
-          "company": "智元创新（上海）科技股份有限公司",
-          "date": "2026-08-04"
-        },
         {
           "endpoint": "https://linksoul.agibot.com/zh-cn/login",
           "found": "信息泄露(Nuxt运行时配置泄露APM监控凭证)",

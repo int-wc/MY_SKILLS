@@ -3,7 +3,7 @@
   "description": "SRC/ZC 通用API模式字典 — 每次运行自动积累新发现的模式",
   "api_prefixes": {
     "/api/": {
-      "count": 46,
+      "count": 47,
       "first_seen": "2026-07-09",
       "last_seen": "2026-08-15"
     },
@@ -219,16 +219,6 @@
     "Verification"
   ],
   "common_endpoints": [
-    "https://vpn.huazhu.com/gateway/export",
-    "https://vpn.huazhu.com/gateway/file",
-    "https://vpn.huazhu.com/gateway/import",
-    "https://vpn.huazhu.com/gateway/log",
-    "https://vpn.huazhu.com/gateway/login",
-    "https://vpn.huazhu.com/gateway/manage",
-    "https://vpn.huazhu.com/gateway/order",
-    "https://vpn.huazhu.com/gateway/payment",
-    "https://vpn.huazhu.com/gateway/report",
-    "https://vpn.huazhu.com/gateway/system",
     "https://vpn.huazhu.com/gateway/token",
     "https://vpn.huazhu.com/gateway/upload",
     "https://vpn.huazhu.com/gateway/user",
@@ -1218,7 +1208,17 @@
     "https://sou.xiaolanben.com/v3/system",
     "https://sou.xiaolanben.com/v3/token",
     "https://sou.xiaolanben.com/v3/upload",
-    "https://sou.xiaolanben.com/v3/user"
+    "https://sou.xiaolanben.com/v3/user",
+    "https://report.51credit.com/api",
+    "https://report.51credit.com/api/v1",
+    "https://report.51credit.com/api/v2",
+    "https://report.51credit.com/api/v3",
+    "https://report.51credit.com/crm",
+    "https://report.51credit.com/dwr",
+    "https://report.51credit.com/erp",
+    "https://report.51credit.com/gateway",
+    "https://report.51credit.com/manage",
+    "https://report.51credit.com/sys"
   ],
   "framework_patterns": {
     "JeecgBoot": [

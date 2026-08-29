@@ -111,6 +111,21 @@
       "count": 1,
       "first_seen": "2026-08-29",
       "last_seen": "2026-08-29"
+    },
+    "/mobile/": {
+      "count": 1,
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-08-29"
+    },
+    "/smsverify/": {
+      "count": 1,
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-08-29"
+    },
+    "/attachment/": {
+      "count": 1,
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-08-29"
     }
   },
   "path_segments": [
@@ -227,7 +242,10 @@
     "member",
     "FormerLogin",
     "Verification",
-    "login?redirect="
+    "login?redirect=",
+    "sendsmartcode",
+    "download_docstore?fileID={uuid}",
+    "getIdentifyCode"
   ],
   "common_endpoints": [
     "https://vpn.huazhu.com/jeecg-boot/sys/sysFillRule",

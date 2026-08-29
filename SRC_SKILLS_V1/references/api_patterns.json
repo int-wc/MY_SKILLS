@@ -106,6 +106,11 @@
       "count": 1,
       "first_seen": "2026-08-29",
       "last_seen": "2026-08-29"
+    },
+    "/user/": {
+      "count": 1,
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-08-29"
     }
   },
   "path_segments": [
@@ -221,10 +226,10 @@
     "auth-center",
     "member",
     "FormerLogin",
-    "Verification"
+    "Verification",
+    "login?redirect="
   ],
   "common_endpoints": [
-    "https://vpn.huazhu.com/jeecg-boot/sys/sysDataLog",
     "https://vpn.huazhu.com/jeecg-boot/sys/sysFillRule",
     "https://vpn.huazhu.com/jeecg-boot/sys/user/list",
     "https://vpn.huazhu.com/json",
@@ -1223,7 +1228,8 @@
     "/mobile/getIdentifyCode",
     "/platform/login",
     "/actuator",
-    "http://open.daojia.com/platform/login"
+    "http://open.daojia.com/platform/login",
+    "https://jzinfosys-oauthcenter.daojia-inc.com/user/login?redirect="
   ],
   "framework_patterns": {
     "JeecgBoot": [

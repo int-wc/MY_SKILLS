@@ -248,10 +248,6 @@
     "getIdentifyCode"
   ],
   "common_endpoints": [
-    "https://vpn.huazhu.com/jeecg-boot/sys/sysFillRule",
-    "https://vpn.huazhu.com/jeecg-boot/sys/user/list",
-    "https://vpn.huazhu.com/json",
-    "https://vpn.huazhu.com/login",
     "https://vpn.huazhu.com/logout",
     "https://vpn.huazhu.com/manage",
     "https://vpn.huazhu.com/manage/admin",
@@ -1247,7 +1243,11 @@
     "/platform/login",
     "/actuator",
     "http://open.daojia.com/platform/login",
-    "https://jzinfosys-oauthcenter.daojia-inc.com/user/login?redirect="
+    "https://jzinfosys-oauthcenter.daojia-inc.com/user/login?redirect=",
+    "/login/verify.login",
+    "/login/getVerifyCode.login",
+    "/common/wallet/i/cashOut/getBalance",
+    "/guest/getverificationcode"
   ],
   "framework_patterns": {
     "JeecgBoot": [

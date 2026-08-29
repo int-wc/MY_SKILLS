@@ -304,12 +304,6 @@
       "risk": "",
       "instances": [
         {
-          "endpoint": "https://linksoul.agibot.com/zh-cn/login",
-          "found": "信息泄露(Nuxt运行时配置泄露APM监控凭证)",
-          "company": "智元创新（上海）科技股份有限公司",
-          "date": "2026-08-04"
-        },
-        {
           "endpoint": "https://deadpool-yeeuu.cjia.com/api/v1/login",
           "found": "认证缺陷/暴力破解(登录接口无验证码无锁定，可自动化爆破门锁运维平台账号)",
           "company": "华住酒店",
@@ -382,7 +376,7 @@
           "date": "2026-08-04"
         },
         {
-          "endpoint": "https://safety-tsportal.sto.cn/api/common/concurrent/getEnterprise?code=sto",
+          "endpoint": "https://user.daojia.com/mobile/getIdentifyCode",
           "found": "信息泄露(未授权返回企业登录配置含钉钉accessKey/SSO零信任架构)",
           "company": "申通快递",
           "date": "2026-08-04"

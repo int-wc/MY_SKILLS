@@ -101,6 +101,11 @@
       "count": 1,
       "first_seen": "2026-08-15",
       "last_seen": "2026-08-15"
+    },
+    "/platform/": {
+      "count": 1,
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-08-29"
     }
   },
   "path_segments": [
@@ -219,7 +224,6 @@
     "Verification"
   ],
   "common_endpoints": [
-    "https://vpn.huazhu.com/jeecg-boot/sys/permission",
     "https://vpn.huazhu.com/jeecg-boot/sys/sysDataLog",
     "https://vpn.huazhu.com/jeecg-boot/sys/sysFillRule",
     "https://vpn.huazhu.com/jeecg-boot/sys/user/list",
@@ -1218,7 +1222,8 @@
     "/index.html",
     "/mobile/getIdentifyCode",
     "/platform/login",
-    "/actuator"
+    "/actuator",
+    "http://open.daojia.com/platform/login"
   ],
   "framework_patterns": {
     "JeecgBoot": [

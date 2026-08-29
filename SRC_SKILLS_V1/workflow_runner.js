@@ -70,6 +70,14 @@ if (typeof args === 'string') {
     companyName = args
     mode = 'full'
   }
+  if (mode === 'domain' && !domainParam) {
+    log('⚠️ 单域模式需指定 domain 参数，如: {mode: "domain", company: "理想汽车", domain: "saos-mall-admin-ui.chehejia.com"}')
+    return { error: 'need_domain', message: '请指定domain参数' }
+  }
+  if (mode === 'url' && !singleUrl) {
+    log('⚠️ 单URL模式需指定 url 参数，如: {mode: "url", url: "https://target:8080"}')
+    return { error: 'need_url', message: '请指定url参数' }
+  }
 } else if (typeof args === 'object' && args) {
   workflowOptions = args
   companyName = args.company || null
